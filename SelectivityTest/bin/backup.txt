@@ -1,0 +1,44 @@
+		for(int p =0;p<total_plans;p++)
+		{
+			loc = 0;
+			queue.add(loc);
+			while(queue.peek() != null)
+			{
+				current_pos = queue.poll();
+				
+				indx = getCoordinates(dimension,resolution,current_pos);
+				 
+				if(indx[0] != resolution - 1 )
+				{
+					next_right_pt[0] = indx[0]+1;
+					next_right_pt[1] = indx[1]; 
+					right_pos = getIndex(next_right_pt,resolution);
+					
+					queue.add(right_pos);
+					//Check and fix the violation for the right point.
+					
+					if(AllPlanCosts[p][current_pos] > AllPlanCosts[p][right_pos])
+					{
+						AllPlanCosts[p][right_pos] = AllPlanCosts[p][current_pos];
+					}
+					
+				}
+				if(indx[1] != resolution - 1)
+				{
+					next_top_pt[0] = indx[0];
+					next_top_pt[1] = indx[1]+1; 
+					top_pos = getIndex(next_top_pt,resolution);
+					
+					queue.add(top_pos);
+					//Check the violation for the top point and fix it.
+					if(AllPlanCosts[p][current_pos] > AllPlanCosts[p][top_pos])
+					{
+						AllPlanCosts[p][top_pos] = AllPlanCosts[p][current_pos];
+					}
+					
+				}
+				
+			}
+			
+		}
+	}
