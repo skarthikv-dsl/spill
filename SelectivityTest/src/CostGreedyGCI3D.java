@@ -172,6 +172,7 @@ public class CostGreedyGCI3D
 		getAllPermuations(remainingDim,0);
 		while(cost < 2*h_cost)
 		{
+		
 			if(cost>h_cost)
 				cost = h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -185,8 +186,7 @@ public class CostGreedyGCI3D
 				learntDimIndices.clear();
 				obj.getContourPoints(order,cost);
 			}
-			//settings
-			writeContourPointstoFile(i);
+			//writeContourPointstoFile(i);
 			int size_of_contour = final_points.size();
 			ContourPoints.put(i, new ArrayList<point_generic>(final_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
@@ -226,6 +226,11 @@ public class CostGreedyGCI3D
 		i =1;
 		while(i<=ContourPoints.size() && !done)
 		{	
+			if(cost<(double)10000){
+				cost *= 2;
+				i++;
+				continue;
+			}
 			if(cost>h_cost)
 				cost=h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -233,8 +238,10 @@ public class CostGreedyGCI3D
 			obj.sortContourPoints(i);
 
 			obj.planBouquetAlgo(i,cost);
-
+			
 			algo_cost = algo_cost+ (learning_cost);
+			System.out.println("The current algo_cost is "+algo_cost);
+			System.out.println("The cost expended in this contour is "+learning_cost);
 			cost = cost*2;  
 			i = i+1;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -286,42 +293,48 @@ public class CostGreedyGCI3D
 		 Collections.sort(ContourPoints.get(contour_no), new pointComparator());
 	}
 
-	public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
+	 public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
 
-		String funName =  "writeSuboptToFile";
-       File file = new File(path+"planBouquet_"+"suboptimality"+".txt");
-	    if (!file.exists()) {
-	        file.createNewFile();
-	    }
-	    FileWriter writer = new FileWriter(file, false);
-	    PrintWriter pw = new PrintWriter(writer);
-	    
-	    
-		for(int i =0;i<resolution;i++){
-			for(int j=0;j<resolution;j++){
-				//Settings
-				//for(int k=0;k<resolution;k++){
-				//if(i%5==0 && j%5==0){
-					int [] index = new int[2];
-					index[0] = i;
-					index[1] = j;
-					//index[2] = k;
-					int ind = getIndex(index, resolution);
-					if(j!=0)
-						pw.print("\t"+subOpt[ind]);
-					else
-						pw.print(subOpt[ind]);
-				//}
-				//}	
-			}
-			//if(i%2==0)
-				//pw.print("\n");
+		 //settings
+	       File file = new File(path+"planBouquet_20"+"suboptimality"+".txt");
+		    if (!file.exists()) {
+		        file.createNewFile();
+		    }
+		    FileWriter writer = new FileWriter(file, false);
+		    PrintWriter pw = new PrintWriter(writer);
+
+		    
+		    for(int loc=0;loc<totalPoints;loc++){
+		    	int[] index = getCoordinates(dimension, resolution, loc);
+		    	for(int d=0;d<dimension;d++){
+		    		pw.print(index[d]+",");
+		    	}
+		    	pw.print("\t is "+subOpt[loc]+"\n");
+		    }
+//			for(int i =0;i<resolution;i++){
+//				for(int j=0;j<resolution;j++){
+//					//Settings
+//					for(int k=0;k<resolution;k++){
+//					//if(i%5==0 && j%5==0){
+//						int [] index = new int[3];
+//						index[0] = i;
+//						index[1] = j;
+//						index[2] = k;
+//						int ind = getIndex(index, resolution);
+//						if(j!=0)
+//							pw.print("\t"+subOpt[ind]);
+//						else
+//							pw.print(subOpt[ind]);
+//					//}
+//					}	
+//				}
+//				//if(i%2==0)
+//					//pw.print("\n");
+//			}
+			pw.close();
+			writer.close();
+			
 		}
-		pw.close();
-		writer.close();
-		
-	}
-
 	
 	public void planBouquetAlgo(int contour_no, double cost) {
 
@@ -364,12 +377,17 @@ public class CostGreedyGCI3D
 				learning_cost += cost;
 				//Settings: learning_cost += p.get_cost();  changed to include only the contour cost and not the point
 				unique_plans.add(getPlanNumber_generic(arr));
-				last_exec_cost = p.get_cost();
+				last_exec_cost = cost;
+			}
+			if(flag == true){
+				if(cost_generic(convertSelectivitytoIndex(actual_sel)) > 2*cost)
+					flag = false;
 			}
 			if(flag){
 				done = true;
 				 System.out.println("The number unique points are "+unique_points);
 				 System.out.println("The number unique plans are "+unique_plans.size());
+				 System.out.println("The  unique plans are "+unique_plans);
 				 System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
 				//Settings:  changed to include only the contour cost and not the point
 //				 if(p.get_cost() > last_exec_cost ){
@@ -378,9 +396,14 @@ public class CostGreedyGCI3D
 //				 }
 				 learning_cost -= last_exec_cost;
 				 int [] int_actual_sel = new int[dimension];
-					for(int d=0;d<dimension;d++)
-						int_actual_sel[d] = findNearestPoint(actual_sel[d]);
-				 learning_cost  += fpc_cost_generic(int_actual_sel, p.get_plan_no());
+				 for(int d=0;d<dimension;d++)
+					 int_actual_sel[d] = findNearestPoint(actual_sel[d]);
+				 double oneDimCost = cost;
+				 if(fpc_cost_generic(int_actual_sel, p.get_plan_no())<oneDimCost)
+					 oneDimCost = fpc_cost_generic(int_actual_sel, p.get_plan_no());
+				 if(cost_generic(int_actual_sel)> oneDimCost)
+					 oneDimCost = cost_generic(int_actual_sel);
+				 learning_cost  += oneDimCost;
 	 
 				 for(int d=0;d<dimension;d++){
 						System.out.print(arr[d]+",");
@@ -391,6 +414,7 @@ public class CostGreedyGCI3D
 		}	
 		 System.out.println("The number unique points are "+unique_points);
 		 System.out.println("The number unique plans are "+unique_plans.size());
+		 System.out.println("The  unique plans are "+unique_plans);
 		 System.out.println("Contour No. is "+contour_no+" : Max cost is "+max_cost+" and min cost is "+min_cost);
 
 
@@ -406,6 +430,16 @@ private double[] convertIndextoSelectivity(int[] point_Index) {
 	for(int d=0; d<dimension;d++)
 		point_selec[d] = selectivity[point_Index[d]];
 	return point_selec;
+}
+private int[] convertSelectivitytoIndex (double[] point_sel) {
+	
+	String funName = "convertSelectivitytoIndex";
+	
+	int [] point_index = new int[point_sel.length];
+	assert (point_sel.length == dimension): funName+" ERROR: point index length not matching with dimension"; 
+	for(int d=0; d<dimension;d++)
+		point_index[d] = findNearestPoint(point_sel[d]);
+	return point_index;
 }
 
 
@@ -570,7 +604,7 @@ public void intialize(int location) {
 				else if(i!=0){
 					arr[last_dim]--; //in order to look at the cost at lower value on the last index
 					double cur_val_l = cost_generic(arr);
-					arr[last_dim]++; //restore the index back in the earlier implementation 
+					arr[last_dim]++; //restore the index back 
 					if( cur_val > targetval  && cur_val_l < targetval ) //NOTE : changed the inequality to strict inequality
 					{
 						if(!pointAlreadyExist(arr)){ //check if the point already exist
@@ -578,17 +612,6 @@ public void intialize(int location) {
 							final_points.add(p);
 						}
 					}
-//					arr[last_dim]--; //in order to look at the cost at lower value on the last index
-//					double cur_val_l = cost_generic(arr);
-//					 //restore the index back in the earlier implementation 
-//					if( cur_val > targetval  && cur_val_l < targetval ) //NOTE : changed the inequality to strict inequality
-//					{
-//						if(!pointAlreadyExist(arr)){ //check if the point already exist
-//							point_generic p = new point_generic(arr,getPlanNumber_generic(arr), cur_val_l,remainingDim);
-//							final_points.add(p);
-//						}
-//					}
-//					arr[last_dim]++;
 					
 				}
 			}
@@ -795,13 +818,14 @@ public void intialize(int location) {
 			double sel;
 			this.selectivity = new double [resolution];
 			
+			//settings
 			if(resolution == 10){
-//			selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
-//			selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
-//			selectivity[8] = 0.50;		selectivity[9] = 0.99;                                 // oct - 2012
-				selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
-				selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
-				selectivity[8] = 0.6;		selectivity[9] = 0.99;                                 // oct - 2012
+			selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
+			selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
+			selectivity[8] = 0.50;		selectivity[9] = 0.95;                                 // oct - 2012
+//				selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
+//				selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
+//				selectivity[8] = 0.6;		selectivity[9] = 0.95;                                 // oct - 2012
 
 			}
 
@@ -1173,10 +1197,10 @@ public void intialize(int location) {
 			// get the property value and print it out
 			apktPath = prop.getProperty("apktPath");
 			qtName = prop.getProperty("qtName");
-			varyingJoins = prop.getProperty("varyingJoins");
-			JS_multiplier1 = Integer.parseInt(prop.getProperty("JS_multiplier1"));
-			JS_multiplier2 = Integer.parseInt(prop.getProperty("JS_multiplier2"));
-			query = "explain analyze FPC(\"customer\")  (\"10000.0\") select c_custkey, c_name,	l_extendedprice * (1 - l_discount) as revenue, c_acctbal, n_name, c_address, c_phone, c_comment from customer, orders, lineitem,	nation where c_custkey = o_custkey and l_orderkey = o_orderkey and o_orderdate between '1993-01-20' and '1994-01-01' 	and c_nationkey = n_nationkey  order by	revenue desc";
+//			varyingJoins = prop.getProperty("varyingJoins");
+//			JS_multiplier1 = Integer.parseInt(prop.getProperty("JS_multiplier1"));
+//			JS_multiplier2 = Integer.parseInt(prop.getProperty("JS_multiplier2"));
+//			query = "explain analyze FPC(\"customer\")  (\"10000.0\") select c_custkey, c_name,	l_extendedprice * (1 - l_discount) as revenue, c_acctbal, n_name, c_address, c_phone, c_comment from customer, orders, lineitem,	nation where c_custkey = o_custkey and l_orderkey = o_orderkey and o_orderdate between '1993-01-20' and '1994-01-01' 	and c_nationkey = n_nationkey  order by	revenue desc";
 			//query = prop.getProperty("query");
 			cardinalityPath = prop.getProperty("cardinalityPath");
 			

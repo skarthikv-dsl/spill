@@ -95,7 +95,7 @@ public class GCI3D
 	static String plansPath = "/home/dsladmin/Srinivas/data/spillBound/temp/";
 	static String qtName ;
 	static String varyingJoins;
-	static int JS_multiplier [];
+	static double JS_multiplier [];
 	static int PK_relation_size [];
 	static String query;
 	static String cardinalityPath;
@@ -105,7 +105,7 @@ public class GCI3D
 	static boolean MSOCalculation = true;
 	static boolean randomPredicateOrder = false;
 	//Settings: 
-	static boolean FROM_CLAUSE = true;
+	static boolean FROM_CLAUSE = false;
 	static Connection conn = null;
 
 	static ArrayList<Integer> remainingDim;
@@ -118,6 +118,12 @@ public class GCI3D
 
 	 static double learning_cost = 0;
 	 static double oneDimCost = 0;
+	 static int no_executions = 0;
+	 static int no_repeat_executions = 0;
+	 static int max_no_executions = 0;
+	 static int max_no_repeat_executions = 0;
+
+	 static boolean [] already_visited;  
 	 
 	 double[] actual_sel;
 	 
@@ -203,8 +209,9 @@ public class GCI3D
 		try{
 			Class.forName("org.postgresql.Driver");
 
+			//Settings
 			conn = DriverManager
-					.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+					.getConnection("jdbc:postgresql://localhost:5432/tpcds",
 							"sa", "database");
 			 System.out.println("Opened database successfully");
 		}
@@ -216,7 +223,7 @@ public class GCI3D
 		 * running the spillBound and plan bouquet algorithm 
 		 */
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
-		
+		obj.getPlanCountArray();
 		//int max_point = 0; /*to not execute the spillBound algorithm*/
 		int max_point = 1; /*to execute a specific q_a */
 		//Settings
@@ -237,13 +244,19 @@ public class GCI3D
 //		if(index[0]%5 !=0 || index[1]%5!=0)
 //			continue;
 		//Settings:
-//		obj.actual_sel[0] = 0.1;obj.actual_sel[1] = 0.01;obj.actual_sel[2] = 0.99; /*uncomment for single execution*/
+//		obj.actual_sel[0] = 0.02;obj.actual_sel[1] = 0.99;obj.actual_sel[2] = 0.1;obj.actual_sel[3] = 0.99; /*uncomment for single execution*/
 		
 		for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
 		//----------------------------------------------------------
 		i =1;
 		while(i<=ContourPoints.size() && !obj.remainingDim.isEmpty())
 		{	
+
+			if(cost<(double)10000){
+				cost *= 2;
+				i++;
+				continue;
+			}
 			if(cost>h_cost)
 				cost=h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -263,8 +276,30 @@ public class GCI3D
 			algo_cost = algo_cost+ (learning_cost);
 			if(present == prev ){    // just to see whether any dimension was learnt
 									// if no dimension is learnt then move on to the next contour
+				
+				/*
+				 * capturing the properties of the query execution
+				 */
+				System.out.println("In Contour "+i+" has the following details");
+				System.out.println("No of executions is "+no_executions);
+				System.out.println("No of repeat moves is "+no_repeat_executions);
+				if(no_executions>max_no_executions)
+					max_no_executions = no_executions;
+				if(no_repeat_executions > max_no_repeat_executions)
+					max_no_repeat_executions = no_repeat_executions;
+				
+				
 				cost = cost*2;  
 				i = i+1;
+				/*
+				 * initialize the repeat moves and exections for the next contour
+				 */
+				for(int d=0;d<obj.dimension;d++){
+					already_visited[d] = false;
+					no_executions = 0;
+					no_repeat_executions =0;
+				}
+					
 			}
 			
 			System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -310,9 +345,7 @@ public class GCI3D
 
 	}
 	
-
-
-	public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
+	 public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
 
        File file = new File(path+"spillBound_"+"suboptimality"+".txt");
 	    if (!file.exists()) {
@@ -320,28 +353,35 @@ public class GCI3D
 	    }
 	    FileWriter writer = new FileWriter(file, false);
 	    PrintWriter pw = new PrintWriter(writer);
+
 	    
-	    
-		for(int i =0;i<resolution;i++){
-			for(int j=0;j<resolution;j++){
-				//Settings
-				for(int k=0;k<resolution;k++){
-				//if(i%5==0 && j%5==0){
-					int [] index = new int[3];
-					index[0] = i;
-					index[1] = j;
-					index[2] = k;
-					int ind = getIndex(index, resolution);
-					if(j!=0)
-						pw.print("\t"+subOpt[ind]);
-					else
-						pw.print(subOpt[ind]);
-				//}
-				}	
-			}
-			//if(i%2==0)
-				//pw.print("\n");
-		}
+	    for(int loc=0;loc<totalPoints;loc++){
+	    	int[] index = getCoordinates(dimension, resolution, loc);
+	    	for(int d=0;d<dimension;d++){
+	    		pw.print(index[d]+",");
+	    	}
+	    	pw.print("\t is "+subOpt[loc]+"\n");
+	    }
+//		for(int i =0;i<resolution;i++){
+//			for(int j=0;j<resolution;j++){
+//				//Settings
+//				for(int k=0;k<resolution;k++){
+//				//if(i%5==0 && j%5==0){
+//					int [] index = new int[3];
+//					index[0] = i;
+//					index[1] = j;
+//					index[2] = k;
+//					int ind = getIndex(index, resolution);
+//					if(j!=0)
+//						pw.print("\t"+subOpt[ind]);
+//					else
+//						pw.print(subOpt[ind]);
+//				//}
+//				}	
+//			}
+//			//if(i%2==0)
+//				//pw.print("\n");
+//		}
 		pw.close();
 		writer.close();
 		
@@ -350,12 +390,21 @@ public class GCI3D
 	
 	public void oneDimensionSearch(int contour_no, double cost) {
 
+		String funName = "oneDimensionSearch";
 		/*
 		 * just sanity check for findNearestPoint and findNearestSelectivity
 		 */
-		assert (findNearestSelectivity(actual_sel[0]) != findNearestSelectivity(findNearestSelectivity(actual_sel[0]))) : " findNearPoint" + " Error";
-		assert (findNearestPoint(actual_sel[0]) != findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) : " findNearPoint" + " Error";
-		String funName = "oneDimensionSearch";
+		if (findNearestSelectivity(actual_sel[0]) != findNearestSelectivity(findNearestSelectivity(actual_sel[0]))) 
+			 System.out.println(" findNearSelectivity" + " Error");
+		if (findNearestPoint(actual_sel[0]) != findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) 
+			System.out.println(" findNearPoint" + " Error");
+		
+		//newly added code Feb28; 8:00 pm
+		if(cost_generic(convertSelectivitytoIndex(actual_sel)) > 2*cost){
+			oneDimCost = cost;
+			return;
+		}
+			
 		oneDimCost = 0;//initialization
 		assert (remainingDim.size() == 1): funName+": more than one dimension left";
 		int [] arr = new int[dimension];
@@ -390,7 +439,10 @@ public class GCI3D
 							int [] int_actual_sel = new int[dimension];
 							for(int d=0;d<dimension;d++)
 								int_actual_sel[d] = findNearestPoint(actual_sel[d]);
-							oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
+							if(fpc_cost_generic(int_actual_sel, fpc_plan)<oneDimCost)
+								oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
+							if(cost_generic(int_actual_sel)> oneDimCost)
+								oneDimCost = cost_generic(int_actual_sel);
 							System.out.println(funName+" learnt "+ remDim+" dimension completely");
 							remainingDim.remove(remainingDim.indexOf(remDim));
 							System.out.println(funName+" Sel_max = "+sel_max+" and cost is "+oneDimCost);
@@ -505,30 +557,31 @@ private void spillBoundAlgo(int contour_no, CostGreedy cg) throws IOException {
 		double q_a_cost = cost_generic(convertSelectivitytoIndex(actual_sel));
 		double c_min = getOptimalCost(0);
 		//&& (Math.pow(2, contour_no-1)*c_min <= q_a_cost)
-		if(currentContourPoints  ==0  && (Math.pow(2, contour_no)*c_min >= q_a_cost)){
-			int [] arr = new int[dimension];	
-			//update the learnt dimensions selectivity
-			for(int d=0;d<dimension;d++){
-				if(remainingDim.contains(d))
-					arr[d] = resolution-1;
-				else 
-					arr[d] = findNearestPoint(actual_sel[d]);
+		if(currentContourPoints  ==0) {
+			if((Math.pow(2, contour_no)*c_min >= q_a_cost)){
+				int [] arr = new int[dimension];	
+				//update the learnt dimensions selectivity
+				for(int d=0;d<dimension;d++){
+					if(remainingDim.contains(d))
+						arr[d] = resolution-1;
+					else 
+						arr[d] = findNearestPoint(actual_sel[d]);
+				}
+				if(cost_generic(arr)>Math.pow(2, contour_no)*c_min)
+					System.out.println(funName+" ERROR from the boundary point");
+				else {
+					point_generic p = new point_generic(arr, getPlanNumber_generic(arr), cost_generic(arr), remainingDim);
+					ContourPoints.get(contour_no).add(p);
+					max_cost = min_cost = p.get_cost();
+					unique_plans.add(p.get_plan_no());
+					p.reloadOrderList(remainingDim);
+					int learning_dim = p.getLearningDimension();
+					sel_max[learning_dim] = selectivity[arr[learning_dim]];
+					points_max.put(new Integer(learning_dim),p );
+				}
+
 			}
-			if(cost_generic(arr)>Math.pow(2, contour_no)*c_min)
-				System.out.println(funName+" ERROR from the boundary point");
-			else {
-				point_generic p = new point_generic(arr, getPlanNumber_generic(arr), cost_generic(arr), remainingDim);
-				ContourPoints.get(contour_no).add(p);
-				max_cost = min_cost = p.get_cost();
-				unique_plans.add(p.get_plan_no());
-				p.reloadOrderList(remainingDim);
-				int learning_dim = p.getLearningDimension();
-				sel_max[learning_dim] = selectivity[arr[learning_dim]];
-				points_max.put(new Integer(learning_dim),p );
-			}
-				
-		}
-		
+		}	
 		//TODO put in an assert saying that the same plan cannot be part of sel_max 
 		// of different dimensions
 		System.out.print("Max cost = "+max_cost+" Min cost = "+min_cost+" ");
@@ -550,12 +603,21 @@ private void spillBoundAlgo(int contour_no, CostGreedy cg) throws IOException {
 			if(remainingDim.contains(d))
 			{				
 				if(sel_max[d] != (double)-1){  //TODO is type casting Okay?: Ans: It is fine
+					
+					/*
+					 * update the number of execution and repeat steps here
+					 */
+					no_executions ++;
+					already_visited[d] = true;
+					if(already_visited[d]==true)
+						no_repeat_executions++;
+					
 					double sel = 0;
 					point_generic p = points_max.get(new Integer(d));
 					//sel = Simulated_Spilling(max_x_plan, cg_obj, 0, cur_val);
 					if(sel_max[d] <= sel)
 						sel_max[d] = sel;  
-					sel = getLearntSelectivity(d,p.get_plan_no(),p.get_cost(), p);
+					sel = getLearntSelectivity(d,p.get_plan_no(),(Math.pow(2, contour_no-1)*getOptimalCost(0)), p);
 					if(sel_max[d]<=sel)
 						sel_max[d] = sel;
 					else
@@ -665,18 +727,26 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 		 */
 		double[] temp_act_sel = new double[dimension];
 		for(int d=0;d<dimension;d++){
-			if(dim==d)
-				temp_act_sel[d] = selectivity[p.get_dimension(d)];
+			if(dim==d){
+				if(selectivity[p.get_dimension(d)] >= actual_sel[d])
+					temp_act_sel[d] = actual_sel[d];
+				else
+					temp_act_sel[d] = selectivity[p.get_dimension(d)];
+			}
 			else
 				temp_act_sel[d] = actual_sel[d];
 		}
 		
+		double budget = cost;   //if this contour is the last for point p set the budget to  point's cost
+		if(p.get_cost() <2*cost)
+			budget = p.get_cost();
 		
-		while((temp_act_sel[dim] <= actual_sel[dim]) || (execCost<=p.get_cost()))
+		while((temp_act_sel[dim] <= actual_sel[dim]) || (execCost<=budget))
 		{	
 			stmt.execute("set spill_node = "+ spill_node);
 			stmt.execute("set work_mem = '100MB'");
-			stmt.execute("set effective_cache_size='1GB'");
+			//NOTE,Settings: 4GB for DS and 1GB for H
+			stmt.execute("set effective_cache_size='4GB'");
 			//NOTE,Settings: need not set the page cost's
 			stmt.execute("set  seq_page_cost = 1");
 			stmt.execute("set  random_page_cost=4");
@@ -713,9 +783,10 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 			if((valstring = br.readLine()) != null){
 				hashjoinFlag = true;
 				double rows = Double.parseDouble(valstring);
-				double remainingBudget = p.get_cost() -execCost; //this should be  > 0
+				double remainingBudget = budget -execCost; 
 				
-				assert(remainingBudget >0) : funName+" remainingBuget not greater than 0";
+				if(remainingBudget<=0)
+					break;
 				//assert(newrows>=rows) : funName+" hashjoin case ";
 				//0.01 is used since this is the cost taken for outputting every tuple (=cpu_tuple_cost) 
 				double  budget_needed= (rows*0.01)*(actual_sel[dim]/selectivity[p.get_dimension(dim)] -1);
@@ -753,7 +824,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 			 * because if the learnt selectivity (earlier iteration's) is >= than the actual sel, the loop should have finished 
 			 * in the earlier iteration itself. This is anyway conservative. 
 			 */
-			if(execCost>p.get_cost()) //TODO: should we add a small threshold? may be use the next point's cost
+			if(execCost>budget) //TODO: should we add a small threshold? may be use the next point's cost
 				break;
 			/*
 			 * this is the case when we learn the actual selectivity since the execCost (subplan's cost) does not 
@@ -781,14 +852,18 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
     	}
     	else{
     		if(prevExecCost==Double.MIN_VALUE){
-    			learning_cost += p.get_cost();
-    			prevExecCost = p.get_cost();
+    			learning_cost += cost; //just adding the cost of the contour in the while loop zips through in the starting iteration itself
+    			prevExecCost = cost; //for the sake of printing
+    			selLearnt = selectivity[p.get_dimension(dim)];
     		}
-    		else
-    			learning_cost += prevExecCost;
+    		else{
+    			//prevExecCost = cost;
+    			learning_cost += prevExecCost; //actual cost taken for learning selecitvity
+    		}
+    			
     		System.out.println("Cost of the spilled execution (not sucessful) is "+prevExecCost);
-    		if(!hashjoinFlag){
-    			int idx = findNearestPoint(temp_act_sel[dim]);
+    		int idx = findNearestPoint(temp_act_sel[dim]);
+    		if(!hashjoinFlag && idx>0){	
     			idx --;
     			assert(idx>=0): funName+" idx going below 0";
     			selLearnt = selectivity[idx];
@@ -933,8 +1008,16 @@ public void intialize(int location) {
 	for(int i=0;i<dimension;i++)
 		remainingDim.add(i);
 	
+	
 	learning_cost = 0;
 	oneDimCost = 0;
+	no_executions = 0;
+	no_repeat_executions =0;
+	max_no_executions = 0;
+	max_no_repeat_executions =0;
+	already_visited = new boolean[dimension];
+	for(int i =0;i<dimension;i++)
+		already_visited[i] = false;
 	//updating the actual selectivities for each of the dimensions
 	int index[] = getCoordinates(dimension, resolution, location);
 	
@@ -1631,9 +1714,14 @@ public void intialize(int location) {
 			
 			if(resolution == 10){
 				//Settings
-				selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
-				selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
-				selectivity[8] = 0.6;		selectivity[9] = 0.99;                                 // oct - 2012
+//				selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
+//				selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
+//			selectivity[8] = 0.6;		selectivity[9] = 0.95;                                 // oct - 2012
+				
+				selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
+				selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
+				selectivity[8] = 0.50;		selectivity[9] = 0.95;                                 // dec - 2012
+	
 			}
 
 
@@ -1784,17 +1872,17 @@ public	int calculatePlanNumber(double x_act, double y_act, double z_act)
 			qtName = prop.getProperty("qtName");
 			varyingJoins = prop.getProperty("varyingJoins");
 			
-			JS_multiplier = new int[dimension];
+			JS_multiplier = new double[dimension];
 			PK_relation_size = new int[dimension];
 			for(int d=0;d<dimension;d++){
 				String multiplierStr = new String("JS_multiplier"+(d+1));
-				JS_multiplier[d] = Integer.parseInt(prop.getProperty(multiplierStr));
+				JS_multiplier[d] = Double.parseDouble(prop.getProperty(multiplierStr));
 				//PK_relation_size[d] = Integer.parseInt(prop.getProperty("PK_relation_size"+(d+1)));
 			}
 			
-			//Settings
-			//query = "explain analyze FPC(\"customer\") (\"10000.0\") select c_custkey, c_name,	l_extendedprice * (1 - l_discount) as revenue, c_acctbal, n_name, c_address, c_phone, c_comment from customer, orders, lineitem,	nation where c_custkey = o_custkey and l_orderkey = o_orderkey and o_totalprice <= 50000 and c_nationkey = n_nationkey  and c_acctbal<=10000  order by	revenue desc";
-			query = "explain analyze FPC(\"supplier\") (\"10000.0\") select	supp_nation,	cust_nation,	l_year,	volume  from	(select 	n1.n_name as supp_nation, n2.n_name as cust_nation, 	DATE_PART('YEAR',l_shipdate) as l_year,	l_extendedprice * (1 - l_discount) as volume	from	supplier,	lineitem,		orders,	customer,	nation n1,	nation n2  where	s_suppkey = l_suppkey	and o_orderkey = l_orderkey			and c_custkey = o_custkey	and s_nationkey = n1.n_nationkey	and c_nationkey = n2.n_nationkey 	and l_extendedprice<=22560	and s_acctbal <= 10000	) as  temp";
+			//Settings:Note dont forget to put analyze here
+			query = "explain FPC(\"store_sales\")  (\"197.5\") select i_item_id, ss_quantity, ss_list_price, ss_coupon_amt, ss_sales_price from store_sales, customer_demographics, date_dim, item, promotion where ss_sold_date_sk = d_date_sk and ss_item_sk = i_item_sk and ss_cdemo_sk = cd_demo_sk and ss_promo_sk = p_promo_sk and cd_gender = 'F' and cd_marital_status = 'M' and cd_education_status = 'College' and d_year = 2001      and ss_list_price <= 197.5";
+			//query = "explain analyze FPC(\"catalog_sales\")  (\"150.5\") select ca_zip, cs_sales_price from catalog_sales,customer,customer_address,date_dim where cs_bill_customer_sk = c_customer_sk and c_current_addr_sk = ca_address_sk and cs_sold_date_sk = d_date_sk and ca_gmt_offset <= -7.0   and d_year <= 1900  and cs_list_price <= 150.5";
 			//query = prop.getProperty("query");
 			
 			cardinalityPath = prop.getProperty("cardinalityPath");
@@ -2079,7 +2167,6 @@ class point3D{
 		return order.get(0);
 	}
 
-	
 }
 
 class point_generic
