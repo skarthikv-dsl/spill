@@ -92,20 +92,16 @@ public class CostGreedyGCI3D
 	static int totalPoints;
 	double selectivity[];
 
-	static ArrayList<point3D> contourPoints = new ArrayList<point3D>();
+
 	
 	//The following parameters has to be set manually for each query
 	static String apktPath;
-	static String plansPath = "/home/dsladmin/Srinivas/data/spillBound/temp/";
 	static String qtName ;
-	static String varyingJoins;
-	static int JS_multiplier1;
-	static int JS_multiplier2;
-	static String query;
 	static String cardinalityPath;
 	
 	double  minIndex [];
 	double  maxIndex [];
+	static int sel_distribution;
 	static boolean MSOCalculation = true;
 	static boolean randomPredicateOrder = false; 
 	static Connection conn = null;
@@ -126,7 +122,6 @@ public class CostGreedyGCI3D
 	public static void main(String args[]) throws IOException, SQLException
 	{
 		
-		int selConf = 3;
 
 		CostGreedyGCI3D obj = new CostGreedyGCI3D();
 		obj.loadPropertiesFile();
@@ -146,7 +141,7 @@ public class CostGreedyGCI3D
 		obj.readpkt(reducedgdp);
 
 		//Populate the selectivity Matrix.
-		obj.loadSelectivity(selConf);
+		obj.loadSelectivity();
 		
 		//Calculate Native MSO
 		obj.findingNativeMSO();
@@ -811,23 +806,32 @@ public void intialize(int location) {
 		/*
 		 * Populates the selectivity Matrix according to the input given
 		 * */
-		void loadSelectivity(int option)
+		void loadSelectivity()
 		{
 			String funName = "loadSelectivity: ";
 			System.out.println(funName+" Resolution = "+resolution);
 			double sel;
 			this.selectivity = new double [resolution];
 			
-			//settings
 			if(resolution == 10){
-			selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
-			selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
-			selectivity[8] = 0.50;		selectivity[9] = 0.95;                                 // oct - 2012
-//				selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
-//				selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
-//				selectivity[8] = 0.6;		selectivity[9] = 0.95;                                 // oct - 2012
+				if(sel_distribution == 0){
+					
+					//This is for TPCH queries 
+					selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
+					selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
+					selectivity[8] = 0.6;		selectivity[9] = 0.95;                                 // oct - 2012
+				}
+				else if( sel_distribution ==1){
+					
+					//This is for TPCDS queries
+					selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
+					selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
+					selectivity[8] = 0.50;		selectivity[9] = 0.95;                                 // dec - 2012
+				}
+				else
+					assert (false) : "should not come here";
 
-			}
+			}		
 
 
 			if(resolution == 20){
@@ -1197,12 +1201,8 @@ public void intialize(int location) {
 			// get the property value and print it out
 			apktPath = prop.getProperty("apktPath");
 			qtName = prop.getProperty("qtName");
-//			varyingJoins = prop.getProperty("varyingJoins");
-//			JS_multiplier1 = Integer.parseInt(prop.getProperty("JS_multiplier1"));
-//			JS_multiplier2 = Integer.parseInt(prop.getProperty("JS_multiplier2"));
-//			query = "explain analyze FPC(\"customer\")  (\"10000.0\") select c_custkey, c_name,	l_extendedprice * (1 - l_discount) as revenue, c_acctbal, n_name, c_address, c_phone, c_comment from customer, orders, lineitem,	nation where c_custkey = o_custkey and l_orderkey = o_orderkey and o_orderdate between '1993-01-20' and '1994-01-01' 	and c_nationkey = n_nationkey  order by	revenue desc";
-			//query = prop.getProperty("query");
 			cardinalityPath = prop.getProperty("cardinalityPath");
+			sel_distribution = Integer.parseInt(prop.getProperty("sel_distribution"));
 			
 		} catch (IOException ex) {
 			ex.printStackTrace();

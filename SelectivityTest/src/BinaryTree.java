@@ -83,16 +83,16 @@ public class BinaryTree {
     
     public static Set<Pipeline> PIPELINES = new HashSet<Pipeline>();
     //Note that rules for predicates is (predicate1<space>=<space>predicate2)
-   	static String[] predicates = {"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
-   	static String[] predicatesRev = {"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
-//   	static String[] predicates = {"(orders.o_custkey = customer.c_custkey)","(lineitem.l_orderkey = orders.o_orderkey)"};
-//   	static String[] predicatesRev = {"(customer.c_custkey = orders.o_custkey)","(orders.o_orderkey = lineitem.l_orderkey)"};   	
-   		static String path = "/home/dsladmin/Srinivas/data/DSQT914DR10_E/";
+//   	static String[] predicates = {"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
+//   	static String[] predicatesRev = {"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
+   	static String[] predicates = {"(supplier.s_suppkey = lineitem.l_suppkey)","(lineitem.l_orderkey = orders.o_orderkey)","(orders.o_custkey = customer.c_custkey)"};
+   	static String[] predicatesRev = {"(lineitem.l_suppkey = supplier.s_suppkey)","(orders.o_orderkey = lineitem.l_orderkey)","(customer.c_custkey = orders.o_custkey)"};   	
+   		static String path = "/home/dsladmin/Srinivas/data/HQT73DR10_E/";
 //   	static String path = "/home/dsladmin/Srinivas/data/HQT102DR100_U_Page0/";
-//   	static String[] relations = {"s","l","o","c","n1","n2"};
+   	static String[] relations = {"s","l","o","c","n1","n2"};
 //   	static String[] relations = {"c","o","l","n"};
-   		static String[] relations = {"cc","cr","d","c","ca","cd","hd"};
-   	static int numplans = 198;
+//   		static String[] relations = {"cc","cr","d","c","ca","cd","hd"};
+   	static int numplans = 29;
    	public static HashMap<String, Integer> relationMap =  new HashMap<String, Integer>();
    	public static boolean FROM_CLAUSE = false;
    	

@@ -88,15 +88,12 @@ public class GCI3D
 	static int totalPoints;
 	double selectivity[];
 
-	static ArrayList<point3D> contourPoints = new ArrayList<point3D>();
 	
 	//The following parameters has to be set manually for each query
 	static String apktPath;
-	static String plansPath = "/home/dsladmin/Srinivas/data/spillBound/temp/";
 	static String qtName ;
 	static String varyingJoins;
 	static double JS_multiplier [];
-	static int PK_relation_size [];
 	static String query;
 	static String cardinalityPath;
 
@@ -104,34 +101,35 @@ public class GCI3D
 	double  maxIndex [];
 	static boolean MSOCalculation = true;
 	static boolean randomPredicateOrder = false;
+	
 	//Settings: 
-	static boolean FROM_CLAUSE = false;
+	static int sel_distribution; 
+	static boolean FROM_CLAUSE = true;
 	static Connection conn = null;
 
 	static ArrayList<Integer> remainingDim;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
-	 static ArrayList<point_generic> final_points = new ArrayList<point_generic>();
-	 static ArrayList<Integer> learntDim = new ArrayList<Integer>();
-		//static ArrayList<Integer> learntDimIndices = new ArrayList<Integer>();
-	 static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
-	 static HashMap<Integer,ArrayList<point_generic>> ContourPoints = new HashMap<Integer,ArrayList<point_generic>>();
+	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
+	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
+	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
+	static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
 
-	 static double learning_cost = 0;
-	 static double oneDimCost = 0;
-	 static int no_executions = 0;
-	 static int no_repeat_executions = 0;
-	 static int max_no_executions = 0;
-	 static int max_no_repeat_executions = 0;
+	static double learning_cost = 0;
+	static double oneDimCost = 0;
+	static int no_executions = 0;
+	static int no_repeat_executions = 0;
+	static int max_no_executions = 0;
+	static int max_no_repeat_executions = 0;
 
-	 static boolean [] already_visited;  
-	 
-	 double[] actual_sel;
-	 
-	 //for ASO calculation 
-		static double planCount[], planRelativeArea[];
-		static float picsel[], locationWeight[];
+	static boolean [] already_visited;  
 
-		static double areaSpace =0,totalEstimatedArea = 0;
+	double[] actual_sel;
+
+	//for ASO calculation 
+	static double planCount[], planRelativeArea[];
+	static float picsel[], locationWeight[];
+
+	static double areaSpace =0,totalEstimatedArea = 0;
 
 
 	 
@@ -139,7 +137,6 @@ public class GCI3D
 	public static void main(String args[]) throws IOException, SQLException
 	{
 		
-		int selConf = 3;
 
 		GCI3D obj = new GCI3D();
 
@@ -158,36 +155,36 @@ public class GCI3D
 		obj.readpkt(gdp);
 
 		//Populate the selectivity Matrix.
-		obj.loadSelectivity(selConf);
+		obj.loadSelectivity();
 		obj.loadPropertiesFile();
 		int i;
 		double h_cost = obj.getOptimalCost(totalPoints-1);
 		double min_cost = obj.getOptimalCost(0);
 		double ratio = h_cost/min_cost;
-	//	System.out.println("-------------------------  ------\n"+qtName+"    alpha="+alpha+"\n-------------------------  ------"+"\n"+"Highest Cost ="+h_cost+", \nRatio of highest cost to lowest cost ="+ratio);
+		assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
 		System.out.println("the ratio of C_max/c_min is "+ratio);
 		
 		i = 1;
 		
+		//to generate contours
 		remainingDim.clear(); 
 		for(int d=0;d<obj.dimension;d++){
 			remainingDim.add(d);
 		}
-		learntDim.clear();
 		
+		learntDim.clear();
 		learntDimIndices.clear();
 		double cost = obj.getOptimalCost(0);
-		//cost*=2;
 		getAllPermuations(remainingDim,0);
+		assert (allPermutations.size() == obj.factorial(obj.dimension)) : "all the permutations are not generated";
+		
 		while(cost < 2*h_cost)
 		{
 			if(cost>h_cost)
 				cost = h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
 			System.out.println("Contour "+i+" cost : "+cost+"\n");
-			
-			final_points.clear();
-			//final_points = new ArrayList<point_generic>();
+			all_contour_points.clear();
 			for(ArrayList<Integer> order:allPermutations){
 				System.out.println("Entering the order"+order);
 				learntDim.clear();
@@ -196,8 +193,8 @@ public class GCI3D
 			}
 			//Settings
 			//writeContourPointstoFile(i);
-			int size_of_contour = final_points.size();
-			ContourPoints.put(i, new ArrayList<point_generic>(final_points)); //storing the contour points
+			int size_of_contour = all_contour_points.size();
+			ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
 				cost = cost*2;
 				i = i+1;
@@ -211,7 +208,7 @@ public class GCI3D
 
 			//Settings
 			conn = DriverManager
-					.getConnection("jdbc:postgresql://localhost:5432/tpcds",
+					.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
 							"sa", "database");
 			 System.out.println("Opened database successfully");
 		}
@@ -249,7 +246,7 @@ public class GCI3D
 		for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
 		//----------------------------------------------------------
 		i =1;
-		while(i<=ContourPoints.size() && !obj.remainingDim.isEmpty())
+		while(i<=ContourPointsMap.size() && !obj.remainingDim.isEmpty())
 		{	
 
 			if(cost<(double)10000){
@@ -345,7 +342,16 @@ public class GCI3D
 
 	}
 	
-	 public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
+	 private int factorial(int num) {
+
+		 int factorial = 1;
+		for(int i=num;i>=1;i--){
+			factorial *= i; 
+		}
+		return factorial;
+	}
+
+	public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
 
        File file = new File(path+"spillBound_"+"suboptimality"+".txt");
 	    if (!file.exists()) {
@@ -418,9 +424,9 @@ public class GCI3D
 		}
 		
 		//TODO: pick the sel_min in the contour in 1D
-		for(int c=0;c< ContourPoints.get(contour_no).size();c++){
+		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
 
-			point_generic p = ContourPoints.get(contour_no).get(c);
+			point_generic p = ContourPointsMap.get(contour_no).get(c);
 
 			if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
 				Integer learning_dim = new Integer(p.getLearningDimension());
@@ -515,9 +521,9 @@ private void spillBoundAlgo(int contour_no, CostGreedy cg) throws IOException {
 		//end of declaration of variables
 		int currentContourPoints = 0;
 		
-		for(int c=0; c <ContourPoints.get(contour_no).size();c++){
+		for(int c=0; c <ContourPointsMap.get(contour_no).size();c++){
 			
-			point_generic p = ContourPoints.get(contour_no).get(c);
+			point_generic p = ContourPointsMap.get(contour_no).get(c);
 			
 			/*
 			 * update the max and the min cost seen for this contour
@@ -571,7 +577,7 @@ private void spillBoundAlgo(int contour_no, CostGreedy cg) throws IOException {
 					System.out.println(funName+" ERROR from the boundary point");
 				else {
 					point_generic p = new point_generic(arr, getPlanNumber_generic(arr), cost_generic(arr), remainingDim);
-					ContourPoints.get(contour_no).add(p);
+					ContourPointsMap.get(contour_no).add(p);
 					max_cost = min_cost = p.get_cost();
 					unique_plans.add(p.get_plan_no());
 					p.reloadOrderList(remainingDim);
@@ -664,8 +670,8 @@ private void spillBoundAlgo(int contour_no, CostGreedy cg) throws IOException {
 private void removeDimensionFromContourPoints(int d) {
 	String funName = "removeDimensionFromContourPoints";
 	//TODO should we have to check for empty contours and points? 
-	for(int c=1;c<=ContourPoints.size();c++){
-		for(point_generic p: ContourPoints.get(c)){
+	for(int c=1;c<=ContourPointsMap.size();c++){
+		for(point_generic p: ContourPointsMap.get(c)){
 			p.remove_dimension(d);
 		}
 	}
@@ -746,7 +752,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 			stmt.execute("set spill_node = "+ spill_node);
 			stmt.execute("set work_mem = '100MB'");
 			//NOTE,Settings: 4GB for DS and 1GB for H
-			stmt.execute("set effective_cache_size='4GB'");
+			stmt.execute("set effective_cache_size='1GB'");
 			//NOTE,Settings: need not set the page cost's
 			stmt.execute("set  seq_page_cost = 1");
 			stmt.execute("set  random_page_cost=4");
@@ -1033,9 +1039,9 @@ public void intialize(int location) {
 	/*
 	 * reload the order list before the start of  every contour
 	 */
-	for(int i=1;i<=ContourPoints.size();i++){
-		for(int j=0;j<ContourPoints.get(i).size();j++){
-			point_generic p = ContourPoints.get(i).get(j);
+	for(int i=1;i<=ContourPointsMap.size();i++){
+		for(int j=0;j<ContourPointsMap.get(i).size();j++){
+			point_generic p = ContourPointsMap.get(i).get(j);
 			p.reloadOrderList(remainingDim);
 		}
 	}
@@ -1071,7 +1077,7 @@ public void intialize(int location) {
 	    PrintWriter pway = new PrintWriter(writeray);
 //	    PrintWriter pwaz = new PrintWriter(writeraz);
 	    //Take iterator over the list
-	    for(point_generic p : final_points) {
+	    for(point_generic p : all_contour_points) {
 		    //        System.out.println(p.getX()+":"+p.getY()+": Plan ="+p.p_no);
 	   	 pwax.print((int)p.get_dimension(0) + "\t");
 	   	 pway.print((int)p.get_dimension(1)+ "\t");
@@ -1094,7 +1100,7 @@ public void intialize(int location) {
 
 	private static void getAllPermuations(ArrayList<Integer> DimOrder,int k) {
 
-	 //   static void permute(int[] a, int k) 
+
 		if (k == DimOrder.size()) 
 		{	ArrayList<Integer> tempList = new ArrayList<Integer>();
 			for (int i = 0; i <  DimOrder.size(); i++) 
@@ -1128,11 +1134,10 @@ public void intialize(int location) {
 
 	void getContourPoints(ArrayList<Integer> order,double cost) throws IOException
 	{
-		//Assume 
-		//1. there is a List named "final_points";
-		//2. Make sure you emptied "final_points" before calling this function; 
-		
-		
+		String funName = "getContourPoints";
+		//learntDim contains the dimensions already learnt (which is null initially)
+		//learntDimIndices contains the exact point in the space for the learnt dimensions
+
 		ArrayList<Integer> remainingDimList = new ArrayList<Integer>();
 		for(int i=0;i<order.size();i++)
 		{
@@ -1158,6 +1163,10 @@ public void intialize(int location) {
 					last_dim = i;
 			}
 			
+			assert (learntDim.size() == learntDimIndices.size()) : funName+" : learnt dimension data structures size not matching";
+			assert (last_dim>=0 && last_dim<dimension) :funName+ " : index problem ";
+			assert (remainingDimList.size() + learntDim.size() == dimension) : funName+" : learnt dimension data structures size not matching";
+			
 			//Search the whole line and return all the points which fall into the contour
 			for(int i=0;i< resolution;i++)
 			{
@@ -1167,10 +1176,9 @@ public void intialize(int location) {
 
 				if(cur_val == targetval)
 				{
-
 					if(!pointAlreadyExist(arr)){ //check if the point already exist
 						point_generic p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
-						final_points.add(p);
+						all_contour_points.add(p);
 					}
 				}
 				else if(i!=0){
@@ -1181,7 +1189,7 @@ public void intialize(int location) {
 					{
 						if(!pointAlreadyExist(arr)){ //check if the point already exist
 							point_generic p = new point_generic(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
-							final_points.add(p);
+							all_contour_points.add(p);
 						}
 					}
 					
@@ -1210,7 +1218,7 @@ public void intialize(int location) {
 	private boolean pointAlreadyExist(int[] arr) {
 
 		boolean flag = false;
-		for(point_generic p: final_points){
+		for(point_generic p: all_contour_points){
 			flag = true;
 			for(int i=0;i<dimension;i++){
 				if(p.get_dimension(i)!= arr[i]){
@@ -1226,313 +1234,13 @@ public void intialize(int location) {
 	}
 
 
-	/*
-	 * Implementation of the actual algorithm
-	 * Get y_min, do binary search to get x_act.
-	 * */
-	void getContour(double cost,int contour_no) throws IOException
-	{
-	//	double [] this.costed_points = new double [totalPoints];
-		
-		
-		System.out.println("\nContour number ="+contour_no+",Cost : "+cost);
-		
-//		System.out.println("\n Cost : "+cost);
-		
-		double e = 0.1; //Error allowed while searching or doing the binary search.
-		double x_act,y_act,z_act;
-		double x_min, y_min,z_min;
-
-		int x_act_index, y_act_index,z_act_index;
-		point3D tempPoint;
-		//List output;
-		ArrayList<point3D> output = new ArrayList<point3D>();
-		Set<Integer> unique_plans = new HashSet();
-		
-
-		
-		// Trying list functions
-	//	point p1 =new point(4,3);
-	//	output.add(p1);
-	//	System.out.println("Point is :"+output.get(0).getX()+output.get(0).getY()+"\n");
-		
-	//=============================
-	
-		z_min = selectivity[0];
-		z_act = z_min;
-		z_act_index = 0;
-		int i;
-		while(z_act <= 1)
-		{
-	//		System.out.println("\n z_act="+z_act+", z_index"+z_act_index);
-	//		System.out.println("\n1\n");
-	//		System.out.println("\n Before Calling getContour2D z_index ="+z_act_index+", z_act ="+z_act+", sel[0] ="+selectivity[0]);
-			getContour2D(z_act_index,cost);
-		//	System.out.println("\ny_act_index :"+y_act_index);
-		//	System.out.println("\n After Calling getContour2D z_index ="+z_act_index+", z_act ="+z_act+", sel[0] ="+selectivity[0]);
-	//		System.out.println("\n2");
-			
-			//z_act = z_act*alpha;
-			z_act_index = findNearestPoint(z_act);
-	//		System.out.println("\n3");
-			if( !(contourPoints.isEmpty()) )
-			{
-	//			System.out.println("\n4");
-	//			System.out.println("\n ContourPoints size ="+ contourPoints.size());
-				// Iterate over the contourPoints and elevate each of them to alpha*z !!
-				
-				for(i = 0;i < contourPoints.size();i++)
-				{
-		//			System.out.println("\n5");
-					tempPoint = contourPoints.get(i);
-					x_act = tempPoint.getX();
-					y_act = tempPoint.getY();
-				//	z_act = tempPoint.getZ();
-				//	point p2 = new point(x_act, y_act);
-				//	original.add(p2);
-			//		System.out.println("\n Before Updation.. z actual ="+z_act);
-					//z_act = z_act*alpha;
-		//			System.out.println("\n Updated.. z actual ="+z_act);
-			//		z_act_index = findNearestPoint(z_act);
-					
-					if(z_act < 1)
-					{
-						//System.out.println("\n1\n");
-				// uncomment		point3D p1 = new point3D(x_act,y_act,z_act,calculatePlanNumber(x_act,y_act,z_act));
-				//		output.add(p1);
-					}
-					else
-					{
-				//uncomment		point3D p1 = new point3D(x_act,y_act,selectivity[resolution-1],calculatePlanNumber(x_act,y_act,selectivity[resolution - 1]));
-				//		output.add(p1);
-					}
-				}
-				contourPoints.clear();
-			}	
-			else
-			{
-		//		System.out.println("\n x_act_index == -1");
-				//z_act = z_act*alpha;
-			//	z_act_index = findNearestPoint(z_act);
-				
-			}
-		//	System.out.println("\n After Loop z actual ="+z_act);
-			
-		}
-	//	System.out.println("\n6");
-		
-		// ---------------------------------------------------------------------- Generate Brute Force..
-	/*
-	//	int i;
-		double x, y, z;
-		int x_index, y_index,z_index;
-		for(z_index = 0;z_index < resolution; z_index++)
-		{
-			for(y_index = 0; y_index < resolution; y_index++)
-			{
-				x_index = getContourPoint(y_index,z_index,cost);
-				if(x_index == -1)
-				{
-					continue;
-				}
-				x = selectivity[x_index];
-				y = selectivity[y_index];
-				z = selectivity[z_index];
-				point3D p2 = new point3D(x,y,z);
-				original.add(p2);
-			}
-		}
-		
-	*/
-		//----------------------------------------------------------------------
-		//Display output List
-//		System.out.println("List size is :"+output.size());
-	//	System.out.println("List size is :"+original.size());
-	//	System.out.println("\nNo of Optimizations :"+no_of_optimizations);
-		
-		//Display output List
-		System.out.println("Virtual Contour list size is :"+output.size());
-//		System.out.println("List size is :"+original.size());
-		
-		 for(point3D p : output) {
-	    //        System.out.println(p.getX()+":"+p.getY()+": Plan ="+p.p_no);
-	            // Insert the plan number into a set.
-	            unique_plans.add(p.p_no);
-	            //System.out.println(+p.getX()+":"+p.getY());
-	        }
-		 System.out.println("Number of Unique Plans ="+unique_plans.size());
-		 for(int k : unique_plans){
-	            System.out.println(" Plan ="+k);
-	        }
-	        unique_plans.clear();
-		
-	        output.clear();
-/*		 for(point p : output) {
-	            System.out.println(p.getX());
-	            //System.out.println(+p.getX()+":"+p.getY());
-	        }
-	        */
-/*		for(point p : original) {
-            System.out.println(p.getY());
-            //System.out.println(+p.getX()+":"+p.getY());
-        }
-*/		
-//		System.out.println("\n Cost="+ OptimalCost[2]+"\n Sel[2]="+selectivity[2]);
-	}
-	
-	
-	
-	void genBruteForce(double cost,int contour_no) throws IOException
-	{
-		//	int i;
-		ArrayList<point3D> original = new ArrayList<point3D>();
-		double x, y, z;
-		int x_index, y_index,z_index;
-		for(z_index = 0;z_index < resolution; z_index++)
-		{
-			for(y_index = 0; y_index < resolution; y_index++)
-			{
-				x_index = getContourPoint(y_index,z_index,cost);
-				if(x_index == -1)
-				{
-					continue;
-				}
-				x = selectivity[x_index];
-				y = selectivity[y_index];
-				z = selectivity[z_index];
-				//uncomment  point3D p2 = new point3D(x,y,z,getPlanNumber(x_index,y_index,z_index));
-				//original.add(p2);
-			}
-		}
-		original.clear();
-	}
 	
 	
 	
 	
-	// Populates the list of "ContourPoints" at z=z_act_index with Cost = cost
-	// Use getContourPoint.
-	void getContour2D(int z_act_index, double cost) throws IOException
-	{
-		
-	// Do one pass of it !!
-		double x_act,y_act,z_act;
-		double x_min, y_min,z_min;
-
-		int x_act_index, y_act_index;
-		z_act = selectivity[z_act_index];
-	//	System.out.println("\n Inside getContour2D z_index ="+z_act_index+", z_act ="+z_act+", sel[0] ="+selectivity[0]);
-		y_min = selectivity[0];
-		y_act = y_min;
-		y_act_index = 0;
-		while(y_act <= 1)
-		{
-			x_act_index = getContourPoint(y_act_index,z_act_index,cost);
-	//		System.out.println("\ny_act="+y_act+", y_act_index :"+y_act_index);
-	//		
-			y_act = selectivity[y_act_index];
-			if(x_act_index != -1 )
-			{
-		//		System.out.println("\n2");
-			//	y_act = selectivity[y_act_index];
-				x_act = selectivity[x_act_index];
-			//	point p2 = new point(x_act, y_act);
-			//	original.add(p2);
-				//y_act = y_act*alpha;
-				y_act_index = findNearestPoint(y_act);
-				if(y_act < 1)
-				{
-				//uncomment	point3D p2 = new point3D(x_act,y_act,z_act, calculatePlanNumber(x_act,y_act,z_act));
-				//	contourPoints.add(p2);
-				}
-				else
-				{
-				//	uncomment point3D p2 = new point3D(x_act,selectivity[resolution-1],z_act, calculatePlanNumber(x_act,selectivity[resolution -1],z_act));
-				//	contourPoints.add(p2);
-				}
-			}	
-			else
-			{
-		//		System.out.println("\n x_act_index == -1");
-				//y_act = y_act*alpha;
-				y_act_index = findNearestPoint(y_act);
-			}
-			
-		}
-	//	System.out.println("\noutside y_act\n");
-	}
 	
 	
-	// Function which does binary search to find the actual point !!
-	//Return the x co-ordinate *index*
-	int getContourPoint(int y_act_index,int z_act_index, double cost)
-	{
-		double x_min = selectivity[0];
-		double min = selectivity[0];
-		double max = selectivity[resolution -1];
-		int min_index = 0;
-		int max_index = resolution -1;
-		double mid,val;
-		int mid_index;
-		double mid_cost,mid_cost_r, mid_cost_l;
-		int [] coord = new int[2];
-		coord[1] = y_act_index;
-		
-		
-		while (min_index <= max_index)
-		{
-			mid_index = (int) Math.floor((min_index + max_index)/2);
-			// mid_index is the index of selectivity near mid
-		//	mid_index = findNearestPoint(selectivity[mid]);
-			//Check the cost at index, y_act
-			mid_cost = cost(mid_index, y_act_index,z_act_index);
-	//		System.out.println("\n mid_cost : "+mid_cost);
-			if(mid_index != resolution - 1)
-			{
-				mid_cost_r = cost(mid_index + 1, y_act_index,z_act_index);
-			}
-			else
-			{
-				mid_cost_r = mid_cost;
-			}
-			
-			if(mid_index != 0)
-			{
-				mid_cost_l = cost(mid_index - 1, y_act_index,z_act_index);
-			}
-			else
-			{
-				mid_cost_l = mid_cost;
-			}
-			
-			
-			if(mid_cost >= cost)
-			{
-				if(mid_cost_l <= cost)
-				{
-					//Cost lies between mid and mid-1 so be conservative and return mid_index as the x coordinate of the contour point.
-					return mid_index;
-				}
-				//Then we have to Look from min to mid (left-half)
-				max_index = mid_index - 1;
-			}
-			if(mid_cost < cost)
-			{
-				if(mid_cost_r >= cost)
-				{
-					return mid_index + 1;
-				}
-				//Then we have to look from mid to max(right-half)
-				min_index = mid_index + 1;
-			}
-			
-			
-		}
-		//While ends above
-		return -1;
 	
-		
-	}
 // Return the index near to the selecitivity=mid;
 	public int findNearestPoint(double mid)
 	{
@@ -1608,11 +1316,9 @@ public void intialize(int location) {
 			{
 				this.OptimalCost[i]= data[i].getCost();
 				this.plans[i] = data[i].getPlanNumber();
-				//System.out.println("Plan Number ="+plans[i]+"\n");
-				//	System.out.println("\nOptimal_cost:["+i+"] ="+OptimalCost[i]+"\n");
 			}
 
-			//TO get the number of points for each plan
+			//To get the number of points for each plan
 			int  [] plan_count = new int[totalPlans];
 			for(int p=0;p<data.length;p++){
 				plan_count[plans[p]]++;
@@ -1627,15 +1333,13 @@ public void intialize(int location) {
 			 */
 			nPlans = totalPlans;
 			AllPlanCosts = new double[nPlans][totalPoints];
-			//costBouquet = new double[total_points];
 			for (int i = 0; i < nPlans; i++) {
 				try {
 
 					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + i + ".pcst")));
 					double[] cost = (double[]) ip.readObject();
 					for (int j = 0; j < totalPoints; j++)
-					{
-					
+					{					
 						AllPlanCosts[i][j] = cost[j];
 					}
 				} catch (Exception e) {
@@ -1705,7 +1409,7 @@ public void intialize(int location) {
 		/*
 		 * Populates the selectivity Matrix according to the input given
 		 * */
-		void loadSelectivity(int option)
+		void loadSelectivity()
 		{
 			String funName = "loadSelectivity: ";
 			System.out.println(funName+" Resolution = "+resolution);
@@ -1713,18 +1417,24 @@ public void intialize(int location) {
 			this.selectivity = new double [resolution];
 			
 			if(resolution == 10){
-				//Settings
-//				selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
-//				selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
-//			selectivity[8] = 0.6;		selectivity[9] = 0.95;                                 // oct - 2012
-				
-				selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
-				selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
-				selectivity[8] = 0.50;		selectivity[9] = 0.95;                                 // dec - 2012
-	
-			}
+				if(sel_distribution == 0){
+					
+					//This is for TPCH queries 
+					selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
+					selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
+					selectivity[8] = 0.6;		selectivity[9] = 0.95;                                 // oct - 2012
+				}
+				else if( sel_distribution ==1){
+					
+					//This is for TPCDS queries
+					selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
+					selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
+					selectivity[8] = 0.50;		selectivity[9] = 0.95;                                 // dec - 2012
+				}
+				else
+					assert (false) : "should not come here";
 
-
+			}		
 			if(resolution == 20){
 			selectivity[0] = 0.000005;		selectivity[1] = 0.00005;		selectivity[2] = 0.0005;	selectivity[3] = 0.002;
 			selectivity[4] = 0.005;		selectivity[5] = 0.008;		selectivity[6] = 0.01;		selectivity[7] = 0.02;
@@ -1873,22 +1583,27 @@ public	int calculatePlanNumber(double x_act, double y_act, double z_act)
 			varyingJoins = prop.getProperty("varyingJoins");
 			
 			JS_multiplier = new double[dimension];
-			PK_relation_size = new int[dimension];
 			for(int d=0;d<dimension;d++){
 				String multiplierStr = new String("JS_multiplier"+(d+1));
 				JS_multiplier[d] = Double.parseDouble(prop.getProperty(multiplierStr));
-				//PK_relation_size[d] = Integer.parseInt(prop.getProperty("PK_relation_size"+(d+1)));
 			}
 			
 			//Settings:Note dont forget to put analyze here
-			query = "explain FPC(\"store_sales\")  (\"197.5\") select i_item_id, ss_quantity, ss_list_price, ss_coupon_amt, ss_sales_price from store_sales, customer_demographics, date_dim, item, promotion where ss_sold_date_sk = d_date_sk and ss_item_sk = i_item_sk and ss_cdemo_sk = cd_demo_sk and ss_promo_sk = p_promo_sk and cd_gender = 'F' and cd_marital_status = 'M' and cd_education_status = 'College' and d_year = 2001      and ss_list_price <= 197.5";
+			//query = "explain analyze FPC(\"lineitem\") (\"104949\")  select	supp_nation,	cust_nation,	l_year,	volume from	(select n1.n_name as supp_nation, n2.n_name as cust_nation, 	DATE_PART('YEAR',l_shipdate) as l_year,	l_extendedprice * (1 - l_discount) as volume	from	supplier, lineitem, orders, 	customer, nation n1,	nation n2 where s_suppkey = l_suppkey	and o_orderkey = l_orderkey and c_custkey = o_custkey		and s_nationkey = n1.n_nationkey and c_nationkey = n2.n_nationkey	and  c_acctbal<=10000 and l_extendedprice<=22560 ) as temp";
 			//query = "explain analyze FPC(\"catalog_sales\")  (\"150.5\") select ca_zip, cs_sales_price from catalog_sales,customer,customer_address,date_dim where cs_bill_customer_sk = c_customer_sk and c_current_addr_sk = ca_address_sk and cs_sold_date_sk = d_date_sk and ca_gmt_offset <= -7.0   and d_year <= 1900  and cs_list_price <= 150.5";
-			//query = prop.getProperty("query");
+			query = prop.getProperty("query");
 			
 			cardinalityPath = prop.getProperty("cardinalityPath");
 			
-			//TODO,Settings: need to change this
-			//FROM_CLAUSE = prop.getProperty("FROM_CLAUSE");
+			
+			int from_clause_int_val = Integer.parseInt(prop.getProperty("FROM_CLAUSE"));
+			
+			if(from_clause_int_val == 1)
+				FROM_CLAUSE = true;
+			else
+				FROM_CLAUSE = false;
+			
+			sel_distribution = Integer.parseInt(prop.getProperty("sel_distribution"));
 			
 		} catch (IOException ex) {
 			ex.printStackTrace();
@@ -1939,7 +1654,7 @@ void getContourPointsLohitOld(double cost, double errorboundval) throws IOExcept
 			{
 			
 				 point_generic p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
-				 final_points.add(p);
+				 all_contour_points.add(p);
 			}
 		}
 		
@@ -2111,63 +1826,6 @@ public int getPCSTWorstPlan(int loc) {
 }
 
 
-class point3D{
-	double x;
-	double y;
-	double z;
-	int p_no;
-	ArrayList<Integer> order;
-	int value;
-	static String plansPath = "/home/dsladmin/Srinivas/data/HQT103D-OC-OL-SL_EXP2/predicateOrder/";
-	point3D(double a, double b,double c, int num, ArrayList<Integer> remainingDim) throws  IOException{
-		this.x = a;
-		this.y = b;
-		this.z = c;
-		
-		//calculate the plan number.
-//		this.p_no = GCI3D.calculatePlanNumber(a,b,c);
-		this.p_no = num;
-		
-		order =  new ArrayList<Integer>();
-		FileReader file = new FileReader(plansPath+num+".txt");
-	    //if (!file.exists()) 
-			//System.out.println("ERROR!");
-	    
-	    BufferedReader br = new BufferedReader(file);
-	    String s;
-	    while((s = br.readLine()) != null) {
-	    	//System.out.println(Integer.parseInt(s));
-	    	value = Integer.parseInt(s);
-	    	if(remainingDim.contains(value))
-	    	{
-	    		order.add(value);
-	    	}
-	    }
-	    br.close();
-	    file.close();
-		
-		
-	}
-	double getX()
-	{
-		return this.x;
-	}
-	double getY(){
-		return this.y;
-	}
-	double getZ(){
-		return this.z;
-	}
-	double getPlanNumber(){
-		return this.p_no;
-	}
-	int getLearningDimension(){
-		if(order.isEmpty())
-			System.out.println("ERROR: all dimensions learnt");
-		return order.get(0);
-	}
-
-}
 
 class point_generic
 {
