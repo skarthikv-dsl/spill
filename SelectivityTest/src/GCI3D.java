@@ -106,7 +106,8 @@ public class GCI3D
 	static int sel_distribution; 
 	static boolean FROM_CLAUSE = true;
 	static Connection conn = null;
-
+	static int database_conn;
+	
 	static ArrayList<Integer> remainingDim;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
 	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
@@ -201,15 +202,23 @@ public class GCI3D
 		}
 	
 		/*
-		 * Setting up the DB connection to Postgres/TPCH Benchmark. 
+		 * Setting up the DB connection to Postgres/TPCH/TPCDS Benchmark. 
 		 */
 		try{
 			Class.forName("org.postgresql.Driver");
 
 			//Settings
+			if(database_conn==0){
 			conn = DriverManager
 					.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
 							"sa", "database");
+			}
+			else{
+				conn = DriverManager
+						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
+								"sa", "database");
+
+			}
 			 System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
@@ -221,7 +230,7 @@ public class GCI3D
 		 */
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
 		obj.getPlanCountArray();
-		//int max_point = 0; /*to not execute the spillBound algorithm*/
+		//int max_point = 0; /*not to execute the spillBound algorithm*/
 		int max_point = 1; /*to execute a specific q_a */
 		//Settings
 		if(MSOCalculation)
@@ -236,7 +245,7 @@ public class GCI3D
 		double algo_cost =0;
 		SO =0;
 		cost = obj.getOptimalCost(0);
-		obj.intialize(j);
+		obj.initialize(j);
 		int[] index = obj.getCoordinates(obj.dimension, obj.resolution, j);
 //		if(index[0]%5 !=0 || index[1]%5!=0)
 //			continue;
@@ -254,6 +263,7 @@ public class GCI3D
 				i++;
 				continue;
 			}
+			assert (cost>=2*h_cost) : "cost limit exceeding";
 			if(cost>h_cost)
 				cost=h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -266,6 +276,7 @@ public class GCI3D
 			}
 			else
 				obj.spillBoundAlgo(i,cg);
+			
 			int present = obj.remainingDim.size();
 			if(present < prev - 1 || present > prev)
 				System.out.println("ERROR");
@@ -400,10 +411,8 @@ public class GCI3D
 		/*
 		 * just sanity check for findNearestPoint and findNearestSelectivity
 		 */
-		if (findNearestSelectivity(actual_sel[0]) != findNearestSelectivity(findNearestSelectivity(actual_sel[0]))) 
-			 System.out.println(" findNearSelectivity" + " Error");
-		if (findNearestPoint(actual_sel[0]) != findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) 
-			System.out.println(" findNearPoint" + " Error");
+		assert(findNearestSelectivity(actual_sel[0]) != findNearestSelectivity(findNearestSelectivity(actual_sel[0]))) : funName+ " : findNearSelectivity Error";
+		assert (findNearestPoint(actual_sel[0]) != findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) : funName+ " : findNearPoint Error";
 		
 		//newly added code Feb28; 8:00 pm
 		if(cost_generic(convertSelectivitytoIndex(actual_sel)) > 2*cost){
@@ -1001,9 +1010,9 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 //
 //}
 
-public void intialize(int location) {
+public void initialize(int location) {
 
-	String funName = "intialize";
+	String funName = "initialize";
 	//updating the feasible region
 	for(int i=0;i<dimension;i++){
 		minIndex[i] =  findNearestSelectivity(0);
@@ -1018,7 +1027,7 @@ public void intialize(int location) {
 	learning_cost = 0;
 	oneDimCost = 0;
 	no_executions = 0;
-	no_repeat_executions =0;
+	no_repeat_executions = 0;
 	max_no_executions = 0;
 	max_no_repeat_executions =0;
 	already_visited = new boolean[dimension];
@@ -1177,8 +1186,19 @@ public void intialize(int location) {
 				if(cur_val == targetval)
 				{
 					if(!pointAlreadyExist(arr)){ //check if the point already exist
-						point_generic p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
+						point_generic p;
+						
+						/*
+						 * The following If condition checks whether any earlier point in all_contour_points 
+						 * had the same plan. If so no need to open the .../predicateOrder/plan.txt again
+						 */
+						
+						if(planVisited(getPlanNumber_generic(arr))!=null)
+							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
+						else
+							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
 						all_contour_points.add(p);
+						
 					}
 				}
 				else if(i!=0){
@@ -1188,7 +1208,11 @@ public void intialize(int location) {
 					if( cur_val > targetval  && cur_val_l < targetval ) //NOTE : changed the inequality to strict inequality
 					{
 						if(!pointAlreadyExist(arr)){ //check if the point already exist
-							point_generic p = new point_generic(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
+							point_generic p; 
+							if(planVisited(getPlanNumber_generic(arr))!=null)
+								p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
+							else
+								p = new point_generic(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
 							all_contour_points.add(p);
 						}
 					}
@@ -1215,6 +1239,18 @@ public void intialize(int location) {
 		
 	}
 	
+	private point_generic planVisited(int plan_no) {
+
+		String funName = "planVisited";
+		
+		for(point_generic p: all_contour_points){
+				if(p.get_plan_no()== plan_no){
+					return p;
+				}
+		}
+		return null;
+	}
+
 	private boolean pointAlreadyExist(int[] arr) {
 
 		boolean flag = false;
@@ -1603,7 +1639,15 @@ public	int calculatePlanNumber(double x_act, double y_act, double z_act)
 			else
 				FROM_CLAUSE = false;
 			
+			/*
+			 * 0 for sel_distribution is used for tpch type queries
+			 */
 			sel_distribution = Integer.parseInt(prop.getProperty("sel_distribution"));
+			
+			/*
+			 * 0 for database_conn is used for tpch type queries
+			 */
+			database_conn = Integer.parseInt(prop.getProperty("database_conn"));
 			
 		} catch (IOException ex) {
 			ex.printStackTrace();
@@ -1869,6 +1913,23 @@ class point_generic
 		
 		
 	}
+	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
+		
+		loadPropertiesFile();
+		System.out.println();
+		dim_values = new int[dimension];
+		for(int i=0;i<dimension;i++){
+			dim_values[i] = arr[i];
+			System.out.print(arr[i]+",");
+		}
+		System.out.println("   having cost = "+cost+" and plan "+num);
+		this.p_no = num;
+		this.cost = cost;
+		
+		//check: if the order and stored order are being updated/populated
+		order =  new ArrayList<Integer>(predicateOrder);
+		storedOrder = new ArrayList<Integer>(predicateOrder);		
+	}
 	int getLearningDimension(){
 		if(order.isEmpty())
 			System.out.println("ERROR: all dimensions learnt");
@@ -1916,6 +1977,11 @@ class point_generic
 	public int get_no_of_dimension(){
 		return dimension;
 	}
+	
+	public ArrayList<Integer> getPredicateOrder(){
+		return storedOrder;
+	}
+	
 	public void loadPropertiesFile() {
 
 		Properties prop = new Properties();
