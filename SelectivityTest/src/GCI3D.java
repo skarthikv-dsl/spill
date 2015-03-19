@@ -253,6 +253,8 @@ public class GCI3D
 //		obj.actual_sel[0] = 0.02;obj.actual_sel[1] = 0.99;obj.actual_sel[2] = 0.1;obj.actual_sel[3] = 0.99; /*uncomment for single execution*/
 		
 		for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
+		if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000)
+			continue;
 		//----------------------------------------------------------
 		i =1;
 		while(i<=ContourPointsMap.size() && !obj.remainingDim.isEmpty())
@@ -424,7 +426,7 @@ public class GCI3D
 		assert (remainingDim.size() == 1): funName+": more than one dimension left";
 		int [] arr = new int[dimension];
 		int remDim = -1;
-		double sel_max = -1;
+		double sel_min = 2; //some value greater than 1
 		for(int d=0;d<dimension;d++){
 			if(remainingDim.contains(d))
 				remDim = d;
@@ -440,63 +442,74 @@ public class GCI3D
 			if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
 				Integer learning_dim = new Integer(p.getLearningDimension());
 				assert (learning_dim.intValue() == remDim) : funName+": ERROR plan's learning dimension not matching with remaining dimension";
-				if(remainingDim.contains(learning_dim)){
-					if(selectivity[p.get_dimension(learning_dim.intValue())] > sel_max){
-						sel_max = selectivity[p.get_dimension(learning_dim.intValue())];
-						
-						//oneDimCost = p.get_cost();
-						oneDimCost = cost;
-						if(sel_max >= actual_sel[remDim]){
-							/*
-							 * set it to plan's cost at q_a
-							 */
-							int fpc_plan = p.get_plan_no();
-							int [] int_actual_sel = new int[dimension];
-							for(int d=0;d<dimension;d++)
-								int_actual_sel[d] = findNearestPoint(actual_sel[d]);
-							if(fpc_cost_generic(int_actual_sel, fpc_plan)<oneDimCost)
-								oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
-							if(cost_generic(int_actual_sel)> oneDimCost)
-								oneDimCost = cost_generic(int_actual_sel);
-							System.out.println(funName+" learnt "+ remDim+" dimension completely");
-							remainingDim.remove(remainingDim.indexOf(remDim));
-							System.out.println(funName+" Sel_max = "+sel_max+" and cost is "+oneDimCost);
-							return; //done if the sel_max is greater than actual selectivity
-						}
-							
+				assert (remainingDim.contains(learning_dim)) : funName+": ERROR remaining dimension does not contain the learning dimension";
+
+				if(selectivity[p.get_dimension(learning_dim.intValue())] >= actual_sel[remDim]){
+					if(selectivity[p.get_dimension(learning_dim.intValue())] < sel_min){
+						sel_min = selectivity[p.get_dimension(learning_dim.intValue())]; 
+
+						oneDimCost = p.get_cost();
+						//oneDimCost = cost;
+					
+						/*
+						 * set it to plan's cost at q_a
+						 */
+						int fpc_plan = p.get_plan_no();
+						int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
+						if(fpc_cost_generic(int_actual_sel, fpc_plan)<oneDimCost)
+							oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
+						if(cost_generic(int_actual_sel)> oneDimCost)
+							oneDimCost = cost_generic(int_actual_sel);
+						assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost of contour";
 					}
+
 				}
 			}
-		}		
-		if(sel_max == (double)-1){
+		}
+		
+		if(sel_min < (double) 1 && sel_min >= actual_sel[remDim]){
+			System.out.println(funName+" learnt "+ remDim+" dimension completely");
+			remainingDim.remove(remainingDim.indexOf(remDim));
+			System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
+			return; //done if the sel_min is greater than actual selectivity
+		}
+
+		
+		if(sel_min == (double)2){
 			arr[remDim] = 0;
+			/*
+			 * The following If condition is needed to skip the contour. If the condition fails then 
+			 * we can possibly we dominated by some point in the contour. Else, we can say the contour
+			 * can be skipped. 
+			 */
 			if(cost_generic(arr) > cost){
 				oneDimCost = 0;
 				return;
 			}
 		}
-		if(sel_max == (double)-1){
+		if(sel_min == (double)2){
+			/*
+			 * We turn to this case when there are no contour point for all the learnt
+			 * selectivities. But check if the point at arr[remDim] = resolution-1 has
+			 * cost less than the contour cost
+			 */
 			arr[remDim] = resolution-1;   //TODO is it okay to resolution -1 in 3D or higher
-			sel_max = selectivity[resolution-1];
+			sel_min = selectivity[resolution-1];
+			oneDimCost = cost_generic(arr);
 			/*
 			 * use the fpc_cost at q_a for oneDimCost
 			 */
-			int fpcplan = getPlanNumber_generic(arr);
-			int [] int_actual_sel = new int[dimension];
-			for(int d=0;d<dimension;d++)
-				int_actual_sel[d] = findNearestPoint(actual_sel[d]);
-			oneDimCost = fpc_cost_generic(int_actual_sel, fpcplan);
+			int fpc_plan = getPlanNumber_generic(arr);
+			int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
+			if(fpc_cost_generic(int_actual_sel, fpc_plan)<oneDimCost)
+				oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
+			if(cost_generic(int_actual_sel)> oneDimCost)
+				oneDimCost = cost_generic(int_actual_sel);
+			remainingDim.remove(remainingDim.indexOf(remDim));
+			System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
 			assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 		}
-		
-		/*
-		 * does not come here
-		 */
-		if(sel_max >= actual_sel[remDim]){
-			System.out.println(funName+" learnt "+ remDim+" dimension completely");
-			remainingDim.remove(remainingDim.indexOf(remDim));
-		}
-		System.out.println(funName+" Sel_max = "+sel_max+" and cost is "+oneDimCost);
+
 
 	}
 	
@@ -506,7 +519,6 @@ private void spillBoundAlgo(int contour_no, CostGreedy cg) throws IOException {
 	Set<Integer> unique_plans = new HashSet();
 	
 	System.out.println("\nContour number ="+contour_no);
-	//----------------------------------- Generate Brute Force..
 	
 	int i;
 
@@ -549,17 +561,13 @@ private void spillBoundAlgo(int contour_no, CostGreedy cg) throws IOException {
 		if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
 			currentContourPoints ++;
 			Integer learning_dim = new Integer(p.getLearningDimension());
-			if(remainingDim.contains(learning_dim)){
+			assert (remainingDim.contains(learning_dim)) : "error: learning dimension already learnt";
 				if(selectivity[p.get_dimension(learning_dim.intValue())] > sel_max[learning_dim.intValue()]){
 					if(points_max.containsKey(learning_dim))
 						points_max.remove(learning_dim);
 					points_max.put(learning_dim, p);
 					sel_max[learning_dim.intValue()] = selectivity[p.get_dimension(learning_dim.intValue())]; 	
 				}
-			}
-			else{
-				System.out.println(funName+": contains the learning dimension which is already learnt");
-			}
 		   } //end for inFeasibleRegion
 		}
 		//

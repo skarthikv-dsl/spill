@@ -217,6 +217,8 @@ public class CostGreedyGCI3D
 //		obj.actual_sel[0] = 0.31;obj.actual_sel[1] = 0.0;//obj.actual_sel[2] = 0.0; /*uncomment for single execution*/
 		
 		for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
+		if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000)
+			continue;
 		//----------------------------------------------------------
 		i =1;
 		while(i<=ContourPoints.size() && !done)
