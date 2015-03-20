@@ -94,10 +94,10 @@ public class CostGreedy
 		System.out.println("the ratio of C_max/c_min is "+ratio);
 		GCI3D obj = new GCI3D();
 		//setting the actual values of x_a, y_a and z_a
-		x_a = obj.x_a;
-		y_a = obj.y_a;
-		z_a = obj.z_a;
-		error = obj.error;
+		x_a = 0;//obj.x_a;
+		y_a = 0;//obj.y_a;
+		z_a = 0; //obj.z_a;
+		error = 0;//obj.error;
 		System.out.println("The original (x_a,y_a,z_a)= ("+x_a+","+y_a+","+z_a+")");
 		
 		x_a = findNearestSelectivity(x_a);
@@ -158,7 +158,7 @@ public class CostGreedy
 	private int run_new_seed_3d_algorithm(double targetval, double errorboundval) {
 		// TODO Auto-generated method stub
 		 int cur_x1 = 0, cur_y1 = resolution - 1, cur_z = 0;
-		 ArrayList<point3D> original = new ArrayList<point3D>();
+		 ArrayList<point> original = new ArrayList<point>();
 		 double cur_val;
 		 double X_max=0,Y_max=0,Z_max=0; 
 

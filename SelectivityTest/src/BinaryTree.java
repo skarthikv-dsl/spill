@@ -82,19 +82,16 @@ public class BinaryTree {
     static HashMap<Integer,Integer> predicateMap = new HashMap<Integer,Integer>(); 
     
     public static Set<Pipeline> PIPELINES = new HashSet<Pipeline>();
-    //Note that rules for predicates is (predicate1<space>=<space>predicate2)
-//   	static String[] predicates = {"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
-//   	static String[] predicatesRev = {"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
-   	static String[] predicates = {"(supplier.s_suppkey = lineitem.l_suppkey)","(lineitem.l_orderkey = orders.o_orderkey)","(orders.o_custkey = customer.c_custkey)"};
-   	static String[] predicatesRev = {"(lineitem.l_suppkey = supplier.s_suppkey)","(orders.o_orderkey = lineitem.l_orderkey)","(customer.c_custkey = orders.o_custkey)"};   	
-   		static String path = "/home/dsladmin/Srinivas/data/HQT73DR10_E/";
+   	static String[] predicates = {"(supplier.s_suppkey = lineitem.l_suppkey)","(lineitem.l_orderkey = orders.o_orderkey)","(orders.o_custkey = customer.c_custkey)","(supplier.s_nationkey = n1.n_nationkey)","(customer.c_nationkey = n2.n_nationkey)"};
+   	static String[] predicatesRev = {"(lineitem.l_suppkey = supplier.s_suppkey)","(orders.o_orderkey = lineitem.l_orderkey)","(customer.c_custkey = orders.o_custkey)","(n1.n_nationkey = supplier.s_nationkey)","(n2.n_nationkey = customer.c_nationkey)"};
+   		static String path = "/home/dsladmin/Srinivas/data/HQT75DR10_E/";
 //   	static String path = "/home/dsladmin/Srinivas/data/HQT102DR100_U_Page0/";
    	static String[] relations = {"s","l","o","c","n1","n2"};
 //   	static String[] relations = {"c","o","l","n"};
-//   		static String[] relations = {"cc","cr","d","c","ca","cd","hd"};
-   	static int numplans = 29;
+//   		static String[] relations = {"c","o","l","s","n","r"};
+   	static int numplans = 227;
    	public static HashMap<String, Integer> relationMap =  new HashMap<String, Integer>();
-   	public static boolean FROM_CLAUSE = false;
+   	public static boolean FROM_CLAUSE = true;
    	
     public BinaryTree(){
 
@@ -190,9 +187,9 @@ public class BinaryTree {
             String relStr1 = null,relStr2 = null;
             if(root.getPredicate().indexOf('.')>=2)
             	relStr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')-2, root.getPredicate().indexOf('.'));
-            String substr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')+1, root.getPredicate().indexOf('_',root.getPredicate().indexOf('.')));
+            String substr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')+1, root.getPredicate().indexOf('_'));
             String substreq = root.getPredicate().substring(root.getPredicate().indexOf('=')); //this is to choose the second occurence after '='
-            String substr2 = substreq.substring(substreq.indexOf('.')+1, substreq.indexOf('_',substreq.indexOf('.')));
+            String substr2 = substreq.substring(substreq.indexOf('.')+1, substreq.indexOf('_'));
             if(substreq.indexOf('.')>=2)
             	relStr2 = substreq.substring(substreq.indexOf('.')-2, substreq.indexOf('.'));
 
@@ -431,8 +428,6 @@ public class BinaryTree {
             ArrayList<Integer> visited = new ArrayList<Integer>();
         	//File file = new File("/home/srinivas/Srinivas/data/HQT83D-OC-PL-SL_EXP2/planStructure/"+numPlans+".txt");
             //File file = new File("/home/dsladmin/Srinivas/data/writingPlans/"+"test.txt");
-            if(i==33)
-        		System.out.println("For testing");
             File file = new File(path+"planStructure/"+i+".txt");
         	FileReader fr = new FileReader(file);
         	BufferedReader br = new BufferedReader(fr); 
@@ -490,7 +485,6 @@ public class BinaryTree {
         				
         		}
         	}
-        	
 			File filer = new File(path+"predicateOrder/"+i+".txt");
 		    FileWriter writer = new FileWriter(filer, false);  
 		    PrintWriter pw = new PrintWriter(writer);

@@ -104,7 +104,7 @@ public class GCI3D
 	
 	//Settings: 
 	static int sel_distribution; 
-	static boolean FROM_CLAUSE = true;
+	static boolean FROM_CLAUSE;
 	static Connection conn = null;
 	static int database_conn;
 	
@@ -148,7 +148,7 @@ public class GCI3D
 		
 		ADiagramPacket gdp = obj.getGDP(new File(pktPath));
 		
-		CostGreedy cg = new CostGreedy();
+//		CostGreedyGCI3D cg = new CostGreedyGCI3D();
 //		cg.run(threshold, gdp,apktPath);
 //		ADiagramPacket reducedgdp = cg.cgFpc(threshold, gdp,apktPath);
 
@@ -205,15 +205,18 @@ public class GCI3D
 		 * Setting up the DB connection to Postgres/TPCH/TPCDS Benchmark. 
 		 */
 		try{
+			System.out.println("entered DB conn1");
 			Class.forName("org.postgresql.Driver");
 
 			//Settings
+			System.out.println("entered DB conn2");
 			if(database_conn==0){
 			conn = DriverManager
 					.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
 							"sa", "database");
 			}
 			else{
+				System.out.println("entered DB tpcds");
 				conn = DriverManager
 						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
 								"sa", "database");
@@ -222,6 +225,7 @@ public class GCI3D
 			 System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
+			System.out.println("entered DB err");
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 
 		}
@@ -277,7 +281,7 @@ public class GCI3D
 				learning_cost = oneDimCost;
 			}
 			else
-				obj.spillBoundAlgo(i,cg);
+				obj.spillBoundAlgo(i);
 			
 			int present = obj.remainingDim.size();
 			if(present < prev - 1 || present > prev)
@@ -513,7 +517,7 @@ public class GCI3D
 
 	}
 	
-private void spillBoundAlgo(int contour_no, CostGreedy cg) throws IOException {
+private void spillBoundAlgo(int contour_no) throws IOException {
 
 	String funName = "spillBoundAlgo"; 
 	Set<Integer> unique_plans = new HashSet();
@@ -738,6 +742,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
     try {
      
     	stmt = conn.createStatement();
+    	System.out.println(funName+ " : database connection statement create successfully");
     	//Settings: constants in BinaryTree   
 		BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
 		tree.FROM_CLAUSE = FROM_CLAUSE;
@@ -769,7 +774,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 			stmt.execute("set spill_node = "+ spill_node);
 			stmt.execute("set work_mem = '100MB'");
 			//NOTE,Settings: 4GB for DS and 1GB for H
-			stmt.execute("set effective_cache_size='1GB'");
+			stmt.execute("set effective_cache_size='4GB'");
 			//NOTE,Settings: need not set the page cost's
 			stmt.execute("set  seq_page_cost = 1");
 			stmt.execute("set  random_page_cost=4");
@@ -1473,7 +1478,7 @@ public void initialize(int location) {
 					//This is for TPCDS queries
 					selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
 					selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
-					selectivity[8] = 0.50;		selectivity[9] = 0.95;                                 // dec - 2012
+					selectivity[8] = 0.50;		selectivity[9] = 0.99;                                 // dec - 2012
 				}
 				else
 					assert (false) : "should not come here";
