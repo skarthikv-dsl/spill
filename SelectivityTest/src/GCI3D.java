@@ -1365,6 +1365,8 @@ public void initialize(int location) {
 			{
 				this.OptimalCost[i]= data[i].getCost();
 				this.plans[i] = data[i].getPlanNumber();
+				if(this.plans[i]==85)
+					System.out.println(getCoordinates(dimension, resolution, i));
 			}
 
 			//To get the number of points for each plan
@@ -1481,7 +1483,7 @@ public void initialize(int location) {
 					selectivity[8] = 0.50;		selectivity[9] = 0.99;                                 // dec - 2012
 				}
 				else
-					assert (false) : "should not come here";
+					assert (false) :funName+ "ERROR: should not come here";
 
 			}		
 			if(resolution == 20){
@@ -1493,17 +1495,60 @@ public void initialize(int location) {
 			}
 
 			if(resolution == 30){
-			selectivity[0] = 0.00002;  selectivity[1] = 0.00009;	selectivity[2] = 0.0002;	selectivity[3] = 0.0005;
-			selectivity[4] = 0.0007;   selectivity[5] = 0.0010;	selectivity[6] = 0.0014;	selectivity[7] = 0.0019;
-			selectivity[8] = 0.0026;	selectivity[9] = 0.0036;	selectivity[10] = 0.0048;	selectivity[11] = 0.0065;
-			selectivity[12] = 0.0087;	selectivity[13] = 0.0117;	selectivity[14] = 0.0156;	selectivity[15] = 0.0208;
-			selectivity[16] = 0.0278;	selectivity[17] = 0.0370;	selectivity[18] = 0.0493;	selectivity[19] = 0.0657;
-			selectivity[20] = 0.0874;	selectivity[21] = 0.1164;	selectivity[22] = 0.1549;	selectivity[23] = 0.2061;
-			selectivity[24] = 0.2741;	selectivity[25] = 0.3647;	selectivity[26] = 0.48515;	selectivity[27] = 0.6453;
-			selectivity[28] = 0.8583;	selectivity[29] = 0.9950;		
+				
+				if(sel_distribution == 0){
+				//tpch
+				selectivity[0] = 0.0005;  selectivity[1] = 0.0008;	selectivity[2] = 0.001;	selectivity[3] = 0.002;
+				selectivity[4] = 0.004;   selectivity[5] = 0.006;	selectivity[28] = 0.008;	selectivity[29] = 0.01;
+				selectivity[8] = 0.03;	selectivity[9] = 0.05;
+				selectivity[10] = 0.07;	selectivity[11] = 0.1;	selectivity[12] = 0.15;	selectivity[13] = 0.20;
+				selectivity[14] = 0.25;	selectivity[15] = 0.30;	selectivity[16] = 0.35;	selectivity[17] = 0.40;
+				selectivity[18] = 0.45;	selectivity[19] = 0.50;	selectivity[20] = 0.55;	selectivity[21] = 0.60;
+				selectivity[22] = 0.65;	selectivity[23] = 0.70;	selectivity[24] = 0.75;	selectivity[25] = 0.80;
+				selectivity[26] = 0.85;	selectivity[27] = 0.90;	selectivity[28] = 0.95;	selectivity[29] = 0.99;
+				}
+				
+				else if(sel_distribution == 1){
+				selectivity[0] = 0.00001;  selectivity[1] = 0.00005;	selectivity[2] = 0.00010;	selectivity[3] = 0.00050;
+				selectivity[4] = 0.0010;   selectivity[5] = 0.005;	selectivity[6] = 0.0100;	selectivity[7] = 0.0200;
+				selectivity[8] = 0.0300;	selectivity[9] = 0.0400;	selectivity[10] = 0.0500;	selectivity[11] = 0.0600;
+				selectivity[12] = 0.0700;	selectivity[13] = 0.0800;	selectivity[14] = 0.0900;	selectivity[15] = 0.1000;
+				selectivity[16] = 0.1200;	selectivity[17] = 0.1400;	selectivity[18] = 0.1600;	selectivity[19] = 0.1800;
+				selectivity[20] = 0.2000;	selectivity[21] = 0.2500;	selectivity[22] = 0.3000;	selectivity[23] = 0.4000;
+				selectivity[24] = 0.5000;	selectivity[25] = 0.6000;	selectivity[26] = 0.7000;	selectivity[27] = 0.8000;
+				selectivity[28] = 0.9000;	selectivity[29] = 0.9950;
+				}
+				
+				else
+					assert (false) :funName+ "ERROR: should not come here";
 			}
 			
 			if(resolution==100){
+				
+				if(sel_distribution == 1){
+				selectivity[0] = 0.000514; 	selectivity[1] = 0.000543; 	selectivity[2] = 0.000576; 	selectivity[3] = 0.000611; 	selectivity[4] = 0.000648;
+				selectivity[5] = 0.000689; 	selectivity[6] = 0.000733; 	selectivity[7] = 0.000781; 	selectivity[8] = 0.000833; 	selectivity[9] = 0.000890;
+				selectivity[10] = 0.000951; 	selectivity[11] = 0.001017; 	selectivity[12] = 0.001088; 	selectivity[13] = 0.001165; 	selectivity[14] = 0.001249;
+				selectivity[15] = 0.001340; 	selectivity[16] = 0.001438; 	selectivity[17] = 0.001545; 	selectivity[18] = 0.001660; 	selectivity[19] = 0.001785;
+				selectivity[20] = 0.001920; 	selectivity[21] = 0.002067; 	selectivity[22] = 0.002225; 	selectivity[23] = 0.002397; 	selectivity[24] = 0.002583;
+				selectivity[25] = 0.002784; 	selectivity[26] = 0.003003; 	selectivity[27] = 0.003239; 	selectivity[28] = 0.003495; 	selectivity[29] = 0.003772;
+				selectivity[30] = 0.004072; 	selectivity[31] = 0.004397; 	selectivity[32] = 0.004749; 	selectivity[33] = 0.005131; 	selectivity[34] = 0.005544;
+				selectivity[35] = 0.005991; 	selectivity[36] = 0.006475; 	selectivity[37] = 0.007000; 	selectivity[38] = 0.007568; 	selectivity[39] = 0.008183;
+				selectivity[40] = 0.008849; 	selectivity[41] = 0.009571; 	selectivity[42] = 0.010352; 	selectivity[43] = 0.011198; 	selectivity[44] = 0.012115;
+				selectivity[45] = 0.013108; 	selectivity[46] = 0.014183; 	selectivity[47] = 0.015347; 	selectivity[48] = 0.016608; 	selectivity[49] = 0.017973;
+				selectivity[50] = 0.019452; 	selectivity[51] = 0.021054; 	selectivity[52] = 0.022788; 	selectivity[53] = 0.024667; 	selectivity[54] = 0.026701;
+				selectivity[55] = 0.028904; 	selectivity[56] = 0.031291; 	selectivity[57] = 0.033875; 	selectivity[58] = 0.036674; 	selectivity[59] = 0.039705;
+				selectivity[60] = 0.042987; 	selectivity[61] = 0.046542; 	selectivity[62] = 0.050392; 	selectivity[63] = 0.054562; 	selectivity[64] = 0.059078;
+				selectivity[65] = 0.063968; 	selectivity[66] = 0.069265; 	selectivity[67] = 0.075001; 	selectivity[68] = 0.081213; 	selectivity[69] = 0.087940;
+				selectivity[70] = 0.095227; 	selectivity[71] = 0.103117; 	selectivity[72] = 0.111663; 	selectivity[73] = 0.120918; 	selectivity[74] = 0.130942;
+				selectivity[75] = 0.141797; 	selectivity[76] = 0.153553; 	selectivity[77] = 0.166285; 	selectivity[78] = 0.180074; 	selectivity[79] = 0.195007;
+				selectivity[80] = 0.211180; 	selectivity[81] = 0.228695; 	selectivity[82] = 0.247664; 	selectivity[83] = 0.268207; 	selectivity[84] = 0.290455;
+				selectivity[85] = 0.314550; 	selectivity[86] = 0.340645; 	selectivity[87] = 0.368905; 	selectivity[88] = 0.399512; 	selectivity[89] = 0.432658;
+				selectivity[90] = 0.468556; 	selectivity[91] = 0.507433; 	selectivity[92] = 0.549537; 	selectivity[93] = 0.595136; 	selectivity[94] = 0.644519;
+				selectivity[95] = 0.698001; 	selectivity[96] = 0.775922; 	selectivity[97] = 0.858651; 	selectivity[98] = 0.926586; 	selectivity[99] = 0.990160;
+
+				}
+				else if(sel_distribution == 0){
 				selectivity[0] = 0.005995; 	selectivity[1] = 0.015985; 	selectivity[2] = 0.025975; 	selectivity[3] = 0.035965; 	selectivity[4] = 0.045955; 	
 				selectivity[5] = 0.055945; 	selectivity[6] = 0.065935; 	selectivity[7] = 0.075925; 	selectivity[8] = 0.085915; 	selectivity[9] = 0.095905; 	
 				selectivity[10] = 0.105895; 	selectivity[11] = 0.115885; 	selectivity[12] = 0.125875; 	selectivity[13] = 0.135865; 	selectivity[14] = 0.145855; 	
@@ -1524,6 +1569,10 @@ public void initialize(int location) {
 				selectivity[85] = 0.855145; 	selectivity[86] = 0.865135; 	selectivity[87] = 0.875125; 	selectivity[88] = 0.885115; 	selectivity[89] = 0.895105; 	
 				selectivity[90] = 0.905095; 	selectivity[91] = 0.915085; 	selectivity[92] = 0.925075; 	selectivity[93] = 0.935065; 	selectivity[94] = 0.945055; 	
 				selectivity[95] = 0.955045; 	selectivity[96] = 0.965035; 	selectivity[97] = 0.975025; 	selectivity[98] = 0.985015; 	selectivity[99] = 0.995005;
+				}
+				
+				else
+					assert (false) :funName+ "ERROR: should not come here";
 			}
 			//the selectivity distribution
 			//System.out.println("The selectivity distribution using is ");
