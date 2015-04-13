@@ -99,20 +99,17 @@ public class CostGreedyGCI3D
 	static String qtName ;
 	static String cardinalityPath;
 	
-	double  minIndex [];
-	double  maxIndex [];
 	static int sel_distribution;
 	static boolean MSOCalculation = true;
-	static boolean randomPredicateOrder = false; 
 	static Connection conn = null;
 
 	static ArrayList<Integer> remainingDim;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
-	 static ArrayList<point_generic> final_points = new ArrayList<point_generic>();
+	 static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	 static ArrayList<Integer> learntDim = new ArrayList<Integer>();
 		//static ArrayList<Integer> learntDimIndices = new ArrayList<Integer>();
 	 static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
-	 static HashMap<Integer,ArrayList<point_generic>> ContourPoints = new HashMap<Integer,ArrayList<point_generic>>();
+	 static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
 
 	 static double learning_cost = 0;
 	 static boolean done = false;
@@ -121,8 +118,6 @@ public class CostGreedyGCI3D
 
 	public static void main(String args[]) throws IOException, SQLException
 	{
-		
-
 		CostGreedyGCI3D obj = new CostGreedyGCI3D();
 		obj.loadPropertiesFile();
 		String pktPath = apktPath + qtName + ".apkt" ;
@@ -173,7 +168,7 @@ public class CostGreedyGCI3D
 			System.out.println("---------------------------------------------------------------------------------------------\n");
 			System.out.println("Contour "+i+" cost : "+cost+"\n");
 			
-			final_points.clear();
+			all_contour_points.clear();
 			//final_points = new ArrayList<point_generic>();
 			for(ArrayList<Integer> order:allPermutations){
 				System.out.println("Entering the order"+order);
@@ -182,8 +177,8 @@ public class CostGreedyGCI3D
 				obj.getContourPoints(order,cost);
 			}
 			//writeContourPointstoFile(i);
-			int size_of_contour = final_points.size();
-			ContourPoints.put(i, new ArrayList<point_generic>(final_points)); //storing the contour points
+			int size_of_contour = all_contour_points.size();
+			ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
 				cost = cost*2;
 				i = i+1;
@@ -221,7 +216,7 @@ public class CostGreedyGCI3D
 			continue;
 		//----------------------------------------------------------
 		i =1;
-		while(i<=ContourPoints.size() && !done)
+		while(i<=ContourPointsMap.size() && !done)
 		{	
 			if(cost<(double)10000){
 				cost *= 2;
@@ -287,7 +282,7 @@ public class CostGreedyGCI3D
 
 		 String funName  = "sortContourPoints";
 		 
-		 Collections.sort(ContourPoints.get(contour_no), new pointComparator());
+		 Collections.sort(ContourPointsMap.get(contour_no), new pointComparator());
 	}
 
 	 public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
@@ -344,9 +339,9 @@ public class CostGreedyGCI3D
 		int unique_points =0;
 		double max_cost =0 , min_cost = Double.MAX_VALUE;
 		
-		for(int c=0;c< ContourPoints.get(contour_no).size();c++){
+		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
 			
-			point_generic p = ContourPoints.get(contour_no).get(c);
+			point_generic p = ContourPointsMap.get(contour_no).get(c);
 			
 			/*needed for testing the code*/
 			unique_points ++;
@@ -496,7 +491,7 @@ public void intialize(int location) {
 	    PrintWriter pway = new PrintWriter(writeray);
 //	    PrintWriter pwaz = new PrintWriter(writeraz);
 	    //Take iterator over the list
-	    for(point_generic p : final_points) {
+	    for(point_generic p : all_contour_points) {
 		    //        System.out.println(p.getX()+":"+p.getY()+": Plan ="+p.p_no);
 	   	 pwax.print((int)p.get_dimension(0) + "\t");
 	   	 pway.print((int)p.get_dimension(1)+ "\t");
@@ -553,11 +548,10 @@ public void intialize(int location) {
 
 	void getContourPoints(ArrayList<Integer> order,double cost) throws IOException
 	{
-		//Assume 
-		//1. there is a List named "final_points";
-		//2. Make sure you emptied "final_points" before calling this function; 
-		
-		
+		String funName = "getContourPoints";
+		//learntDim contains the dimensions already learnt (which is null initially)
+		//learntDimIndices contains the exact point in the space for the learnt dimensions
+
 		ArrayList<Integer> remainingDimList = new ArrayList<Integer>();
 		for(int i=0;i<order.size();i++)
 		{
@@ -583,6 +577,10 @@ public void intialize(int location) {
 					last_dim = i;
 			}
 			
+			assert (learntDim.size() == learntDimIndices.size()) : funName+" : learnt dimension data structures size not matching";
+			assert (last_dim>=0 && last_dim<dimension) :funName+ " : index problem ";
+			assert (remainingDimList.size() + learntDim.size() == dimension) : funName+" : learnt dimension data structures size not matching";
+			
 			//Search the whole line and return all the points which fall into the contour
 			for(int i=0;i< resolution;i++)
 			{
@@ -592,10 +590,21 @@ public void intialize(int location) {
 
 				if(cur_val == targetval)
 				{
+					//if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
+					if(true){								// its okay to have redundancy
+						point_generic p;
 
-					if(!pointAlreadyExist(arr)){ //check if the point already exist
-						point_generic p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
-						final_points.add(p);
+						/*
+						 * The following If condition checks whether any earlier point in all_contour_points 
+						 * had the same plan. If so no need to open the .../predicateOrder/plan.txt again
+						 */
+						
+						if(planVisited(getPlanNumber_generic(arr))!=null)
+							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
+						else
+							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
+						all_contour_points.add(p);
+						
 					}
 				}
 				else if(i!=0){
@@ -605,8 +614,12 @@ public void intialize(int location) {
 					if( cur_val > targetval  && cur_val_l < targetval ) //NOTE : changed the inequality to strict inequality
 					{
 						if(!pointAlreadyExist(arr)){ //check if the point already exist
-							point_generic p = new point_generic(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
-							final_points.add(p);
+							point_generic p; 
+							if(planVisited(getPlanNumber_generic(arr))!=null)
+								p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
+							else
+								p = new point_generic(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
+							all_contour_points.add(p);
 						}
 					}
 					
@@ -632,10 +645,22 @@ public void intialize(int location) {
 		
 	}
 	
+	private point_generic planVisited(int plan_no) {
+
+		String funName = "planVisited";
+		
+		for(point_generic p: all_contour_points){
+				if(p.get_plan_no()== plan_no){
+					return p;
+				}
+		}
+		return null;
+	}
+
 	private boolean pointAlreadyExist(int[] arr) {
 
 		boolean flag = false;
-		for(point_generic p: final_points){
+		for(point_generic p: all_contour_points){
 			flag = true;
 			for(int i=0;i<dimension;i++){
 				if(p.get_dimension(i)!= arr[i]){
@@ -742,8 +767,6 @@ public void intialize(int location) {
 			 remainingDim = new ArrayList<Integer>();
 				for(int i=0;i<dimension;i++)
 					remainingDim.add(i);
-				minIndex = new double[dimension];
-				maxIndex = new double[dimension];
 
 				// ------------------------------------- Read pcst files
 				nPlans = totalPlans;
@@ -1058,8 +1081,12 @@ public void intialize(int location) {
 				newData[i].setPlanNumber(plan);
 				newData[i].setCost(newcost);
 				//TODO : should we change this?
-				if(newData[i].getCost() < data[i].getCost()){
-					newData[i].setCost(data[i].getCost());
+				if(newData[i].getCost() <= data[i].getCost()){
+					newData[i].setCost(data[i].getCost()*1.01);
+					/*
+					 * We are adding 1% more to the cost of the replacement plan, in case 
+					 * when the replacement plan has lesser cost than the original plan
+					 */
 //					newData[i].setPlanNumber(data[i].getPlanNumber());
 				}
 

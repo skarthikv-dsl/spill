@@ -1,5 +1,3 @@
-import iisc.dsl.picasso.common.PicassoConstants;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -14,6 +12,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Random;
 import java.util.Set;
+import java.util.Properties;
+import java.io.*;
 
  class Vertex {
 
@@ -85,17 +85,16 @@ public class BinaryTree {
     
     public static Set<Pipeline> PIPELINES = new HashSet<Pipeline>();
     //Note that rules for predicates is (predicate1<space>=<space>predicate2)
-   	static String[] predicates = {"(store_sales.ss_hdemo_sk = household_demographics.hd_demo_sk)","(time_dim.t_time_sk = store_sales.ss_sold_time_sk)"};
-   	static String[] predicatesRev = {"(household_demographics.hd_demo_sk = store_sales.ss_hdemo_sk)","(store_sales.ss_sold_time_sk = time_dim.t_time_sk)"};
-   	
+   	static String[] predicates = {"(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)","(customer.c_customer_sk = catalog_sales.cs_bill_customer_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
+   	static String[] predicatesRev = {"(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)","(catalog_sales.cs_bill_customer_sk = customer.c_customer_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)"};
 //   	static String[] predicates = {"(orders.o_custkey = customer.c_custkey)","(lineitem.l_orderkey = orders.o_orderkey)"};
 //   	static String[] predicatesRev = {"(customer.c_custkey = orders.o_custkey)","(orders.o_orderkey = lineitem.l_orderkey)"};   	
-//   		static String path = "/home/dsladmin/Srinivas/data/DSQT264DR10_E/";
-   	static String path = "/home/dsladmin/Srinivas/data/DSQT962DR100_E/";
+   		static String path = "/home/dsladmin/Srinivas/data/DSQT153DR10_E/";
+//   	static String path = "/home/dsladmin/Srinivas/data/HQT102DR100_U_Page0/";
 //   	static String[] relations = {"s","l","o","c","n1","n2"};
-   	static String[] relations = {"ss","hd","t","s"};
-//   		static String[] relations = {"cs","cd","d","i","p"};
-   	static int numplans = 10;
+//   	static String[] relations = {"c","o","l","n"};
+   		static String[] relations = {"cs","c","ca","d"};
+   	static int numplans = 15;
    	public static HashMap<String, Integer> relationMap =  new HashMap<String, Integer>();
    	public static boolean FROM_CLAUSE = false;
    	
@@ -338,8 +337,10 @@ public class BinaryTree {
             HashMap<Integer,String> valueMap = new HashMap<Integer,String>();
             HashMap<Integer,ArrayList<Integer>> childrenMap = new HashMap<Integer,ArrayList<Integer>>();
             ArrayList<Integer> visited = new ArrayList<Integer>();
-        	//File file = new File("/home/srinivas/Srinivas/data/HQT83D-OC-PL-SL_EXP2/planStructure/"+numPlans+".txt");
-            //File file = new File("/home/dsladmin/Srinivas/data/writingPlans/"+"test.txt");
+
+            Properties prop = new Properties();
+            prop.load(new FileInputStream(new File("./src/Constants.properties")));
+            path = prop.getProperty("apktPath");
             File file = new File(path+"planStructure/"+planno+".txt");
         	FileReader fr = new FileReader(file);
         	BufferedReader br = new BufferedReader(fr); 
@@ -371,7 +372,7 @@ public class BinaryTree {
         	
         	BuildPredicateOrder(predicates,predicatesRev);
         	assert(predicateMap.size() == predicates.length):"predicateMap length not matching";
-        	System.out.println("The predicate map is "+predicateMap);
+        	//System.out.println("The predicate map is "+predicateMap);
         	//Predicate Map is a mapping from node_id to dimension
         	int spill_id = -1;
            	Iterator it = predicateMap.keySet().iterator();
@@ -383,7 +384,7 @@ public class BinaryTree {
         			 break;
         		 }
         	}
-        	System.out.println("The spill_node is Id is "+spill_id);
+        	//System.out.println("The spill_node is Id is "+spill_id);
         	assert(spill_id == -1 ): "cannot have this number";
         	
         	// determine the spill_node for postgres
@@ -399,13 +400,13 @@ public class BinaryTree {
          			else
          				relationMap.put(relations[i], new Integer(i+2));
             }         	
-         	System.out.println("Hash Strings are "+hashStrings);
-         	System.out.println("The relationMap is "+relationMap);
+         	//System.out.println("Hash Strings are "+hashStrings);
+         	//System.out.println("The relationMap is "+relationMap);
          	//build the spill_node number for this predicate
          	for(String str : hashStrings){
          			temp = temp * 10	+ relationMap.get(str).intValue()	;
          	}
-         	System.out.println("The spillnode id is "+temp);
+         	//System.out.println("The spillnode id is "+temp);
          	returnValue[0] = spill_id; //node id of the tree
          	returnValue[1] = temp;
          	return returnValue;
@@ -424,7 +425,15 @@ public class BinaryTree {
     	//String[] predicatesRev = {"(customer.c_custkey = orders.o_custkey)","(orders.o_orderkey = lineitem.l_orderkey)"};
     	//String[] relations = {"c","o","l","n"};
     	//String path = "/home/dsladmin/Srinivas/data/HQT102DR100/";
-    	
+	Properties prop = new Properties();
+prop.load(new FileInputStream(new File("/home/dsladmin/Srinivas/data/settings/settings.conf")));
+String BaseLocation = prop.getProperty("BaseLocation");
+String QTName = prop.getProperty("QTName");
+path = BaseLocation+QTName+"/";
+numplans=new File(path+"planStructure").listFiles().length;
+System.out.println("NUMPLANS ="+numplans+"\n");
+    
+	
         for(int i=0;i<numplans;i++){
         	//reading the plan
         	
@@ -494,15 +503,6 @@ public class BinaryTree {
         		}
         	}
         	
-			
-			File dir = new File(PicassoConstants.SAVE_PATH+"predicateOrder/");
-			if (!dir.exists()) {
-				if (dir.mkdir()) {
-					System.out.println("Directory is created!");
-				}
-				else
-					System.out.println("Failed while creating Directory predicateOrder");
-			}
 			File filer = new File(path+"predicateOrder/"+i+".txt");
 		    FileWriter writer = new FileWriter(filer, false);  
 		    PrintWriter pw = new PrintWriter(writer);

@@ -63,6 +63,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
+
 import com.ibm.db2.jcc.b.ac;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -114,7 +115,8 @@ public class GCI3D
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
 	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
-
+	static ArrayList<Pair<Integer>> executions = new ArrayList<Pair<Integer>>();  
+	
 	static double learning_cost = 0;
 	static double oneDimCost = 0;
 	static int no_executions = 0;
@@ -209,7 +211,7 @@ public class GCI3D
 			Class.forName("org.postgresql.Driver");
 
 			//Settings
-			System.out.println("entered DB conn2");
+			//System.out.println("entered DB conn2");
 			if(database_conn==0){
 			conn = DriverManager
 					.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
@@ -261,6 +263,7 @@ public class GCI3D
 			continue;
 		//----------------------------------------------------------
 		i =1;
+		executions.clear();
 		while(i<=ContourPointsMap.size() && !obj.remainingDim.isEmpty())
 		{	
 
@@ -305,6 +308,7 @@ public class GCI3D
 				
 				cost = cost*2;  
 				i = i+1;
+				executions.clear();
 				/*
 				 * initialize the repeat moves and exections for the next contour
 				 */
@@ -524,7 +528,7 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 	
 	System.out.println("\nContour number ="+contour_no);
 	
-	int i;
+		int i;
 
 		//declaration and initialization of variables
 		learning_cost = 0;
@@ -560,6 +564,7 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 			if(p.get_cost()<min_cost)
 				min_cost = p.get_cost();
 			
+			assert(min_cost<=max_cost) : funName+"min cost is less than or equal to max. cost in the contour";
 			
 			//Settings: for higher just see if you want to comment this
 		if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
@@ -608,9 +613,22 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 				}
 
 			}
+			else
+				System.out.println(funName+" ERROR from the boundary point for q_a");
 		}	
 		//TODO put in an assert saying that the same plan cannot be part of sel_max 
-		// of different dimensions
+		// of different dimensions: Ans: Done
+		int lastItr = -1;
+		for(int d: remainingDim){
+			if(lastItr == -1){
+				lastItr = d;
+				continue;
+			}
+			assert(points_max.get(new Integer(d)).get_plan_no() != points_max.get(new Integer(lastItr)).get_plan_no()) : funName+" the same plan is spilling on different dimensions";			
+			lastItr = d;
+		}
+		
+		
 		System.out.print("Max cost = "+max_cost+" Min cost = "+min_cost+" ");
 		System.out.println("with Number of Unique plans = "+unique_plans.size());
 		
@@ -630,18 +648,19 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 			if(remainingDim.contains(d))
 			{				
 				if(sel_max[d] != (double)-1){  //TODO is type casting Okay?: Ans: It is fine
-					
-					/*
-					 * update the number of execution and repeat steps here
-					 */
-					no_executions ++;
-					already_visited[d] = true;
-					if(already_visited[d]==true)
-						no_repeat_executions++;
+						
 					
 					double sel = 0;
 					point_generic p = points_max.get(new Integer(d));
 					//sel = Simulated_Spilling(max_x_plan, cg_obj, 0, cur_val);
+					
+					/*
+					 * checking if we had already executed the same plan on the same dimension before.
+					 * 
+					 */
+					if(executions.contains(new Pair(new Integer(d),new Integer(p.get_plan_no()))))
+						continue;
+					
 					if(sel_max[d] <= sel)
 						sel_max[d] = sel;  
 					sel = getLearntSelectivity(d,p.get_plan_no(),(Math.pow(2, contour_no-1)*getOptimalCost(0)), p);
@@ -649,6 +668,20 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 						sel_max[d] = sel;
 					else
 						System.out.println("GetLeantSelectivity: postgres selectivity is less");
+				
+					/*
+					 * add the tuple (dimension,plan) to the executions data structure
+					 */
+					executions.add(new Pair(new Integer(d),new Integer(p.get_plan_no())));
+					
+					
+					/*
+					 * update the number of execution and repeat steps here
+					 */
+					no_executions ++;
+					if(already_visited[d]==true)
+						no_repeat_executions++;
+					already_visited[d] = true;
 					 
 //					File file = new File(cardinalityPath+"spill_cost");
 //					FileReader fr = new FileReader(file);
@@ -742,7 +775,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
     try {
      
     	stmt = conn.createStatement();
-    	System.out.println(funName+ " : database connection statement create successfully");
+    	//System.out.println(funName+ " : database connection statement create successfully");
     	//Settings: constants in BinaryTree   
 		BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
 		tree.FROM_CLAUSE = FROM_CLAUSE;
@@ -768,13 +801,25 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 		double budget = cost;   //if this contour is the last for point p set the budget to  point's cost
 		if(p.get_cost() <2*cost)
 			budget = p.get_cost();
+
+		File file=null;
+		FileReader fr=null;
+		BufferedReader br=null;
+
 		
 		while((temp_act_sel[dim] <= actual_sel[dim]) || (execCost<=budget))
 		{	
 			stmt.execute("set spill_node = "+ spill_node);
+			
 			stmt.execute("set work_mem = '100MB'");
 			//NOTE,Settings: 4GB for DS and 1GB for H
-			stmt.execute("set effective_cache_size='4GB'");
+			if(database_conn==0){
+				stmt.execute("set effective_cache_size='1GB'");
+			}
+			else{
+				stmt.execute("set effective_cache_size='4GB'");
+			}
+			
 			//NOTE,Settings: need not set the page cost's
 			stmt.execute("set  seq_page_cost = 1");
 			stmt.execute("set  random_page_cost=4");
@@ -796,13 +841,15 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 
 			stmt.execute(query);
 			//read the selectivity returned
-			File file = new File(cardinalityPath+"spill_cost");
-			FileReader fr = new FileReader(file);
-			BufferedReader br = new BufferedReader(fr);
+			file = new File(cardinalityPath+"spill_cost");
+			fr = new FileReader(file);
+			br = new BufferedReader(fr);
 			//read the selectivity or the info needed for INL
 			//--------------------------------------------------------------
 			execCost = Double.parseDouble(br.readLine());
 			
+			assert(execCost<=budget) : funName+" execution cost of spilling is greater than the optimal cost at that position";
+
 			String valstring = new String();
 			/*
 			 * If there are two rows in the file then it is the hash join case. Where the second row is the number of rows
@@ -824,7 +871,14 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 				}
 				else if(budget_needed > remainingBudget){
 	
+					/*
+					 * temp_act_sel[dim] contains the selectivity that would have been learnt
+					 * with the remaining budget
+					 */
 					temp_act_sel[dim] = selectivity[p.get_dimension(dim)] + (actual_sel[dim]- selectivity[p.get_dimension(dim)])*(remainingBudget/budget_needed);
+				
+					assert(temp_act_sel[dim] > selectivity[p.get_dimension(dim)]) : funName+" there is no increment in learnt selectivity even with increase in budget";
+					
 					if(findNearestSelectivity(temp_act_sel[dim])!=temp_act_sel[dim]){
 						//move to the lower indexed selectivity
 						int idx = findNearestPoint(temp_act_sel[dim]);
@@ -843,8 +897,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 				}
 				break;
 			}
-			br.close();
-			fr.close();
+			
 			//-----------------------------------------------------------------
 			/*
 			 * this is the case when the current execution exceeds the budget and learnt selectivity is as per the
@@ -872,8 +925,13 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 			temp_act_sel[dim] = selectivity[idx];
 		}
 
-    	if(sel_completely_learnt){
-			
+		if(br!=null)
+			br.close();
+		if(fr!=null)
+			fr.close();
+	
+		
+    	if(sel_completely_learnt){			
     		learning_cost += execCost;
     		selLearnt = temp_act_sel[dim];
 			System.out.println("Cost of the spilled execution is "+execCost);
@@ -1144,7 +1202,7 @@ public void initialize(int location) {
 				temp = DimOrder.get(k);
 				DimOrder.set(k, DimOrder.get(i));
 				DimOrder.set(i,temp);
-
+				
 			}
 
 		}
@@ -1198,12 +1256,13 @@ public void initialize(int location) {
 
 				if(cur_val == targetval)
 				{
-					if(!pointAlreadyExist(arr)){ //check if the point already exist
+					//if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
+					if(true){								// its okay to have redundancy
 						point_generic p;
 						
 						/*
 						 * The following If condition checks whether any earlier point in all_contour_points 
-						 * had the same plan. If so no need to open the .../predicateOrder/plan.txt again
+						 * had the same plan. If so, no need to open the .../predicateOrder/plan.txt again
 						 */
 						
 						if(planVisited(getPlanNumber_generic(arr))!=null)
@@ -1487,11 +1546,27 @@ public void initialize(int location) {
 
 			}		
 			if(resolution == 20){
-			selectivity[0] = 0.000005;		selectivity[1] = 0.00005;		selectivity[2] = 0.0005;	selectivity[3] = 0.002;
-			selectivity[4] = 0.005;		selectivity[5] = 0.008;		selectivity[6] = 0.01;		selectivity[7] = 0.02;
-			selectivity[8] = 0.03;			selectivity[9] = 0.04;			selectivity[10] = 0.05;	selectivity[11] = 0.08;
-			selectivity[12] = 0.10; 		selectivity[13] = 0.15;		selectivity[14] = 0.20;	selectivity[15] = 0.30;
-			selectivity[16] = 0.40;		selectivity[17] = 0.60;		selectivity[18]=0.80;		selectivity[19] = 0.99;
+				
+				if(sel_distribution == 0){
+					
+					selectivity[0] = 0.0005;   selectivity[1] = 0.0008;		selectivity[2] = 0.001;	selectivity[3] = 0.002;
+					selectivity[4] = 0.004;   selectivity[5] = 0.006;		selectivity[6] = 0.08;	selectivity[7] = 0.01;
+					selectivity[8] = 0.03;	selectivity[9] = 0.05;	selectivity[10] = 0.08;	selectivity[11] = 0.10;
+					selectivity[12] = 0.200;	selectivity[13] = 0.300;	selectivity[14] = 0.400;	selectivity[15] = 0.500;
+					selectivity[16] = 0.600;	selectivity[17] = 0.700;	selectivity[18] = 0.800;	selectivity[19] = 0.99;
+				}
+				else if( sel_distribution ==1){
+					
+					selectivity[0] = 0.00005;   selectivity[1] = 0.00008;		selectivity[2] = 0.0001;	selectivity[3] = 0.0002;
+					selectivity[4] = 0.0004;   selectivity[5] = 0.0006;		selectivity[6] = 0.008;	selectivity[7] = 0.001;
+					selectivity[8] = 0.003;	selectivity[9] = 0.005;	selectivity[10] = 0.008;	selectivity[11] = 0.01;
+					selectivity[12] = 0.05;	selectivity[13] = 0.1;	selectivity[14] = 0.15;	selectivity[15] = 0.25;
+					selectivity[16] = 0.40;	selectivity[17] = 0.60;	selectivity[18] = 0.80;	selectivity[19] = 0.99;
+				}
+				else
+					assert (false) :funName+ "ERROR: should not come here";
+
+				
 			}
 
 			if(resolution == 30){
@@ -1509,14 +1584,14 @@ public void initialize(int location) {
 				}
 				
 				else if(sel_distribution == 1){
-				selectivity[0] = 0.00001;  selectivity[1] = 0.00005;	selectivity[2] = 0.00010;	selectivity[3] = 0.00050;
-				selectivity[4] = 0.0010;   selectivity[5] = 0.005;	selectivity[6] = 0.0100;	selectivity[7] = 0.0200;
-				selectivity[8] = 0.0300;	selectivity[9] = 0.0400;	selectivity[10] = 0.0500;	selectivity[11] = 0.0600;
-				selectivity[12] = 0.0700;	selectivity[13] = 0.0800;	selectivity[14] = 0.0900;	selectivity[15] = 0.1000;
-				selectivity[16] = 0.1200;	selectivity[17] = 0.1400;	selectivity[18] = 0.1600;	selectivity[19] = 0.1800;
-				selectivity[20] = 0.2000;	selectivity[21] = 0.2500;	selectivity[22] = 0.3000;	selectivity[23] = 0.4000;
-				selectivity[24] = 0.5000;	selectivity[25] = 0.6000;	selectivity[26] = 0.7000;	selectivity[27] = 0.8000;
-				selectivity[28] = 0.9000;	selectivity[29] = 0.9950;
+					selectivity[0] = 0.00001;  selectivity[1] = 0.00005;	selectivity[2] = 0.00010;	selectivity[3] = 0.00050;
+					selectivity[4] = 0.0010;   selectivity[5] = 0.005;	selectivity[6] = 0.0100;	selectivity[7] = 0.0200;
+					selectivity[8] = 0.0300;	selectivity[9] = 0.0400;	selectivity[10] = 0.0500;	selectivity[11] = 0.0600;
+					selectivity[12] = 0.0700;	selectivity[13] = 0.0800;	selectivity[14] = 0.0900;	selectivity[15] = 0.1000;
+					selectivity[16] = 0.1200;	selectivity[17] = 0.1400;	selectivity[18] = 0.1600;	selectivity[19] = 0.1800;
+					selectivity[20] = 0.2000;	selectivity[21] = 0.2500;	selectivity[22] = 0.3000;	selectivity[23] = 0.4000;
+					selectivity[24] = 0.5000;	selectivity[25] = 0.6000;	selectivity[26] = 0.7000;	selectivity[27] = 0.8000;
+					selectivity[28] = 0.9000;	selectivity[29] = 0.9950;
 				}
 				
 				else
@@ -2065,4 +2140,32 @@ class point_generic
 		}
 	}
 
-}	
+}
+
+final class Pair<T> {
+
+	   final T left;
+	   final T right;
+
+	   public Pair(T left, T right)
+	   {
+	     if (left == null || right == null) { 
+	       throw new IllegalArgumentException("left and right must be non-null!");
+	     }
+	     this.left = left;
+	     this.right = right;
+	   }
+
+	   public boolean equals(Object o)
+	   {
+	     // see @maaartinus answer
+	     if (! (o instanceof Pair)) { return false; }
+	     Pair p = (Pair)o;
+	     return left.equals(p.left) && right.equals(p.right);
+	   } 
+
+	   public int hashCode()
+	   {
+	      return 7 * left.hashCode() + 13 * right.hashCode();
+	   } 
+	}
