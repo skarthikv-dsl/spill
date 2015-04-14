@@ -63,7 +63,6 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
-
 import com.ibm.db2.jcc.b.ac;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -272,7 +271,7 @@ public class GCI3D
 				i++;
 				continue;
 			}
-			assert (cost>=2*h_cost) : "cost limit exceeding";
+			assert (cost<=2*h_cost) : "cost limit exceeding";
 			if(cost>h_cost)
 				cost=h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -421,10 +420,10 @@ public class GCI3D
 		/*
 		 * just sanity check for findNearestPoint and findNearestSelectivity
 		 */
-		assert(findNearestSelectivity(actual_sel[0]) != findNearestSelectivity(findNearestSelectivity(actual_sel[0]))) : funName+ " : findNearSelectivity Error";
-		assert (findNearestPoint(actual_sel[0]) != findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) : funName+ " : findNearPoint Error";
+		assert(findNearestSelectivity(actual_sel[0]) == findNearestSelectivity(findNearestSelectivity(actual_sel[0]))) : funName+ " : findNearSelectivity Error";
+		assert (findNearestPoint(actual_sel[0]) == findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) : funName+ " : findNearPoint Error";
 		
-		//newly added code Feb28; 8:00 pm
+		// added code Feb28; 8:00 pm
 		if(cost_generic(convertSelectivitytoIndex(actual_sel)) > 2*cost){
 			oneDimCost = cost;
 			return;
@@ -468,7 +467,7 @@ public class GCI3D
 							oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
 						if(cost_generic(int_actual_sel)> oneDimCost)
 							oneDimCost = cost_generic(int_actual_sel);
-						assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost of contour";
+						
 					}
 
 				}
@@ -479,6 +478,7 @@ public class GCI3D
 			System.out.println(funName+" learnt "+ remDim+" dimension completely");
 			remainingDim.remove(remainingDim.indexOf(remDim));
 			System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
+			assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 			return; //done if the sel_min is greater than actual selectivity
 		}
 
@@ -521,6 +521,7 @@ public class GCI3D
 
 	}
 	
+@SuppressWarnings({ "unchecked", "rawtypes" })
 private void spillBoundAlgo(int contour_no) throws IOException {
 
 	String funName = "spillBoundAlgo"; 
@@ -624,7 +625,8 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 				lastItr = d;
 				continue;
 			}
-			assert(points_max.get(new Integer(d)).get_plan_no() != points_max.get(new Integer(lastItr)).get_plan_no()) : funName+" the same plan is spilling on different dimensions";			
+			if(points_max.get(new Integer(d))!=null && points_max.get(new Integer(lastItr))!=null)
+				assert(points_max.get(new Integer(d)).get_plan_no() != points_max.get(new Integer(lastItr)).get_plan_no()) : funName+" the same plan is spilling on different dimensions";			
 			lastItr = d;
 		}
 		
@@ -848,7 +850,9 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 			//--------------------------------------------------------------
 			execCost = Double.parseDouble(br.readLine());
 			
-			assert(execCost<=budget) : funName+" execution cost of spilling is greater than the optimal cost at that position";
+			// Commenting this assert since it is possible that execCost is greater than the budget due to Grid issues
+			//For instance, a 6K cost point can be part of 2K cost contour
+			// assert(execCost<=budget) : funName+" execution cost of spilling is greater than the optimal cost at that position";
 
 			String valstring = new String();
 			/*
@@ -961,7 +965,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 
     } 		
     	assert(dim<=dimension) : funName+" dim data structure more dimensions possible";
-    	assert(selLearnt<=1):funName+"selectivity learnt is greater than 1!";
+    	assert(selLearnt<=(double)1):funName+"selectivity learnt is greater than 1!";
     	System.out.println("Postgres: selectivity learnt  "+selLearnt+" with plan number "+plan);
     	return selLearnt; //has to have single line in the file
 

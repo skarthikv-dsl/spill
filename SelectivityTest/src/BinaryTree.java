@@ -385,7 +385,7 @@ public class BinaryTree {
         		 }
         	}
         	//System.out.println("The spill_node is Id is "+spill_id);
-        	assert(spill_id == -1 ): "cannot have this number";
+        	assert(spill_id != -1 ): "cannot have this number";
         	
         	// determine the spill_node for postgres
         	int spill_node = -1; 
