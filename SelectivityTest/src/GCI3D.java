@@ -234,6 +234,7 @@ public class GCI3D
 		 * running the spillBound and plan bouquet algorithm 
 		 */
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
+		int ASO_points=0;
 		obj.getPlanCountArray();
 		//int max_point = 0; /*not to execute the spillBound algorithm*/
 		int max_point = 1; /*to execute a specific q_a */
@@ -346,19 +347,20 @@ public class GCI3D
 		if(Harm > MaxHarm)
 			MaxHarm = Harm;
 		ASO += SO;
+		ASO_points++;
 		anshASO += SO*locationWeight[j];
 		if(SO>MSO)
 			MSO = SO;
 		System.out.println("\nSpillBound The SubOptimaility  is "+SO);
-		System.out.println("\nSpillBound Harm  is "+SO);
+		System.out.println("\nSpillBound Harm  is "+Harm);
 	  } //end of for
 	  //Settings
 	  	obj.writeSuboptToFile(subOpt, apktPath);
 	  	conn.close();
 	  	System.out.println("SpillBound The MaxSubOptimaility  is "+MSO);
 	  	System.out.println("SpillBound The MaxHarm  is "+MaxHarm);
-	  	System.out.println("SpillBound Anshuman average Suboptimality is "+(double)anshASO/max_point);
-		System.out.println("SpillBound The AverageSubOptimaility  is "+(double)ASO/max_point);
+	  	System.out.println("SpillBound Anshuman average Suboptimality is "+(double)anshASO);
+		System.out.println("SpillBound The AverageSubOptimaility  is "+(double)ASO/ASO_points);
 
 	}
 	
@@ -478,7 +480,7 @@ public class GCI3D
 			System.out.println(funName+" learnt "+ remDim+" dimension completely");
 			remainingDim.remove(remainingDim.indexOf(remDim));
 			System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
-			assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
+			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 			return; //done if the sel_min is greater than actual selectivity
 		}
 
@@ -962,6 +964,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
     }
     catch ( Exception e ) {
     	System.err.println( e.getClass().getName()+": "+ e.getMessage() );
+    	 e.printStackTrace();
 
     } 		
     	assert(dim<=dimension) : funName+" dim data structure more dimensions possible";
@@ -1283,7 +1286,8 @@ public void initialize(int location) {
 					arr[last_dim]++; //restore the index back 
 					if( cur_val > targetval  && cur_val_l < targetval ) //NOTE : changed the inequality to strict inequality
 					{
-						if(!pointAlreadyExist(arr)){ //check if the point already exist
+						//if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
+						if(true){								// its okay to have redundancy
 							point_generic p; 
 							if(planVisited(getPlanNumber_generic(arr))!=null)
 								p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
@@ -1428,8 +1432,7 @@ public void initialize(int location) {
 			{
 				this.OptimalCost[i]= data[i].getCost();
 				this.plans[i] = data[i].getPlanNumber();
-				if(this.plans[i]==85)
-					System.out.println(getCoordinates(dimension, resolution, i));
+			
 			}
 
 			//To get the number of points for each plan
@@ -1489,18 +1492,7 @@ public void initialize(int location) {
 
 		}
 
-	
-	 double cost(int x, int y, int z)
-	{
-		int [] arr = new int [3];
-		arr[0] = x;
-		arr[1] = y;
-		arr[2] = z;
-		int index = getIndex(arr,resolution);
 
-		
-		return OptimalCost[index];
-	}
 	 double cost_generic(int arr[])
 		{
 		 
@@ -1706,12 +1698,7 @@ public void initialize(int location) {
 	{
 		return this.OptimalCost[index];
 	}
-	int getPlanNumber(int x, int y, int z)
-	{
-		 int arr[] = {x,y,z};
-		int index = getIndex(arr,resolution);
-		return plans[index];
-	}
+
 	int getPlanNumber_generic(int arr[])
 	{
 		int index = getIndex(arr,resolution);
@@ -1719,16 +1706,6 @@ public void initialize(int location) {
 	}
 	
 	
-public	int calculatePlanNumber(double x_act, double y_act, double z_act)
-	{
-		int x,y,z;
-		x = findNearestPoint(x_act);
-		y = findNearestPoint(y_act);
-		z = findNearestPoint(z_act);
-		
-		return getPlanNumber(x,y,z);
-		
-	}
 
  
  public boolean inFeasibleRegion(double [] arr) {
@@ -1914,40 +1891,88 @@ public  void getPlanCountArray() {
 
 		double locationWeightLocal[] = new double[resln];
 
-			
-			//for tpch
-			locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
-			locationWeightLocal[3] = 2;         locationWeightLocal[4] = 4;				locationWeightLocal[5] = 7;
-			locationWeightLocal[6] = 15;        locationWeightLocal[7] = 20;				locationWeightLocal[8] = 30;
-			locationWeightLocal[9] = 20;
-			
-			//for tpcds
-			locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
-			locationWeightLocal[3] = 2;         locationWeightLocal[4] = 4;				locationWeightLocal[5] = 6;
-			locationWeightLocal[6] = 7;        locationWeightLocal[7] = 25;				locationWeightLocal[8] = 30;
-			locationWeightLocal[9] = 20;
-
-
-
-		for (int loc=0; loc < data.length; loc++)
-		{
-			double weight = 1.0;
-			int tempLoc = loc;
-			for(int d=0;d<dim;d++){
-				weight *= locationWeightLocal[tempLoc % resln];
-				tempLoc = tempLoc/10;
+		if(resolution==10 ){
+			if(sel_distribution==0){
+				//for tpch
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 2;         locationWeightLocal[4] = 4;				locationWeightLocal[5] = 7;
+				locationWeightLocal[6] = 15;        locationWeightLocal[7] = 20;				locationWeightLocal[8] = 30;
+				locationWeightLocal[9] = 20;
 			}
 
-			locationWeight[loc] = (float) weight;
-			planCount[data[loc].getPlanNumber()] += weight;
+			//for tpcds
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 2;         locationWeightLocal[4] = 4;				locationWeightLocal[5] = 6;
+				locationWeightLocal[6] = 7;        locationWeightLocal[7] = 25;				locationWeightLocal[8] = 30;
+				locationWeightLocal[9] = 20;
+			}
+		}
+
+		else if (resolution == 30){
+			if(sel_distribution == 0){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 1;
+				locationWeightLocal[9] = 2;
+				locationWeightLocal[10] = 3;			locationWeightLocal[11] = 3;				locationWeightLocal[12] = 5;
+				locationWeightLocal[13] = 5;         locationWeightLocal[14] = 5;				locationWeightLocal[15] = 5;
+				locationWeightLocal[16] = 5;        locationWeightLocal[17] = 5;				locationWeightLocal[18] = 5;
+				locationWeightLocal[19] = 5;
+				locationWeightLocal[20] = 5;			locationWeightLocal[21] = 5;				locationWeightLocal[22] = 5;
+				locationWeightLocal[23] = 5;         locationWeightLocal[24] = 5;				locationWeightLocal[25] = 5;
+				locationWeightLocal[26] = 5;        locationWeightLocal[27] = 5;				locationWeightLocal[28] = 5;
+				locationWeightLocal[29] = 2;
+			}
+			
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 1;
+				locationWeightLocal[9] = 2;
+				locationWeightLocal[10] = 3;			locationWeightLocal[11] = 3;				locationWeightLocal[12] = 4;
+				locationWeightLocal[13] = 4;         locationWeightLocal[14] = 4;				locationWeightLocal[15] = 4;
+				locationWeightLocal[16] = 4;        locationWeightLocal[17] = 4;				locationWeightLocal[18] = 4;
+				locationWeightLocal[19] = 4;
+				locationWeightLocal[20] = 4;			locationWeightLocal[21] = 6;				locationWeightLocal[22] = 6;
+				locationWeightLocal[23] = 6;         locationWeightLocal[24] = 6;				locationWeightLocal[25] = 6;
+				locationWeightLocal[26] = 6;        locationWeightLocal[27] = 6;				locationWeightLocal[28] = 6;
+				locationWeightLocal[29] = 5;
+			}
+
+		}
+		for (int loc=0; loc < data.length; loc++)
+		{
+			if(OptimalCost[loc]>=(double)10000){
+				double weight = 1.0;
+				int tempLoc = loc;
+				for(int d=0;d<dim;d++){
+					weight *= locationWeightLocal[tempLoc % resln];
+					tempLoc = tempLoc/resln;
+				}
+
+				locationWeight[loc] = (float) weight;
+				planCount[data[loc].getPlanNumber()] += weight;
+			}
+			else
+				locationWeight[loc] = (float) -1;
+			
 		}
 
 
-
+		double totalWeight = 0;
 	for (int i = 0; i < data.length; i++) {
-		if (planCount[data[i].getPlanNumber()] == 0)
-			planCount[data[i].getPlanNumber()] = 1;
+		if(locationWeight[i]>=0)
+			totalWeight += locationWeight[i];
 	}
+	
+	for (int i = 0; i < data.length; i++) {
+		if(locationWeight[i]>=0){
+			locationWeight[i] /= totalWeight;
+		}
+		assert (locationWeight[i]<=1) : "In getPlanCountArray: locationWeight is not less than 1";
+	}
+
 
 	/*
 	 * if(scaleupflag) { for(int i = 0; i < planCount.length; i++)

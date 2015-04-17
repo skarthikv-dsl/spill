@@ -115,6 +115,12 @@ public class CostGreedyGCI3D
 	 static boolean done = false;
 	 
 	 double[] actual_sel;
+	 
+	 //for ASO calculation 
+	 static double planCount[], planRelativeArea[];
+	 static float picsel[], locationWeight[];
+
+	 static double areaSpace =0,totalEstimatedArea = 0;
 
 	public static void main(String args[]) throws IOException, SQLException
 	{
@@ -160,6 +166,9 @@ public class CostGreedyGCI3D
 		double cost = obj.getOptimalCost(0);
 		//cost*=2;
 		getAllPermuations(remainingDim,0);
+		
+		assert (allPermutations.size() == obj.factorial(obj.dimension)) : "all the permutations are not generated";
+		
 		while(cost < 2*h_cost)
 		{
 		
@@ -188,8 +197,10 @@ public class CostGreedyGCI3D
 		/*
 		 * running the plan bouquet algorithm 
 		 */
-		double MSO =0, ASO = 0,SO=0;
+		double MSO =0, ASO = 0,SO=0,anshASO = 0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
+		int ASO_points=0;
 		
+		obj.getPlanCountArray();
 		//int max_point = 0; /*to not execute the spillBound algorithm*/
 		int max_point = 1; /*to execute a specific q_a */
 		//Settings
@@ -205,7 +216,7 @@ public class CostGreedyGCI3D
 		double algo_cost =0;
 		SO =0;
 		cost = obj.getOptimalCost(0);
-		obj.intialize(j);
+		obj.initialize(j);
 		int[] index = obj.getCoordinates(obj.dimension, obj.resolution, j);
 //		if(index[0]%5 !=0 || index[1]%5!=0)
 //			continue;
@@ -223,6 +234,8 @@ public class CostGreedyGCI3D
 				i++;
 				continue;
 			}
+			assert (cost<=2*h_cost) : "cost limit exceeding";
+			
 			if(cost>h_cost)
 				cost=h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -240,10 +253,7 @@ public class CostGreedyGCI3D
 
 		}  //end of while
 		
-		if(!done){
-			System.out.println("ERROR: Still plan bouquet not completed");
-		}
-
+		assert(done) : "In Main done variable not true even when the while loop is broken out";
 		
 		/*
 		 * printing the actual selectivity
@@ -263,18 +273,27 @@ public class CostGreedyGCI3D
 		for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
 
 		SO = (algo_cost/obj.cost_generic(index_actual_sel));
-		SO = SO * (1 + threshold/100);
+		SO = SO * (1 + threshold/100);		
 		subOpt[j] = SO;
+		Harm = obj.maxHarmCalculation(j, SO);
+		if(Harm > MaxHarm)
+			MaxHarm = Harm;
 		ASO += SO;
+		ASO_points++;
+		anshASO += SO*locationWeight[j];
 		if(SO>MSO)
 			MSO = SO;
-		System.out.println("\nPlanBouquet The SubOptimaility  is "+SO);
+		System.out.println("\nSpillBound The SubOptimaility  is "+SO);
+		System.out.println("\nSpillBound Harm  is "+Harm);
 	  } //end of for
 	  	//Settings
 	  	obj.writeSuboptToFile(subOpt, apktPath);
 	  	
-		System.out.println("PlanBouquet The MaxSubOptimaility  is "+MSO);
-		System.out.println("PlanBouquet The AverageSubOptimaility  is "+(double)ASO/max_point);
+	  	System.out.println("SpillBound The MaxSubOptimaility  is "+MSO);
+	  	System.out.println("SpillBound The MaxHarm  is "+MaxHarm);
+	  	System.out.println("SpillBound Anshuman average Suboptimality is "+(double)anshASO);
+		System.out.println("SpillBound The AverageSubOptimaility  is "+(double)ASO/ASO_points);
+
 
 	}
 	
@@ -327,7 +346,139 @@ public class CostGreedyGCI3D
 			writer.close();
 			
 		}
+	 
+	 private int factorial(int num) {
+
+		 int factorial = 1;
+		for(int i=num;i>=1;i--){
+			factorial *= i; 
+		}
+		return factorial;
+	}
 	
+	 
+
+public  void getPlanCountArray() {
+	planCount = new double[totalPlans];
+	locationWeight = new float[data.length];
+	// Set dim depending on whether we are dealing with full packet or slice
+	// int dim;
+
+
+	int resln = resolution;
+	int dim = dimension;
+
+	int[] r = new int[dim];
+
+	for (int i = 0; i < dim; i++)
+		r[i] = resln;
+
+	/*
+	 * if(gdp.getDimension()==1) dim = 1; else if(data.length > r[0] * r[1])
+	 * //full packet { dim = dim; //set to actual number of dimensions }
+	 * else //slice { if(getDimension()==1) dim = 1; else dim = 2; //if
+	 * actual dimension >= 2 }
+	 */
+
+
+		double locationWeightLocal[] = new double[resln];
+
+		if(resolution==10 ){
+			if(sel_distribution==0){
+				//for tpch
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 2;         locationWeightLocal[4] = 4;				locationWeightLocal[5] = 7;
+				locationWeightLocal[6] = 15;        locationWeightLocal[7] = 20;				locationWeightLocal[8] = 30;
+				locationWeightLocal[9] = 20;
+			}
+
+			//for tpcds
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 2;         locationWeightLocal[4] = 4;				locationWeightLocal[5] = 6;
+				locationWeightLocal[6] = 7;        locationWeightLocal[7] = 25;				locationWeightLocal[8] = 30;
+				locationWeightLocal[9] = 20;
+			}
+		}
+
+		else if (resolution == 30){
+			if(sel_distribution == 0){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 1;
+				locationWeightLocal[9] = 2;
+				locationWeightLocal[10] = 3;			locationWeightLocal[11] = 3;				locationWeightLocal[12] = 5;
+				locationWeightLocal[13] = 5;         locationWeightLocal[14] = 5;				locationWeightLocal[15] = 5;
+				locationWeightLocal[16] = 5;        locationWeightLocal[17] = 5;				locationWeightLocal[18] = 5;
+				locationWeightLocal[19] = 5;
+				locationWeightLocal[20] = 5;			locationWeightLocal[21] = 5;				locationWeightLocal[22] = 5;
+				locationWeightLocal[23] = 5;         locationWeightLocal[24] = 5;				locationWeightLocal[25] = 5;
+				locationWeightLocal[26] = 5;        locationWeightLocal[27] = 5;				locationWeightLocal[28] = 5;
+				locationWeightLocal[29] = 2;
+			}
+			
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 1;
+				locationWeightLocal[9] = 2;
+				locationWeightLocal[10] = 3;			locationWeightLocal[11] = 3;				locationWeightLocal[12] = 4;
+				locationWeightLocal[13] = 4;         locationWeightLocal[14] = 4;				locationWeightLocal[15] = 4;
+				locationWeightLocal[16] = 4;        locationWeightLocal[17] = 4;				locationWeightLocal[18] = 4;
+				locationWeightLocal[19] = 4;
+				locationWeightLocal[20] = 4;			locationWeightLocal[21] = 6;				locationWeightLocal[22] = 6;
+				locationWeightLocal[23] = 6;         locationWeightLocal[24] = 6;				locationWeightLocal[25] = 6;
+				locationWeightLocal[26] = 6;        locationWeightLocal[27] = 6;				locationWeightLocal[28] = 6;
+				locationWeightLocal[29] = 5;
+			}
+
+		}
+		for (int loc=0; loc < data.length; loc++)
+		{
+			if(OptimalCost[loc]>=(double)10000){
+				double weight = 1.0;
+				int tempLoc = loc;
+				for(int d=0;d<dim;d++){
+					weight *= locationWeightLocal[tempLoc % resln];
+					tempLoc = tempLoc/resln;
+				}
+
+				locationWeight[loc] = (float) weight;
+				planCount[data[loc].getPlanNumber()] += weight;
+			}
+			else
+				locationWeight[loc] = (float) -1;
+			
+		}
+
+
+		double totalWeight = 0;
+	for (int i = 0; i < data.length; i++) {
+		if(locationWeight[i]>=0)
+			totalWeight += locationWeight[i];
+	}
+	
+	float weightSum = 0;
+	for (int i = 0; i < data.length; i++) {
+		if(locationWeight[i]>=0){
+			locationWeight[i] /= totalWeight;
+			weightSum += locationWeight[i];
+		}
+		assert (locationWeight[i]<=1) : "In getPlanCountArray: locationWeight is not less than 1";
+	}
+	assert (weightSum<=1) : "In getPlanCountArray: locationWeight is not less than 1";
+
+	/*
+	 * if(scaleupflag) { for(int i = 0; i < planCount.length; i++)
+	 * planCount[i] /= 100Math.pow(10, getDimension()); }
+	 */
+
+
+	checkValidityofWeights();
+
+}
+	 
+	 
 	public void planBouquetAlgo(int contour_no, double cost) {
 
 		String funName = "planBouquetAlgo";
@@ -372,7 +523,7 @@ public class CostGreedyGCI3D
 				last_exec_cost = cost;
 			}
 			if(flag == true){
-				if(cost_generic(convertSelectivitytoIndex(actual_sel)) > 2*cost)
+				if(cost_generic(convertSelectivitytoIndex(actual_sel)) >= 2*cost)
 					flag = false;
 			}
 			if(flag){
@@ -401,9 +552,13 @@ public class CostGreedyGCI3D
 						System.out.print(arr[d]+",");
 					}
 				System.out.println();
+				assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
+				assert (learning_cost <= (unique_plans.size()+1)*cost) : funName+" : learning cost exceeding its cap";
 				return;
 			}
-		}	
+		}
+		 assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
+		 assert (learning_cost <= unique_plans.size()*cost) : funName+" : learning cost exceeding its cap";
 		 System.out.println("The number unique points are "+unique_points);
 		 System.out.println("The number unique plans are "+unique_plans.size());
 		 System.out.println("The  unique plans are "+unique_plans);
@@ -413,6 +568,45 @@ public class CostGreedyGCI3D
 	}
 	
 
+	public  void checkValidityofWeights() {
+		double areaPlans =0;
+		double relativeAreaPlans =0;
+		areaSpace = 0.0;
+
+		planRelativeArea = new double[totalPlans];
+
+		for (int i=0; i< data.length; i++){
+			areaSpace += locationWeight[i];
+		}
+		//	System.out.println(areaSpace);
+
+		for (int i=0; i< totalPlans; i++){
+			planRelativeArea[i] = planCount[i]/areaSpace;
+			relativeAreaPlans += planRelativeArea[i];
+			areaPlans += planCount[i];
+		}
+		//	System.out.println(areaPlans);
+		//	System.out.println(relativeAreaPlans);
+
+		if(relativeAreaPlans < 0.99) {
+			System.out.println("ALERT! The area of plans add up to only " + relativeAreaPlans);
+			//System.exit(0);
+		}
+	}
+
+	
+	public double maxHarmCalculation(int loc,double SO){
+		int bestPlan  = getPCSTOptimalPlan(loc);
+		double bestCost = AllPlanCosts[bestPlan][loc];
+		int worstPlan = getPCSTWorstPlan(loc);
+		double worstCost = AllPlanCosts[worstPlan][loc];
+		double worst_native = (worstCost/bestCost);
+		if(worst_native<1)
+			System.out.println("MaxharmCalculation : error ");
+		return (SO/worst_native - 1);
+		//assert that this ratio is > 1
+	}
+	
 private double[] convertIndextoSelectivity(int[] point_Index) {
 	
 	String funName = "convertIndextoSelectivity";
@@ -435,7 +629,7 @@ private int[] convertSelectivitytoIndex (double[] point_sel) {
 }
 
 
-public void intialize(int location) {
+public void initialize(int location) {
 
 	String funName = "intialize";
 
@@ -613,7 +807,8 @@ public void intialize(int location) {
 					arr[last_dim]++; //restore the index back 
 					if( cur_val > targetval  && cur_val_l < targetval ) //NOTE : changed the inequality to strict inequality
 					{
-						if(!pointAlreadyExist(arr)){ //check if the point already exist
+						//if(!pointAlreadyExist(arr)){ //check if the point already exist
+						if(true){	
 							point_generic p; 
 							if(planVisited(getPlanNumber_generic(arr))!=null)
 								p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
@@ -860,45 +1055,103 @@ public void intialize(int location) {
 
 
 			if(resolution == 20){
-			selectivity[0] = 0.000005;		selectivity[1] = 0.00005;		selectivity[2] = 0.0005;	selectivity[3] = 0.002;
-			selectivity[4] = 0.005;		selectivity[5] = 0.008;		selectivity[6] = 0.01;		selectivity[7] = 0.02;
-			selectivity[8] = 0.03;			selectivity[9] = 0.04;			selectivity[10] = 0.05;	selectivity[11] = 0.08;
-			selectivity[12] = 0.10; 		selectivity[13] = 0.15;		selectivity[14] = 0.20;	selectivity[15] = 0.30;
-			selectivity[16] = 0.40;		selectivity[17] = 0.60;		selectivity[18]=0.80;		selectivity[19] = 0.99;
+				if(sel_distribution == 0){
+
+					selectivity[0] = 0.0005;   selectivity[1] = 0.0008;		selectivity[2] = 0.001;	selectivity[3] = 0.002;
+					selectivity[4] = 0.004;   selectivity[5] = 0.006;		selectivity[6] = 0.08;	selectivity[7] = 0.01;
+					selectivity[8] = 0.03;	selectivity[9] = 0.05;	selectivity[10] = 0.08;	selectivity[11] = 0.10;
+					selectivity[12] = 0.200;	selectivity[13] = 0.300;	selectivity[14] = 0.400;	selectivity[15] = 0.500;
+					selectivity[16] = 0.600;	selectivity[17] = 0.700;	selectivity[18] = 0.800;	selectivity[19] = 0.99;
+				}
+				else if( sel_distribution ==1){
+
+					selectivity[0] = 0.00005;   selectivity[1] = 0.00008;		selectivity[2] = 0.0001;	selectivity[3] = 0.0002;
+					selectivity[4] = 0.0004;   selectivity[5] = 0.0006;		selectivity[6] = 0.008;	selectivity[7] = 0.001;
+					selectivity[8] = 0.003;	selectivity[9] = 0.005;	selectivity[10] = 0.008;	selectivity[11] = 0.01;
+					selectivity[12] = 0.05;	selectivity[13] = 0.1;	selectivity[14] = 0.15;	selectivity[15] = 0.25;
+					selectivity[16] = 0.40;	selectivity[17] = 0.60;	selectivity[18] = 0.80;	selectivity[19] = 0.99;
+				}
+				else
+					assert (false) :funName+ "ERROR: should not come here";
 			}
 
 			if(resolution == 30){
-			selectivity[0] = 0.00002;  selectivity[1] = 0.00009;	selectivity[2] = 0.0002;	selectivity[3] = 0.0005;
-			selectivity[4] = 0.0007;   selectivity[5] = 0.0010;	selectivity[6] = 0.0014;	selectivity[7] = 0.0019;
-			selectivity[8] = 0.0026;	selectivity[9] = 0.0036;	selectivity[10] = 0.0048;	selectivity[11] = 0.0065;
-			selectivity[12] = 0.0087;	selectivity[13] = 0.0117;	selectivity[14] = 0.0156;	selectivity[15] = 0.0208;
-			selectivity[16] = 0.0278;	selectivity[17] = 0.0370;	selectivity[18] = 0.0493;	selectivity[19] = 0.0657;
-			selectivity[20] = 0.0874;	selectivity[21] = 0.1164;	selectivity[22] = 0.1549;	selectivity[23] = 0.2061;
-			selectivity[24] = 0.2741;	selectivity[25] = 0.3647;	selectivity[26] = 0.48515;	selectivity[27] = 0.6453;
-			selectivity[28] = 0.8583;	selectivity[29] = 0.9950;		
+				if(sel_distribution == 0){
+				//tpch
+				selectivity[0] = 0.0005;  selectivity[1] = 0.0008;	selectivity[2] = 0.001;	selectivity[3] = 0.002;
+				selectivity[4] = 0.004;   selectivity[5] = 0.006;	selectivity[28] = 0.008;	selectivity[29] = 0.01;
+				selectivity[8] = 0.03;	selectivity[9] = 0.05;
+				selectivity[10] = 0.07;	selectivity[11] = 0.1;	selectivity[12] = 0.15;	selectivity[13] = 0.20;
+				selectivity[14] = 0.25;	selectivity[15] = 0.30;	selectivity[16] = 0.35;	selectivity[17] = 0.40;
+				selectivity[18] = 0.45;	selectivity[19] = 0.50;	selectivity[20] = 0.55;	selectivity[21] = 0.60;
+				selectivity[22] = 0.65;	selectivity[23] = 0.70;	selectivity[24] = 0.75;	selectivity[25] = 0.80;
+				selectivity[26] = 0.85;	selectivity[27] = 0.90;	selectivity[28] = 0.95;	selectivity[29] = 0.99;
+				}
+				
+				else if(sel_distribution == 1){
+					selectivity[0] = 0.00001;  selectivity[1] = 0.00005;	selectivity[2] = 0.00010;	selectivity[3] = 0.00050;
+					selectivity[4] = 0.0010;   selectivity[5] = 0.005;	selectivity[6] = 0.0100;	selectivity[7] = 0.0200;
+					selectivity[8] = 0.0300;	selectivity[9] = 0.0400;	selectivity[10] = 0.0500;	selectivity[11] = 0.0600;
+					selectivity[12] = 0.0700;	selectivity[13] = 0.0800;	selectivity[14] = 0.0900;	selectivity[15] = 0.1000;
+					selectivity[16] = 0.1200;	selectivity[17] = 0.1400;	selectivity[18] = 0.1600;	selectivity[19] = 0.1800;
+					selectivity[20] = 0.2000;	selectivity[21] = 0.2500;	selectivity[22] = 0.3000;	selectivity[23] = 0.4000;
+					selectivity[24] = 0.5000;	selectivity[25] = 0.6000;	selectivity[26] = 0.7000;	selectivity[27] = 0.8000;
+					selectivity[28] = 0.9000;	selectivity[29] = 0.9950;
+				}
+				
+				else
+					assert (false) :funName+ "ERROR: should not come here";
 			}
 			
 			if(resolution==100){
-				selectivity[0] = 0.005995; 	selectivity[1] = 0.015985; 	selectivity[2] = 0.025975; 	selectivity[3] = 0.035965; 	selectivity[4] = 0.045955; 	
-				selectivity[5] = 0.055945; 	selectivity[6] = 0.065935; 	selectivity[7] = 0.075925; 	selectivity[8] = 0.085915; 	selectivity[9] = 0.095905; 	
-				selectivity[10] = 0.105895; 	selectivity[11] = 0.115885; 	selectivity[12] = 0.125875; 	selectivity[13] = 0.135865; 	selectivity[14] = 0.145855; 	
-				selectivity[15] = 0.155845; 	selectivity[16] = 0.165835; 	selectivity[17] = 0.175825; 	selectivity[18] = 0.185815; 	selectivity[19] = 0.195805; 	
-				selectivity[20] = 0.205795; 	selectivity[21] = 0.215785; 	selectivity[22] = 0.225775; 	selectivity[23] = 0.235765; 	selectivity[24] = 0.245755; 	
-				selectivity[25] = 0.255745; 	selectivity[26] = 0.265735; 	selectivity[27] = 0.275725; 	selectivity[28] = 0.285715; 	selectivity[29] = 0.295705; 	
-				selectivity[30] = 0.305695; 	selectivity[31] = 0.315685; 	selectivity[32] = 0.325675; 	selectivity[33] = 0.335665; 	selectivity[34] = 0.345655; 	
-				selectivity[35] = 0.355645; 	selectivity[36] = 0.365635; 	selectivity[37] = 0.375625; 	selectivity[38] = 0.385615; 	selectivity[39] = 0.395605; 	
-				selectivity[40] = 0.405595; 	selectivity[41] = 0.415585; 	selectivity[42] = 0.425575; 	selectivity[43] = 0.435565; 	selectivity[44] = 0.445555; 	
-				selectivity[45] = 0.455545; 	selectivity[46] = 0.465535; 	selectivity[47] = 0.475525; 	selectivity[48] = 0.485515; 	selectivity[49] = 0.495505; 	
-				selectivity[50] = 0.505495; 	selectivity[51] = 0.515485; 	selectivity[52] = 0.525475; 	selectivity[53] = 0.535465; 	selectivity[54] = 0.545455; 	
-				selectivity[55] = 0.555445; 	selectivity[56] = 0.565435; 	selectivity[57] = 0.575425; 	selectivity[58] = 0.585415; 	selectivity[59] = 0.595405; 	
-				selectivity[60] = 0.605395; 	selectivity[61] = 0.615385; 	selectivity[62] = 0.625375; 	selectivity[63] = 0.635365; 	selectivity[64] = 0.645355; 	
-				selectivity[65] = 0.655345; 	selectivity[66] = 0.665335; 	selectivity[67] = 0.675325; 	selectivity[68] = 0.685315; 	selectivity[69] = 0.695305; 	
-				selectivity[70] = 0.705295; 	selectivity[71] = 0.715285; 	selectivity[72] = 0.725275; 	selectivity[73] = 0.735265; 	selectivity[74] = 0.745255; 	
-				selectivity[75] = 0.755245; 	selectivity[76] = 0.765235; 	selectivity[77] = 0.775225; 	selectivity[78] = 0.785215; 	selectivity[79] = 0.795205; 	
-				selectivity[80] = 0.805195; 	selectivity[81] = 0.815185; 	selectivity[82] = 0.825175; 	selectivity[83] = 0.835165; 	selectivity[84] = 0.845155; 	
-				selectivity[85] = 0.855145; 	selectivity[86] = 0.865135; 	selectivity[87] = 0.875125; 	selectivity[88] = 0.885115; 	selectivity[89] = 0.895105; 	
-				selectivity[90] = 0.905095; 	selectivity[91] = 0.915085; 	selectivity[92] = 0.925075; 	selectivity[93] = 0.935065; 	selectivity[94] = 0.945055; 	
-				selectivity[95] = 0.955045; 	selectivity[96] = 0.965035; 	selectivity[97] = 0.975025; 	selectivity[98] = 0.985015; 	selectivity[99] = 0.995005;
+				if(sel_distribution == 1){
+					selectivity[0] = 0.000514; 	selectivity[1] = 0.000543; 	selectivity[2] = 0.000576; 	selectivity[3] = 0.000611; 	selectivity[4] = 0.000648;
+					selectivity[5] = 0.000689; 	selectivity[6] = 0.000733; 	selectivity[7] = 0.000781; 	selectivity[8] = 0.000833; 	selectivity[9] = 0.000890;
+					selectivity[10] = 0.000951; 	selectivity[11] = 0.001017; 	selectivity[12] = 0.001088; 	selectivity[13] = 0.001165; 	selectivity[14] = 0.001249;
+					selectivity[15] = 0.001340; 	selectivity[16] = 0.001438; 	selectivity[17] = 0.001545; 	selectivity[18] = 0.001660; 	selectivity[19] = 0.001785;
+					selectivity[20] = 0.001920; 	selectivity[21] = 0.002067; 	selectivity[22] = 0.002225; 	selectivity[23] = 0.002397; 	selectivity[24] = 0.002583;
+					selectivity[25] = 0.002784; 	selectivity[26] = 0.003003; 	selectivity[27] = 0.003239; 	selectivity[28] = 0.003495; 	selectivity[29] = 0.003772;
+					selectivity[30] = 0.004072; 	selectivity[31] = 0.004397; 	selectivity[32] = 0.004749; 	selectivity[33] = 0.005131; 	selectivity[34] = 0.005544;
+					selectivity[35] = 0.005991; 	selectivity[36] = 0.006475; 	selectivity[37] = 0.007000; 	selectivity[38] = 0.007568; 	selectivity[39] = 0.008183;
+					selectivity[40] = 0.008849; 	selectivity[41] = 0.009571; 	selectivity[42] = 0.010352; 	selectivity[43] = 0.011198; 	selectivity[44] = 0.012115;
+					selectivity[45] = 0.013108; 	selectivity[46] = 0.014183; 	selectivity[47] = 0.015347; 	selectivity[48] = 0.016608; 	selectivity[49] = 0.017973;
+					selectivity[50] = 0.019452; 	selectivity[51] = 0.021054; 	selectivity[52] = 0.022788; 	selectivity[53] = 0.024667; 	selectivity[54] = 0.026701;
+					selectivity[55] = 0.028904; 	selectivity[56] = 0.031291; 	selectivity[57] = 0.033875; 	selectivity[58] = 0.036674; 	selectivity[59] = 0.039705;
+					selectivity[60] = 0.042987; 	selectivity[61] = 0.046542; 	selectivity[62] = 0.050392; 	selectivity[63] = 0.054562; 	selectivity[64] = 0.059078;
+					selectivity[65] = 0.063968; 	selectivity[66] = 0.069265; 	selectivity[67] = 0.075001; 	selectivity[68] = 0.081213; 	selectivity[69] = 0.087940;
+					selectivity[70] = 0.095227; 	selectivity[71] = 0.103117; 	selectivity[72] = 0.111663; 	selectivity[73] = 0.120918; 	selectivity[74] = 0.130942;
+					selectivity[75] = 0.141797; 	selectivity[76] = 0.153553; 	selectivity[77] = 0.166285; 	selectivity[78] = 0.180074; 	selectivity[79] = 0.195007;
+					selectivity[80] = 0.211180; 	selectivity[81] = 0.228695; 	selectivity[82] = 0.247664; 	selectivity[83] = 0.268207; 	selectivity[84] = 0.290455;
+					selectivity[85] = 0.314550; 	selectivity[86] = 0.340645; 	selectivity[87] = 0.368905; 	selectivity[88] = 0.399512; 	selectivity[89] = 0.432658;
+					selectivity[90] = 0.468556; 	selectivity[91] = 0.507433; 	selectivity[92] = 0.549537; 	selectivity[93] = 0.595136; 	selectivity[94] = 0.644519;
+					selectivity[95] = 0.698001; 	selectivity[96] = 0.775922; 	selectivity[97] = 0.858651; 	selectivity[98] = 0.926586; 	selectivity[99] = 0.990160;
+
+				}
+				else if(sel_distribution == 0){
+					selectivity[0] = 0.005995; 	selectivity[1] = 0.015985; 	selectivity[2] = 0.025975; 	selectivity[3] = 0.035965; 	selectivity[4] = 0.045955; 	
+					selectivity[5] = 0.055945; 	selectivity[6] = 0.065935; 	selectivity[7] = 0.075925; 	selectivity[8] = 0.085915; 	selectivity[9] = 0.095905; 	
+					selectivity[10] = 0.105895; 	selectivity[11] = 0.115885; 	selectivity[12] = 0.125875; 	selectivity[13] = 0.135865; 	selectivity[14] = 0.145855; 	
+					selectivity[15] = 0.155845; 	selectivity[16] = 0.165835; 	selectivity[17] = 0.175825; 	selectivity[18] = 0.185815; 	selectivity[19] = 0.195805; 	
+					selectivity[20] = 0.205795; 	selectivity[21] = 0.215785; 	selectivity[22] = 0.225775; 	selectivity[23] = 0.235765; 	selectivity[24] = 0.245755; 	
+					selectivity[25] = 0.255745; 	selectivity[26] = 0.265735; 	selectivity[27] = 0.275725; 	selectivity[28] = 0.285715; 	selectivity[29] = 0.295705; 	
+					selectivity[30] = 0.305695; 	selectivity[31] = 0.315685; 	selectivity[32] = 0.325675; 	selectivity[33] = 0.335665; 	selectivity[34] = 0.345655; 	
+					selectivity[35] = 0.355645; 	selectivity[36] = 0.365635; 	selectivity[37] = 0.375625; 	selectivity[38] = 0.385615; 	selectivity[39] = 0.395605; 	
+					selectivity[40] = 0.405595; 	selectivity[41] = 0.415585; 	selectivity[42] = 0.425575; 	selectivity[43] = 0.435565; 	selectivity[44] = 0.445555; 	
+					selectivity[45] = 0.455545; 	selectivity[46] = 0.465535; 	selectivity[47] = 0.475525; 	selectivity[48] = 0.485515; 	selectivity[49] = 0.495505; 	
+					selectivity[50] = 0.505495; 	selectivity[51] = 0.515485; 	selectivity[52] = 0.525475; 	selectivity[53] = 0.535465; 	selectivity[54] = 0.545455; 	
+					selectivity[55] = 0.555445; 	selectivity[56] = 0.565435; 	selectivity[57] = 0.575425; 	selectivity[58] = 0.585415; 	selectivity[59] = 0.595405; 	
+					selectivity[60] = 0.605395; 	selectivity[61] = 0.615385; 	selectivity[62] = 0.625375; 	selectivity[63] = 0.635365; 	selectivity[64] = 0.645355; 	
+					selectivity[65] = 0.655345; 	selectivity[66] = 0.665335; 	selectivity[67] = 0.675325; 	selectivity[68] = 0.685315; 	selectivity[69] = 0.695305; 	
+					selectivity[70] = 0.705295; 	selectivity[71] = 0.715285; 	selectivity[72] = 0.725275; 	selectivity[73] = 0.735265; 	selectivity[74] = 0.745255; 	
+					selectivity[75] = 0.755245; 	selectivity[76] = 0.765235; 	selectivity[77] = 0.775225; 	selectivity[78] = 0.785215; 	selectivity[79] = 0.795205; 	
+					selectivity[80] = 0.805195; 	selectivity[81] = 0.815185; 	selectivity[82] = 0.825175; 	selectivity[83] = 0.835165; 	selectivity[84] = 0.845155; 	
+					selectivity[85] = 0.855145; 	selectivity[86] = 0.865135; 	selectivity[87] = 0.875125; 	selectivity[88] = 0.885115; 	selectivity[89] = 0.895105; 	
+					selectivity[90] = 0.905095; 	selectivity[91] = 0.915085; 	selectivity[92] = 0.925075; 	selectivity[93] = 0.935065; 	selectivity[94] = 0.945055; 	
+					selectivity[95] = 0.955045; 	selectivity[96] = 0.965035; 	selectivity[97] = 0.975025; 	selectivity[98] = 0.985015; 	selectivity[99] = 0.995005;
+				}
+
+				else
+					assert (false) :funName+ "ERROR: should not come here";
 			}
 			//the selectivity distribution
 			//System.out.println("The selectivity distribution using is ");
