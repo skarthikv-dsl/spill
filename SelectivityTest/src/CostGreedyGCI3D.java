@@ -431,6 +431,30 @@ public  void getPlanCountArray() {
 				locationWeightLocal[26] = 6;        locationWeightLocal[27] = 6;				locationWeightLocal[28] = 6;
 				locationWeightLocal[29] = 5;
 			}
+		}	
+			else if (resolution == 20){
+				if(sel_distribution == 0){
+					locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+					locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+					locationWeightLocal[6] = 1;        locationWeightLocal[7] = 4;				locationWeightLocal[8] = 4;
+					locationWeightLocal[9] = 5;
+					locationWeightLocal[10] = 5;			locationWeightLocal[11] = 5;				locationWeightLocal[12] = 5;
+					locationWeightLocal[13] = 6;         locationWeightLocal[14] = 6;				locationWeightLocal[15] = 10;
+					locationWeightLocal[16] = 10;        locationWeightLocal[17] = 10;				locationWeightLocal[18] = 15;
+					locationWeightLocal[19] = 10;
+
+				}
+				
+				if(sel_distribution == 1){
+					locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+					locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+					locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 4;
+					locationWeightLocal[9] = 4;
+					locationWeightLocal[10] = 5;			locationWeightLocal[11] = 5;				locationWeightLocal[12] = 5;
+					locationWeightLocal[13] = 6;         locationWeightLocal[14] = 6;				locationWeightLocal[15] = 10;
+					locationWeightLocal[16] = 10;        locationWeightLocal[17] = 15;				locationWeightLocal[18] = 15;
+					locationWeightLocal[19] = 10;
+				}
 
 		}
 		for (int loc=0; loc < data.length; loc++)
@@ -451,22 +475,29 @@ public  void getPlanCountArray() {
 			
 		}
 
-
-		double totalWeight = 0;
+		double totalWeight = 0,sumWeight=0;
+		
 	for (int i = 0; i < data.length; i++) {
 		if(locationWeight[i]>=0)
 			totalWeight += locationWeight[i];
 	}
 	
-	float weightSum = 0;
 	for (int i = 0; i < data.length; i++) {
 		if(locationWeight[i]>=0){
 			locationWeight[i] /= totalWeight;
-			weightSum += locationWeight[i];
+			sumWeight += locationWeight[i];
 		}
-		assert (locationWeight[i]<=1) : "In getPlanCountArray: locationWeight is not less than 1";
+		
+		assert (locationWeight[i]<= (double)1) : "In getPlanCountArray: locationWeight is not less than 1";
+//		if(locationWeight[i]>(double)1){
+//			System.out.println("In getPlanCountArray: locationWeight is not less than 1");
+//			System.out.println("location weight : "+locationWeight[i]+" at i="+i+" total weight="+totalWeight);
+//		}
 	}
-	assert (weightSum<=1) : "In getPlanCountArray: locationWeight is not less than 1";
+
+	System.out.println("The sum weight is "+sumWeight);
+	assert(sumWeight<=(double)1.01) : "In getPlanCountArray: sumWeight is not less than 1";
+	
 
 	/*
 	 * if(scaleupflag) { for(int i = 0; i < planCount.length; i++)
@@ -552,18 +583,18 @@ public  void getPlanCountArray() {
 						System.out.print(arr[d]+",");
 					}
 				System.out.println();
-				assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
-				assert (learning_cost <= (unique_plans.size()+1)*cost) : funName+" : learning cost exceeding its cap";
+				//assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
+				assert (learning_cost <= (unique_plans.size()+1)*cost*1.01) : funName+" : learning cost exceeding its cap";
 				return;
 			}
 		}
-		 assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
-		 assert (learning_cost <= unique_plans.size()*cost) : funName+" : learning cost exceeding its cap";
-		 System.out.println("The number unique points are "+unique_points);
-		 System.out.println("The number unique plans are "+unique_plans.size());
+		 //assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
+		
+		 System.out.println("The number of unique points are "+unique_points);
+		 System.out.println("The number of unique plans are "+unique_plans.size());
 		 System.out.println("The  unique plans are "+unique_plans);
-		 System.out.println("Contour No. is "+contour_no+" : Max cost is "+max_cost+" and min cost is "+min_cost);
-
+		 System.out.println("Contour No. is "+contour_no+" : Max cost is "+max_cost+" and min cost is "+min_cost+" with learning cost "+learning_cost);
+		 assert (learning_cost <= (unique_plans.size())*cost*1.01) : funName+" : learning cost exceeding its cap";
 
 	}
 	
@@ -784,8 +815,8 @@ public void initialize(int location) {
 
 				if(cur_val == targetval)
 				{
-					//if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
-					if(true){								// its okay to have redundancy
+					if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
+					//if(true){								// its okay to have redundancy
 						point_generic p;
 
 						/*
@@ -807,8 +838,8 @@ public void initialize(int location) {
 					arr[last_dim]++; //restore the index back 
 					if( cur_val > targetval  && cur_val_l < targetval ) //NOTE : changed the inequality to strict inequality
 					{
-						//if(!pointAlreadyExist(arr)){ //check if the point already exist
-						if(true){	
+						if(!pointAlreadyExist(arr)){ //check if the point already exist
+						//if(true){	
 							point_generic p; 
 							if(planVisited(getPlanNumber_generic(arr))!=null)
 								p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
@@ -1038,15 +1069,15 @@ public void initialize(int location) {
 					
 					//This is for TPCH queries 
 					selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
-					selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
-					selectivity[8] = 0.6;		selectivity[9] = 0.95;                                 // oct - 2012
+					selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.20;	selectivity[7] = 0.40;
+					selectivity[8] = 0.60;		selectivity[9] = 0.95;                               // oct - 2012
 				}
 				else if( sel_distribution ==1){
 					
 					//This is for TPCDS queries
 					selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
 					selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
-					selectivity[8] = 0.50;		selectivity[9] = 0.95;                                 // dec - 2012
+					selectivity[8] = 0.50;		selectivity[9] = 0.99;                            // dec - 2012
 				}
 				else
 					assert (false) : "should not come here";
@@ -1058,7 +1089,7 @@ public void initialize(int location) {
 				if(sel_distribution == 0){
 
 					selectivity[0] = 0.0005;   selectivity[1] = 0.0008;		selectivity[2] = 0.001;	selectivity[3] = 0.002;
-					selectivity[4] = 0.004;   selectivity[5] = 0.006;		selectivity[6] = 0.08;	selectivity[7] = 0.01;
+					selectivity[4] = 0.004;   selectivity[5] = 0.006;		selectivity[6] = 0.008;	selectivity[7] = 0.01;
 					selectivity[8] = 0.03;	selectivity[9] = 0.05;	selectivity[10] = 0.08;	selectivity[11] = 0.10;
 					selectivity[12] = 0.200;	selectivity[13] = 0.300;	selectivity[14] = 0.400;	selectivity[15] = 0.500;
 					selectivity[16] = 0.600;	selectivity[17] = 0.700;	selectivity[18] = 0.800;	selectivity[19] = 0.99;
@@ -1066,7 +1097,7 @@ public void initialize(int location) {
 				else if( sel_distribution ==1){
 
 					selectivity[0] = 0.00005;   selectivity[1] = 0.00008;		selectivity[2] = 0.0001;	selectivity[3] = 0.0002;
-					selectivity[4] = 0.0004;   selectivity[5] = 0.0006;		selectivity[6] = 0.008;	selectivity[7] = 0.001;
+					selectivity[4] = 0.0004;   selectivity[5] = 0.0006;		selectivity[6] = 0.0008;	selectivity[7] = 0.001;
 					selectivity[8] = 0.003;	selectivity[9] = 0.005;	selectivity[10] = 0.008;	selectivity[11] = 0.01;
 					selectivity[12] = 0.05;	selectivity[13] = 0.1;	selectivity[14] = 0.15;	selectivity[15] = 0.25;
 					selectivity[16] = 0.40;	selectivity[17] = 0.60;	selectivity[18] = 0.80;	selectivity[19] = 0.99;
@@ -1078,14 +1109,14 @@ public void initialize(int location) {
 			if(resolution == 30){
 				if(sel_distribution == 0){
 				//tpch
-				selectivity[0] = 0.0005;  selectivity[1] = 0.0008;	selectivity[2] = 0.001;	selectivity[3] = 0.002;
-				selectivity[4] = 0.004;   selectivity[5] = 0.006;	selectivity[28] = 0.008;	selectivity[29] = 0.01;
-				selectivity[8] = 0.03;	selectivity[9] = 0.05;
-				selectivity[10] = 0.07;	selectivity[11] = 0.1;	selectivity[12] = 0.15;	selectivity[13] = 0.20;
-				selectivity[14] = 0.25;	selectivity[15] = 0.30;	selectivity[16] = 0.35;	selectivity[17] = 0.40;
-				selectivity[18] = 0.45;	selectivity[19] = 0.50;	selectivity[20] = 0.55;	selectivity[21] = 0.60;
-				selectivity[22] = 0.65;	selectivity[23] = 0.70;	selectivity[24] = 0.75;	selectivity[25] = 0.80;
-				selectivity[26] = 0.85;	selectivity[27] = 0.90;	selectivity[28] = 0.95;	selectivity[29] = 0.99;
+					selectivity[0] = 0.0005;  selectivity[1] = 0.0008;	selectivity[2] = 0.001;	selectivity[3] = 0.002;
+					selectivity[4] = 0.004;   selectivity[5] = 0.006;	selectivity[6] = 0.008;	selectivity[7] = 0.01;
+					selectivity[8] = 0.03;	selectivity[9] = 0.05;
+					selectivity[10] = 0.07;	selectivity[11] = 0.1;	selectivity[12] = 0.15;	selectivity[13] = 0.20;
+					selectivity[14] = 0.25;	selectivity[15] = 0.30;	selectivity[16] = 0.35;	selectivity[17] = 0.40;
+					selectivity[18] = 0.45;	selectivity[19] = 0.50;	selectivity[20] = 0.55;	selectivity[21] = 0.60;
+					selectivity[22] = 0.65;	selectivity[23] = 0.70;	selectivity[24] = 0.75;	selectivity[25] = 0.80;
+					selectivity[26] = 0.85;	selectivity[27] = 0.90;	selectivity[28] = 0.95;	selectivity[29] = 0.99;
 				}
 				
 				else if(sel_distribution == 1){

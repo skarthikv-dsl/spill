@@ -129,7 +129,7 @@ public class GCI3D
 
 	//for ASO calculation 
 	static double planCount[], planRelativeArea[];
-	static float picsel[], locationWeight[];
+	static double picsel[], locationWeight[];
 
 	static double areaSpace =0,totalEstimatedArea = 0;
 
@@ -247,7 +247,11 @@ public class GCI3D
 	  {
 		System.out.println("Entering loop "+j);
 
-		//initialization for every loop
+//		if(j==2962)
+//			System.out.println("Interesting");
+//		else
+//			continue;
+		//initiliazation for every loop
 		double algo_cost =0;
 		SO =0;
 		cost = obj.getOptimalCost(0);
@@ -537,6 +541,7 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 		learning_cost = 0;
 		oneDimCost = 0;
 		double max_cost=0, min_cost = OptimalCost[totalPoints-1]+1;
+		int [] min_cost_index = new int[dimension];
 		double [] sel_max = new double[dimension];
 		
 		
@@ -564,8 +569,11 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 			unique_plans.add(p.get_plan_no());
 			if(p.get_cost()>max_cost)
 				max_cost = p.get_cost();
-			if(p.get_cost()<min_cost)
+			if(p.get_cost()<min_cost){
 				min_cost = p.get_cost();
+				for(int d=0;d<dimension;d++)
+					min_cost_index[d] = p.get_dimension(d);
+			}
 			
 			assert(min_cost<=max_cost) : funName+"min cost is less than or equal to max. cost in the contour";
 			
@@ -603,10 +611,10 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 						arr[d] = findNearestPoint(actual_sel[d]);
 				}
 				if(cost_generic(arr)>Math.pow(2, contour_no)*c_min)
-					System.out.println(funName+" ERROR from the boundary point");
+					assert(false) : funName+" ERROR from the boundary point";
 				else {
 					point_generic p = new point_generic(arr, getPlanNumber_generic(arr), cost_generic(arr), remainingDim);
-					ContourPointsMap.get(contour_no).add(p);
+					//ContourPointsMap.get(contour_no).add(p);
 					max_cost = min_cost = p.get_cost();
 					unique_plans.add(p.get_plan_no());
 					p.reloadOrderList(remainingDim);
@@ -635,6 +643,15 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 		
 		System.out.print("Max cost = "+max_cost+" Min cost = "+min_cost+" ");
 		System.out.println("with Number of Unique plans = "+unique_plans.size());
+		
+		
+		System.out.print("MinCostIndex = ");
+		for(int d=0;d<dimension;d++)
+			System.out.print(min_cost_index[d]+",");
+		
+		System.out.println();
+		
+		
 		
 		for(int d=0;d<dimension;d++)
 			System.out.println(d+"_max : "+sel_max[d]);
@@ -668,10 +685,10 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 					if(sel_max[d] <= sel)
 						sel_max[d] = sel;  
 					sel = getLearntSelectivity(d,p.get_plan_no(),(Math.pow(2, contour_no-1)*getOptimalCost(0)), p);
-					if(sel_max[d]<=sel)
+//					if(sel_max[d]<=sel)
 						sel_max[d] = sel;
-					else
-						System.out.println("GetLeantSelectivity: postgres selectivity is less");
+					//else
+					//	System.out.println("GetLeantSelectivity: postgres selectivity is less");
 				
 					/*
 					 * add the tuple (dimension,plan) to the executions data structure
@@ -785,6 +802,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 		tree.FROM_CLAUSE = FROM_CLAUSE;
 		int spill_values [] = tree.getSpillNode(dim,plan); //[0] gives node id of the tree and [1] gives the spill_node for postgres
 		int spill_node = spill_values[1];
+		System.out.println("The spill node value in the tree is "+spill_node);
 		
 		/*
 		 *temp_act_sel to iterate from point p to  until either we exhaust the budget 
@@ -793,9 +811,9 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 		double[] temp_act_sel = new double[dimension];
 		for(int d=0;d<dimension;d++){
 			if(dim==d){
-				if(selectivity[p.get_dimension(d)] >= actual_sel[d])
-					temp_act_sel[d] = actual_sel[d];
-				else
+//				if(selectivity[p.get_dimension(d)] >= actual_sel[d])
+//					temp_act_sel[d] = actual_sel[d]; //This line posed a problem, and hence commenting it. 
+//				else
 					temp_act_sel[d] = selectivity[p.get_dimension(d)];
 			}
 			else
@@ -803,7 +821,7 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
 		}
 		
 		double budget = cost;   //if this contour is the last for point p set the budget to  point's cost
-		if(p.get_cost() <2*cost)
+		if((p.get_cost() <2*cost) && (p.get_cost()>cost))
 			budget = p.get_cost();
 
 		File file=null;
@@ -1130,6 +1148,7 @@ public void initialize(int location) {
 		for(int j=0;j<ContourPointsMap.get(i).size();j++){
 			point_generic p = ContourPointsMap.get(i).get(j);
 			p.reloadOrderList(remainingDim);
+			assert(p.getPredicateOrder().size() == dimension) : " reLoading predicate Order not done properly";
 		}
 	}
 	
@@ -1263,8 +1282,8 @@ public void initialize(int location) {
 
 				if(cur_val == targetval)
 				{
-					//if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
-					if(true){								// its okay to have redundancy
+					if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
+					//if(true){								// its okay to have redundancy
 						point_generic p;
 						
 						/*
@@ -1286,8 +1305,8 @@ public void initialize(int location) {
 					arr[last_dim]++; //restore the index back 
 					if( cur_val > targetval  && cur_val_l < targetval ) //NOTE : changed the inequality to strict inequality
 					{
-						//if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
-						if(true){								// its okay to have redundancy
+						if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
+						//if(true){								// its okay to have redundancy
 							point_generic p; 
 							if(planVisited(getPlanNumber_generic(arr))!=null)
 								p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
@@ -1527,15 +1546,15 @@ public void initialize(int location) {
 					
 					//This is for TPCH queries 
 					selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
-					selectivity[4] = 0.05;		selectivity[5] = 0.1;	selectivity[6] = 0.2;	selectivity[7] = 0.4;
-					selectivity[8] = 0.6;		selectivity[9] = 0.95;                                 // oct - 2012
+					selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.20;	selectivity[7] = 0.40;
+					selectivity[8] = 0.60;		selectivity[9] = 0.95;                                   // oct - 2012
 				}
 				else if( sel_distribution ==1){
 					
 					//This is for TPCDS queries
 					selectivity[0] = 0.00005;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
 					selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
-					selectivity[8] = 0.50;		selectivity[9] = 0.99;                                 // dec - 2012
+					selectivity[8] = 0.50;		selectivity[9] = 0.99;                                // dec - 2012
 				}
 				else
 					assert (false) :funName+ "ERROR: should not come here";
@@ -1546,7 +1565,7 @@ public void initialize(int location) {
 				if(sel_distribution == 0){
 					
 					selectivity[0] = 0.0005;   selectivity[1] = 0.0008;		selectivity[2] = 0.001;	selectivity[3] = 0.002;
-					selectivity[4] = 0.004;   selectivity[5] = 0.006;		selectivity[6] = 0.08;	selectivity[7] = 0.01;
+					selectivity[4] = 0.004;   selectivity[5] = 0.006;		selectivity[6] = 0.008;	selectivity[7] = 0.01;
 					selectivity[8] = 0.03;	selectivity[9] = 0.05;	selectivity[10] = 0.08;	selectivity[11] = 0.10;
 					selectivity[12] = 0.200;	selectivity[13] = 0.300;	selectivity[14] = 0.400;	selectivity[15] = 0.500;
 					selectivity[16] = 0.600;	selectivity[17] = 0.700;	selectivity[18] = 0.800;	selectivity[19] = 0.99;
@@ -1554,7 +1573,7 @@ public void initialize(int location) {
 				else if( sel_distribution ==1){
 					
 					selectivity[0] = 0.00005;   selectivity[1] = 0.00008;		selectivity[2] = 0.0001;	selectivity[3] = 0.0002;
-					selectivity[4] = 0.0004;   selectivity[5] = 0.0006;		selectivity[6] = 0.008;	selectivity[7] = 0.001;
+					selectivity[4] = 0.0004;   selectivity[5] = 0.0006;		selectivity[6] = 0.0008;	selectivity[7] = 0.001;
 					selectivity[8] = 0.003;	selectivity[9] = 0.005;	selectivity[10] = 0.008;	selectivity[11] = 0.01;
 					selectivity[12] = 0.05;	selectivity[13] = 0.1;	selectivity[14] = 0.15;	selectivity[15] = 0.25;
 					selectivity[16] = 0.40;	selectivity[17] = 0.60;	selectivity[18] = 0.80;	selectivity[19] = 0.99;
@@ -1569,14 +1588,14 @@ public void initialize(int location) {
 				
 				if(sel_distribution == 0){
 				//tpch
-				selectivity[0] = 0.0005;  selectivity[1] = 0.0008;	selectivity[2] = 0.001;	selectivity[3] = 0.002;
-				selectivity[4] = 0.004;   selectivity[5] = 0.006;	selectivity[28] = 0.008;	selectivity[29] = 0.01;
-				selectivity[8] = 0.03;	selectivity[9] = 0.05;
-				selectivity[10] = 0.07;	selectivity[11] = 0.1;	selectivity[12] = 0.15;	selectivity[13] = 0.20;
-				selectivity[14] = 0.25;	selectivity[15] = 0.30;	selectivity[16] = 0.35;	selectivity[17] = 0.40;
-				selectivity[18] = 0.45;	selectivity[19] = 0.50;	selectivity[20] = 0.55;	selectivity[21] = 0.60;
-				selectivity[22] = 0.65;	selectivity[23] = 0.70;	selectivity[24] = 0.75;	selectivity[25] = 0.80;
-				selectivity[26] = 0.85;	selectivity[27] = 0.90;	selectivity[28] = 0.95;	selectivity[29] = 0.99;
+					selectivity[0] = 0.0005;  selectivity[1] = 0.0008;	selectivity[2] = 0.001;	selectivity[3] = 0.002;
+					selectivity[4] = 0.004;   selectivity[5] = 0.006;	selectivity[6] = 0.008;	selectivity[7] = 0.01;
+					selectivity[8] = 0.03;	selectivity[9] = 0.05;
+					selectivity[10] = 0.07;	selectivity[11] = 0.1;	selectivity[12] = 0.15;	selectivity[13] = 0.20;
+					selectivity[14] = 0.25;	selectivity[15] = 0.30;	selectivity[16] = 0.35;	selectivity[17] = 0.40;
+					selectivity[18] = 0.45;	selectivity[19] = 0.50;	selectivity[20] = 0.55;	selectivity[21] = 0.60;
+					selectivity[22] = 0.65;	selectivity[23] = 0.70;	selectivity[24] = 0.75;	selectivity[25] = 0.80;
+					selectivity[26] = 0.85;	selectivity[27] = 0.90;	selectivity[28] = 0.95;	selectivity[29] = 0.99;
 				}
 				
 				else if(sel_distribution == 1){
@@ -1868,7 +1887,7 @@ public  void checkValidityofWeights() {
 
 public  void getPlanCountArray() {
 	planCount = new double[totalPlans];
-	locationWeight = new float[data.length];
+	locationWeight = new double[data.length];
 	// Set dim depending on whether we are dealing with full packet or slice
 	// int dim;
 
@@ -1951,16 +1970,17 @@ public  void getPlanCountArray() {
 					tempLoc = tempLoc/resln;
 				}
 
-				locationWeight[loc] = (float) weight;
+				locationWeight[loc] = weight;
 				planCount[data[loc].getPlanNumber()] += weight;
 			}
 			else
-				locationWeight[loc] = (float) -1;
+				locationWeight[loc] = (double) -1;
 			
 		}
 
 
-		double totalWeight = 0;
+		double totalWeight = 0,sumWeight=0;
+		
 	for (int i = 0; i < data.length; i++) {
 		if(locationWeight[i]>=0)
 			totalWeight += locationWeight[i];
@@ -1969,11 +1989,19 @@ public  void getPlanCountArray() {
 	for (int i = 0; i < data.length; i++) {
 		if(locationWeight[i]>=0){
 			locationWeight[i] /= totalWeight;
+			sumWeight += locationWeight[i];
 		}
-		assert (locationWeight[i]<=1) : "In getPlanCountArray: locationWeight is not less than 1";
+		
+		assert (locationWeight[i]<= (double)1) : "In getPlanCountArray: locationWeight is not less than 1";
+//		if(locationWeight[i]>(double)1){
+//			System.out.println("In getPlanCountArray: locationWeight is not less than 1");
+//			System.out.println("location weight : "+locationWeight[i]+" at i="+i+" total weight="+totalWeight);
+//		}
 	}
 
-
+	System.out.println("The sum weight is "+sumWeight);
+	assert(sumWeight<=(double)1*1.01) : "In getPlanCountArray: sumWeight is not less than 1";
+	
 	/*
 	 * if(scaleupflag) { for(int i = 0; i < planCount.length; i++)
 	 * planCount[i] /= 100Math.pow(10, getDimension()); }

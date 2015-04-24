@@ -401,7 +401,7 @@ public class BinaryTree {
 					break;
 				}
 			}
-			//System.out.println("The spill_node is Id is "+spill_id);
+			System.out.println("The spill_node is Id is "+spill_id);
 			assert(spill_id != -1 ): "cannot have this number";
 
 				// determine the spill_node for postgres
@@ -498,17 +498,8 @@ public class BinaryTree {
 		
 	}
 	public static void main(String[] args) throws NumberFormatException, IOException{
-		int[] elements = new int[]{5,7,2,1,4,6,8};
-		// the number of plans
-		//String[] predicates = {"(lineitem.l_suppkey = supplier.s_suppkey)","(lineitem.l_orderkey = orders.o_orderkey)"};
-		//String[] predicatesRev = {"(supplier.s_suppkey = lineitem.l_suppkey)","(orders.o_orderkey = lineitem.l_orderkey)"};
 
-
-		//The following Five constants need to be hardcoded
-		//String[] predicates = {"(orders.o_custkey = customer.c_custkey)","(lineitem.l_orderkey = orders.o_orderkey)"};
-		//String[] predicatesRev = {"(customer.c_custkey = orders.o_custkey)","(orders.o_orderkey = lineitem.l_orderkey)"};
-		//String[] relations = {"c","o","l","n"};
-		//String path = "/home/dsladmin/Srinivas/data/HQT102DR100/";
+		BinaryTree tree = new BinaryTree();
 		Properties prop = new Properties();
 		prop.load(new FileInputStream(new File("/home/dsladmin/Srinivas/data/settings/settings.conf")));
 		String BaseLocation = prop.getProperty("BaseLocation");
@@ -517,6 +508,7 @@ public class BinaryTree {
 		numplans=new File(path+"planStructure").listFiles().length;
 		System.out.println("NUMPLANS ="+numplans+"\n");
 
+		tree.initialize(QTName);
 		for(int i=0;i<numplans;i++){
 			//reading the plan
 
@@ -526,8 +518,7 @@ public class BinaryTree {
 			ArrayList<Integer> visited = new ArrayList<Integer>();
 			//File file = new File("/home/srinivas/Srinivas/data/HQT83D-OC-PL-SL_EXP2/planStructure/"+numPlans+".txt");
 			//File file = new File("/home/dsladmin/Srinivas/data/writingPlans/"+"test.txt");
-			if(i==33)
-				System.out.println("For testing");
+	
 			File file = new File(path+"planStructure/"+i+".txt");
 			FileReader fr = new FileReader(file);
 			BufferedReader br = new BufferedReader(fr); 
@@ -545,7 +536,7 @@ public class BinaryTree {
 				}
 
 			}
-			BinaryTree tree;
+			
 			String[] tempStr= valueMap.get(0).split(",");
 			if(tempStr[1].contains("null"))
 				tree = new BinaryTree(new Vertex(0,-1,tempStr[0],null),null,null);
