@@ -81,7 +81,7 @@ public class CostGreedyGCI3D
 
 	static double err = 0.03;//no use
 	//Settings
-	static double threshold = 20;
+	static double threshold = 0;
 
 	int plans[];
 	double OptimalCost[];
@@ -110,7 +110,7 @@ public class CostGreedyGCI3D
 		//static ArrayList<Integer> learntDimIndices = new ArrayList<Integer>();
 	 static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	 static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
-
+	 static HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
 	 static double learning_cost = 0;
 	 static boolean done = false;
 	 
@@ -212,6 +212,8 @@ public class CostGreedyGCI3D
 	  {
 		System.out.println("Entering loop "+j);
 
+//		if(j!=totalPoints-1)
+//			continue;
 		//initialization for every loop
 		double algo_cost =0;
 		SO =0;
@@ -262,6 +264,7 @@ public class CostGreedyGCI3D
 		for(int d=0;d<obj.dimension;d++) 
 			System.out.print(obj.actual_sel[d]+",");
 		
+		obj.calculateMSOBound();
 		/*
 		 * storing the index of the actual selectivities. Using this printing the
 		 * index (an approximation) of actual selectivities and its cost
@@ -297,7 +300,30 @@ public class CostGreedyGCI3D
 
 	}
 	
-	 private void sortContourPoints(int contour_no) {
+	 private void calculateMSOBound() {
+
+		 double algo_cost = 0;
+		 double max_pb_so = Double.MIN_VALUE;
+		 double cost = OptimalCost[0];
+		 int skip =0;
+		 for(int i=1;i<=uniquePlansMap.size();i++){
+			 if(cost<(double)10000){
+					cost *= 2;
+					skip++;
+					i--;
+					continue;
+				}
+			 algo_cost += Math.pow(2,i-1)*uniquePlansMap.get(i+skip);
+			 if(i>1){
+			 double so = algo_cost/Math.pow(2,i-2);
+			 if(so > max_pb_so)
+				 max_pb_so = so;
+			 }
+		 }
+		 System.out.println("PB MSO is "+max_pb_so*(1+threshold));
+	}
+
+	private void sortContourPoints(int contour_no) {
 
 		 String funName  = "sortContourPoints";
 		 
@@ -563,6 +589,12 @@ public  void getPlanCountArray() {
 				 System.out.println("The number unique plans are "+unique_plans.size());
 				 System.out.println("The  unique plans are "+unique_plans);
 				 System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
+				 if(!uniquePlansMap.containsKey(contour_no))
+					 uniquePlansMap.put(contour_no, unique_plans.size());
+				 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
+					 uniquePlansMap.remove(contour_no);
+					 uniquePlansMap.put(contour_no, unique_plans.size());
+				 }
 				//Settings:  changed to include only the contour cost and not the point
 //				 if(p.get_cost() > last_exec_cost ){
 //					 learning_cost -= last_exec_cost;
@@ -589,6 +621,13 @@ public  void getPlanCountArray() {
 			}
 		}
 		 //assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
+		
+		if(!uniquePlansMap.containsKey(contour_no))
+			 uniquePlansMap.put(contour_no, unique_plans.size());
+		 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
+			 uniquePlansMap.remove(contour_no);
+			 uniquePlansMap.put(contour_no, unique_plans.size());
+		 }
 		
 		 System.out.println("The number of unique points are "+unique_points);
 		 System.out.println("The number of unique plans are "+unique_plans.size());
