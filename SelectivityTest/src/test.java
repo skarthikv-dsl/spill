@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -15,7 +16,7 @@ public class test {
 	static double matrix_one [][];
 	double matrix_two [][];
 	static double array1 [];
-
+	static HashMap<Integer,Integer> uniquePointsMap = new HashMap<Integer,Integer>();
     public static void main(String[] args) {
     	
     	double threshold = 20;
@@ -28,6 +29,7 @@ public class test {
     	hashStrings.add("two");
     	hashStrings.add("three");
     	
+    	System.out.println("uniquePoints Map "+uniquePointsMap);
     	System.out.println("Before: hashstring is "+hashStrings);
         test obj = new test();
         obj.test_copy_by_reference(hashStrings);
