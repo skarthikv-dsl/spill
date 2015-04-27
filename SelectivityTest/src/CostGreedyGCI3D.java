@@ -81,7 +81,7 @@ public class CostGreedyGCI3D
 
 	static double err = 0.03;//no use
 	//Settings
-	static double threshold = 20;
+	static double threshold = 0;
 
 	int plans[];
 	double OptimalCost[];
