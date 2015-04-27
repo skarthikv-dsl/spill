@@ -486,7 +486,7 @@ public class BinaryTree {
 		    relations = new String[]{"s","l","o","c","n1","n2"};
 		}
 		
-		else if(qtName.contains("HQT73DR")){
+		else if(qtName.contains("HQT84DR")){
 			predicates = new String[]{"(lineitem.l_partkey = part.p_partkey)","(supplier.s_suppkey = lineitem.l_suppkey)","(lineitem.l_orderkey = orders.o_orderkey)","(orders.o_custkey = customer.c_custkey)"};
 		    predicatesRev = new String[]{"(part.p_partkey = lineitem.l_partkey)","(lineitem.l_suppkey = supplier.s_suppkey)","(orders.o_orderkey = lineitem.l_orderkey)","(customer.c_custkey = orders.o_custkey)"};
 		    relations = new String[]{"p","s","l","o","c","n1","n2","r"};
