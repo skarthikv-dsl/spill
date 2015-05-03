@@ -75,8 +75,7 @@ public class GCI3D
 	static int EXP = 2;
 
 	static double err = 0.0;
-	static double threshold = 20;
-
+	
 	static double AllPlanCosts[][];
 	static int nPlans;
 	int plans[];
@@ -247,7 +246,7 @@ public class GCI3D
 	  {
 		System.out.println("Entering loop "+j);
 
-//		if(j==2962)
+//		if(j==320)
 //			System.out.println("Interesting");
 //		else
 //			continue;
@@ -521,7 +520,9 @@ public class GCI3D
 				oneDimCost = cost_generic(int_actual_sel);
 			remainingDim.remove(remainingDim.indexOf(remDim));
 			System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
-			assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
+			if(oneDimCost>2*cost)
+				oneDimCost = 2*cost-1;
+			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 		}
 
 
@@ -533,7 +534,7 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 	String funName = "spillBoundAlgo"; 
 	Set<Integer> unique_plans = new HashSet();
 	
-	System.out.println("\nContour number ="+contour_no);
+	System.out.println("\nContour number ="+contour_no+ " with its size being "+ContourPointsMap.get(contour_no).size());
 	
 		int i;
 
@@ -577,6 +578,7 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 			
 			assert(min_cost<=max_cost) : funName+"min cost is less than or equal to max. cost in the contour";
 			
+			
 			//Settings: for higher just see if you want to comment this
 		if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
 			currentContourPoints ++;
@@ -597,6 +599,7 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 		 * that if the cost of the contour is greater than cost(q_a) then add
 		 * atleast one point which is the max for all the remaining dimensions
 		 */
+		System.out.println("Current Contour Points is "+currentContourPoints );
 		double q_a_cost = cost_generic(convertSelectivitytoIndex(actual_sel));
 		double c_min = getOptimalCost(0);
 		//&& (Math.pow(2, contour_no-1)*c_min <= q_a_cost)
@@ -610,8 +613,13 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 					else 
 						arr[d] = findNearestPoint(actual_sel[d]);
 				}
-				if(cost_generic(arr)>Math.pow(2, contour_no)*c_min)
-					assert(false) : funName+" ERROR from the boundary point";
+				if(false){ //no use checking this. This is 
+				//if(cost_generic(arr)>Math.pow(2, contour_no)*c_min){
+					//learning_cost = 0;
+					//return; //skipping the contour;
+//					System.out.println("The cost at  the error is "+ cost_generic(arr));
+//					assert(false) : funName+" ERROR from the boundary point";
+				}
 				else {
 					point_generic p = new point_generic(arr, getPlanNumber_generic(arr), cost_generic(arr), remainingDim);
 					//ContourPointsMap.get(contour_no).add(p);
@@ -625,7 +633,7 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 
 			}
 			else
-				System.out.println(funName+" ERROR from the boundary point for q_a");
+				System.out.println(funName+" Skipping the contour");
 		}	
 		//TODO put in an assert saying that the same plan cannot be part of sel_max 
 		// of different dimensions: Ans: Done
@@ -682,11 +690,15 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 					if(executions.contains(new Pair(new Integer(d),new Integer(p.get_plan_no()))))
 						continue;
 					
-					if(sel_max[d] <= sel)
-						sel_max[d] = sel;  
+ 
 					sel = getLearntSelectivity(d,p.get_plan_no(),(Math.pow(2, contour_no-1)*getOptimalCost(0)), p);
 //					if(sel_max[d]<=sel)
-						sel_max[d] = sel;
+						if(currentContourPoints!=0)
+							sel_max[d] = sel;
+						else{
+							assert(sel_max[d]>=sel) : "When Contour Point is zero: getLearntSelectivity is higher than sel[resolution]";
+						}
+							
 					//else
 					//	System.out.println("GetLeantSelectivity: postgres selectivity is less");
 				
@@ -1616,26 +1628,26 @@ public void initialize(int location) {
 			if(resolution==100){
 				
 				if(sel_distribution == 1){
-				selectivity[0] = 0.000514; 	selectivity[1] = 0.000543; 	selectivity[2] = 0.000576; 	selectivity[3] = 0.000611; 	selectivity[4] = 0.000648;
-				selectivity[5] = 0.000689; 	selectivity[6] = 0.000733; 	selectivity[7] = 0.000781; 	selectivity[8] = 0.000833; 	selectivity[9] = 0.000890;
-				selectivity[10] = 0.000951; 	selectivity[11] = 0.001017; 	selectivity[12] = 0.001088; 	selectivity[13] = 0.001165; 	selectivity[14] = 0.001249;
-				selectivity[15] = 0.001340; 	selectivity[16] = 0.001438; 	selectivity[17] = 0.001545; 	selectivity[18] = 0.001660; 	selectivity[19] = 0.001785;
-				selectivity[20] = 0.001920; 	selectivity[21] = 0.002067; 	selectivity[22] = 0.002225; 	selectivity[23] = 0.002397; 	selectivity[24] = 0.002583;
-				selectivity[25] = 0.002784; 	selectivity[26] = 0.003003; 	selectivity[27] = 0.003239; 	selectivity[28] = 0.003495; 	selectivity[29] = 0.003772;
-				selectivity[30] = 0.004072; 	selectivity[31] = 0.004397; 	selectivity[32] = 0.004749; 	selectivity[33] = 0.005131; 	selectivity[34] = 0.005544;
-				selectivity[35] = 0.005991; 	selectivity[36] = 0.006475; 	selectivity[37] = 0.007000; 	selectivity[38] = 0.007568; 	selectivity[39] = 0.008183;
-				selectivity[40] = 0.008849; 	selectivity[41] = 0.009571; 	selectivity[42] = 0.010352; 	selectivity[43] = 0.011198; 	selectivity[44] = 0.012115;
-				selectivity[45] = 0.013108; 	selectivity[46] = 0.014183; 	selectivity[47] = 0.015347; 	selectivity[48] = 0.016608; 	selectivity[49] = 0.017973;
-				selectivity[50] = 0.019452; 	selectivity[51] = 0.021054; 	selectivity[52] = 0.022788; 	selectivity[53] = 0.024667; 	selectivity[54] = 0.026701;
-				selectivity[55] = 0.028904; 	selectivity[56] = 0.031291; 	selectivity[57] = 0.033875; 	selectivity[58] = 0.036674; 	selectivity[59] = 0.039705;
-				selectivity[60] = 0.042987; 	selectivity[61] = 0.046542; 	selectivity[62] = 0.050392; 	selectivity[63] = 0.054562; 	selectivity[64] = 0.059078;
-				selectivity[65] = 0.063968; 	selectivity[66] = 0.069265; 	selectivity[67] = 0.075001; 	selectivity[68] = 0.081213; 	selectivity[69] = 0.087940;
-				selectivity[70] = 0.095227; 	selectivity[71] = 0.103117; 	selectivity[72] = 0.111663; 	selectivity[73] = 0.120918; 	selectivity[74] = 0.130942;
-				selectivity[75] = 0.141797; 	selectivity[76] = 0.153553; 	selectivity[77] = 0.166285; 	selectivity[78] = 0.180074; 	selectivity[79] = 0.195007;
-				selectivity[80] = 0.211180; 	selectivity[81] = 0.228695; 	selectivity[82] = 0.247664; 	selectivity[83] = 0.268207; 	selectivity[84] = 0.290455;
-				selectivity[85] = 0.314550; 	selectivity[86] = 0.340645; 	selectivity[87] = 0.368905; 	selectivity[88] = 0.399512; 	selectivity[89] = 0.432658;
-				selectivity[90] = 0.468556; 	selectivity[91] = 0.507433; 	selectivity[92] = 0.549537; 	selectivity[93] = 0.595136; 	selectivity[94] = 0.644519;
-				selectivity[95] = 0.698001; 	selectivity[96] = 0.775922; 	selectivity[97] = 0.858651; 	selectivity[98] = 0.926586; 	selectivity[99] = 0.990160;
+					selectivity[0] = 0.000064; 	selectivity[1] = 0.000093; 	selectivity[2] = 0.000126; 	selectivity[3] = 0.000161; 	selectivity[4] = 0.000198;
+					selectivity[5] = 0.000239; 	selectivity[6] = 0.000284; 	selectivity[7] = 0.000332; 	selectivity[8] = 0.000384; 	selectivity[9] = 0.000440;
+					selectivity[10] = 0.000501; 	selectivity[11] = 0.000567; 	selectivity[12] = 0.000638; 	selectivity[13] = 0.000716; 	selectivity[14] = 0.000800;
+					selectivity[15] = 0.000890; 	selectivity[16] = 0.000989; 	selectivity[17] = 0.001095; 	selectivity[18] = 0.001211; 	selectivity[19] = 0.001335;
+					selectivity[20] = 0.001471; 	selectivity[21] = 0.001617; 	selectivity[22] = 0.001776; 	selectivity[23] = 0.001948; 	selectivity[24] = 0.002134;
+					selectivity[25] = 0.002335; 	selectivity[26] = 0.002554; 	selectivity[27] = 0.002790; 	selectivity[28] = 0.003046; 	selectivity[29] = 0.003323;
+					selectivity[30] = 0.003624; 	selectivity[31] = 0.003949; 	selectivity[32] = 0.004301; 	selectivity[33] = 0.004683; 	selectivity[34] = 0.005096;
+					selectivity[35] = 0.005543; 	selectivity[36] = 0.006028; 	selectivity[37] = 0.006552; 	selectivity[38] = 0.007121; 	selectivity[39] = 0.007736;
+					selectivity[40] = 0.008403; 	selectivity[41] = 0.009125; 	selectivity[42] = 0.009907; 	selectivity[43] = 0.010753; 	selectivity[44] = 0.011670;
+					selectivity[45] = 0.012663; 	selectivity[46] = 0.013739; 	selectivity[47] = 0.014904; 	selectivity[48] = 0.016165; 	selectivity[49] = 0.017531;
+					selectivity[50] = 0.019011; 	selectivity[51] = 0.020613; 	selectivity[52] = 0.022348; 	selectivity[53] = 0.024228; 	selectivity[54] = 0.026263;
+					selectivity[55] = 0.028467; 	selectivity[56] = 0.030854; 	selectivity[57] = 0.033440; 	selectivity[58] = 0.036240; 	selectivity[59] = 0.039272;
+					selectivity[60] = 0.042556; 	selectivity[61] = 0.046113; 	selectivity[62] = 0.049965; 	selectivity[63] = 0.054136; 	selectivity[64] = 0.058654;
+					selectivity[65] = 0.063547; 	selectivity[66] = 0.068845; 	selectivity[67] = 0.074584; 	selectivity[68] = 0.080799; 	selectivity[69] = 0.087530;
+					selectivity[70] = 0.094819; 	selectivity[71] = 0.102714; 	selectivity[72] = 0.111263; 	selectivity[73] = 0.120523; 	selectivity[74] = 0.130550;
+					selectivity[75] = 0.141411; 	selectivity[76] = 0.153172; 	selectivity[77] = 0.165910; 	selectivity[78] = 0.179705; 	selectivity[79] = 0.194645;
+					selectivity[80] = 0.210825; 	selectivity[81] = 0.228348; 	selectivity[82] = 0.247325; 	selectivity[83] = 0.267877; 	selectivity[84] = 0.290136;
+					selectivity[85] = 0.314241; 	selectivity[86] = 0.340348; 	selectivity[87] = 0.368621; 	selectivity[88] = 0.399241; 	selectivity[89] = 0.432403;
+					selectivity[90] = 0.468316; 	selectivity[91] = 0.507211; 	selectivity[92] = 0.549334; 	selectivity[93] = 0.594953; 	selectivity[94] = 0.644359;
+					selectivity[95] = 0.697865; 	selectivity[96] = 0.755812; 	selectivity[97] = 0.818569; 	selectivity[98] = 0.886535; 	selectivity[99] = 0.990142;
 
 				}
 				else if(sel_distribution == 0){
@@ -1928,6 +1940,34 @@ public  void getPlanCountArray() {
 			}
 		}
 
+		
+		else if (resolution == 20){
+			if(sel_distribution == 0){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 4;				locationWeightLocal[8] = 4;
+				locationWeightLocal[9] = 5;
+				locationWeightLocal[10] = 5;			locationWeightLocal[11] = 5;				locationWeightLocal[12] = 5;
+				locationWeightLocal[13] = 6;         locationWeightLocal[14] = 6;				locationWeightLocal[15] = 10;
+				locationWeightLocal[16] = 10;        locationWeightLocal[17] = 10;				locationWeightLocal[18] = 15;
+				locationWeightLocal[19] = 10;
+
+			}
+			
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 4;
+				locationWeightLocal[9] = 4;
+				locationWeightLocal[10] = 5;			locationWeightLocal[11] = 5;				locationWeightLocal[12] = 5;
+				locationWeightLocal[13] = 6;         locationWeightLocal[14] = 6;				locationWeightLocal[15] = 10;
+				locationWeightLocal[16] = 10;        locationWeightLocal[17] = 15;				locationWeightLocal[18] = 15;
+				locationWeightLocal[19] = 10;
+			}
+
+		}
+
+		
 		else if (resolution == 30){
 			if(sel_distribution == 0){
 				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
@@ -1960,6 +2000,13 @@ public  void getPlanCountArray() {
 			}
 
 		}
+		
+		else if (resolution==100){
+			for(int i=0;i<resolution;i++){
+				locationWeightLocal[i] = 1;
+			}
+		}
+		
 		for (int loc=0; loc < data.length; loc++)
 		{
 			if(OptimalCost[loc]>=(double)10000){
@@ -1990,9 +2037,11 @@ public  void getPlanCountArray() {
 		if(locationWeight[i]>=0){
 			locationWeight[i] /= totalWeight;
 			sumWeight += locationWeight[i];
-		}
 		
+		
+		System.out.println("The location weight is "+locationWeight[i]+" and total weight is "+totalWeight);
 		assert (locationWeight[i]<= (double)1) : "In getPlanCountArray: locationWeight is not less than 1";
+		}
 //		if(locationWeight[i]>(double)1){
 //			System.out.println("In getPlanCountArray: locationWeight is not less than 1");
 //			System.out.println("location weight : "+locationWeight[i]+" at i="+i+" total weight="+totalWeight);

@@ -456,15 +456,33 @@ public class BinaryTree {
 		    relations = new String[]{"cs","cd","d","i","p"};
 		} 
 		
+		else if(qtName.contains("DSQT262DR")){
+			predicates = new String[]{"(customer_demographics.cd_demo_sk = catalog_sales.cs_bill_cdemo_sk)","(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)"};
+		    predicatesRev = new String[]{"(catalog_sales.cs_bill_cdemo_sk = customer_demographics.cd_demo_sk)","(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)"};
+		    relations = new String[]{"cs","cd","d","i","p"};
+		}
+		
 		else if(qtName.contains("DSQT914DR")){
 			predicates = new String[]{"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
 		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
 		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
 		} 
 		
+		else if(qtName.contains("DSQT912DR")){
+			predicates = new String[]{"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)"};
+		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
+		} 
+		
 		else if(qtName.contains("DSQT963DR")){
 			predicates = new String[]{"(store_sales.ss_hdemo_sk = household_demographics.hd_demo_sk)","(time_dim.t_time_sk = store_sales.ss_sold_time_sk)","(store_sales.ss_store_sk = store.s_store_sk)"};
 		    predicatesRev = new String[]{"(household_demographics.hd_demo_sk = store_sales.ss_hdemo_sk)","(store_sales.ss_sold_time_sk = time_dim.t_time_sk)","(store.s_store_sk = store_sales.ss_store_sk)"};
+		    relations = new String[]{"ss","hd","t","s"};
+		} 
+		
+		else if(qtName.contains("DSQT962DR")){
+			predicates = new String[]{"(store_sales.ss_hdemo_sk = household_demographics.hd_demo_sk)","(time_dim.t_time_sk = store_sales.ss_sold_time_sk)"};
+		    predicatesRev = new String[]{"(household_demographics.hd_demo_sk = store_sales.ss_hdemo_sk)","(store_sales.ss_sold_time_sk = time_dim.t_time_sk)"};
 		    relations = new String[]{"ss","hd","t","s"};
 		} 
 		

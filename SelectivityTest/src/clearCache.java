@@ -32,8 +32,8 @@ public class clearCache {
 			
 			/*parameters to change*/
 			int option=1;
-			int resolution = 10;
-			double startpoint = 0.005;
+			int resolution = 100;
+			double startpoint = 0.00005;
 			double endpoint = 1.0;
 			/*---------------------*/
 			
@@ -108,7 +108,7 @@ public class clearCache {
 				if(i%5==0)
 					System.out.println();
 				//System.out.print("selecE100["+i+"] = "+selectivity[i]+";"+"\t");
-				System.out.format("selecE10[%d] = %.6f; \t",i, selectivity[i]);
+				System.out.format("selecE100[%d] = %.6f; \t",i, selectivity[i]);
 			}
 			System.out.println();
 	}
