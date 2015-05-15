@@ -222,7 +222,7 @@ public class CostGreedyGCI3D
 		int[] index = obj.getCoordinates(obj.dimension, obj.resolution, j);
 //		if(index[0]%5 !=0 || index[1]%5!=0)
 //			continue;
-//		obj.actual_sel[0] = 0.31;obj.actual_sel[1] = 0.0;//obj.actual_sel[2] = 0.0; /*uncomment for single execution*/
+//		obj.actual_sel[0] = 0.31;obj.actual_sel[1] = 0.3;obj.actual_sel[2] = 0.6; /*uncomment for single execution*/
 		
 		for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
 		if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000)
@@ -313,6 +313,8 @@ public class CostGreedyGCI3D
 					i--;
 					continue;
 				}
+			 else if(cost>OptimalCost[totalPoints-1])
+				 cost = OptimalCost[totalPoints-1];
 			 algo_cost += Math.pow(2,i-1)*uniquePlansMap.get(i+skip);
 			 if(i>1){
 			 double so = algo_cost/Math.pow(2,i-2);
@@ -320,7 +322,7 @@ public class CostGreedyGCI3D
 				 max_pb_so = so;
 			 }
 		 }
-		 System.out.println("PB MSO is "+max_pb_so*(1+threshold));
+		 System.out.println("PB MSO is "+max_pb_so*(1+threshold/100));
 	}
 
 	private void sortContourPoints(int contour_no) {
@@ -570,11 +572,14 @@ public  void getPlanCountArray() {
 			 */
 			boolean flag = true;
 			for(int d=0;d<dimension;d++){
-				if(p.get_dimension(d) < findNearestPoint(actual_sel[d])){
+				if(p.get_dimension(d) < findNearestPoint(actual_sel[d]) ){
 					flag = false;
 					break;
 				}
 			}
+			
+			
+			
 			for(int d=0;d<dimension;d++){
 				arr[d] = p.get_dimension(d);
 				//System.out.print(arr[d]+",");
@@ -590,12 +595,16 @@ public  void getPlanCountArray() {
 				if(cost_generic(convertSelectivitytoIndex(actual_sel)) >= 2*cost)
 					flag = false;
 			}
+			
+			if(!flag && cost_generic(convertSelectivitytoIndex(actual_sel)) < 2*cost)
+				flag = checkFPC(p.get_plan_no(),contour_no);
+			
 			if(flag){
 				done = true;
 				 System.out.println("The number unique points are "+unique_points);
 				 System.out.println("The number unique plans are "+unique_plans.size());
 				 System.out.println("The  unique plans are "+unique_plans);
-				 System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
+				 //System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
 				 if(!uniquePlansMap.containsKey(contour_no))
 					 uniquePlansMap.put(contour_no, unique_plans.size());
 				 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
@@ -644,6 +653,27 @@ public  void getPlanCountArray() {
 
 	}
 	
+
+	private boolean checkFPC(int plan_no, int contour_no) {
+		
+		int last_contour = (int)(Math.ceil(Math.log(cost_generic(convertSelectivitytoIndex(actual_sel))/OptimalCost[0])/Math.log(2)));
+		last_contour++;
+		double cost_q_a = cost_generic(convertSelectivitytoIndex(actual_sel));
+		double budget = Math.pow(2,last_contour-1)*OptimalCost[0];
+		if(budget>OptimalCost[totalPoints-1])
+			budget = OptimalCost[totalPoints-1];
+		if(last_contour==contour_no && cost_q_a!=budget){
+			if(cost_q_a<=OptimalCost[totalPoints-1])
+				assert(budget>cost_q_a):" last contour cost is less than actual selectivity cost";
+			if(fpc_cost_generic(convertSelectivitytoIndex(actual_sel), plan_no)<budget){
+				return true;
+			}
+			else
+				return false;
+		}
+		else 
+			return false;
+	}
 
 	public  void checkValidityofWeights() {
 		double areaPlans =0;

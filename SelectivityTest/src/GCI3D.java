@@ -194,6 +194,7 @@ public class GCI3D
 			}
 			//Settings
 			//writeContourPointstoFile(i);
+			//writeContourPlanstoFile(i);
 			int size_of_contour = all_contour_points.size();
 			ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
@@ -747,11 +748,13 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 	/* should this come here or at the end of the earlier for loop?
 	*  Ans: As per the theory algorithm, this should come here only since there is no pruning while executing intra contour plans
 	*/   	
-	for(int d=0;d<dimension;d++){
-		if(remainingDim.contains(d) &&  sel_max[d]!=(double)-1 && findNearestSelectivity(sel_max[d])<findNearestSelectivity(actual_sel[d]))
-			if(sel_max[d]>minIndex[d])
-				minIndex[d] = sel_max[d];
-	}
+
+//to avoid the inter contour pruning		
+//	for(int d=0;d<dimension;d++){
+//		if(remainingDim.contains(d) &&  sel_max[d]!=(double)-1 && findNearestSelectivity(sel_max[d])<findNearestSelectivity(actual_sel[d]))
+//			if(sel_max[d]>minIndex[d])
+//				minIndex[d] = sel_max[d];
+//	}
 	
 }
 private void removeDimensionFromContourPoints(int d) {
@@ -1215,6 +1218,50 @@ public void initialize(int location) {
 		
 	}
 
+	private static void writeContourPlanstoFile(int contour_no) {
+
+		try {
+	    
+//	    String content = "This is the content to write into file";
+
+			String path = "/home/dsladmin/Srinivas/data/HQT84DR20_E/";
+         File file = new File("/home/dsladmin/Srinivas/data/others/contours/"+"Contour"+contour_no+".txt"); 
+           
+     	ArrayList<Integer> plans = new ArrayList<Integer>();
+	    FileWriter writerax = new FileWriter(file, true);
+	    
+	    PrintWriter pwax = new PrintWriter(writerax);
+
+	    for(point_generic p : all_contour_points) {
+		    //        System.out.println(p.getX()+":"+p.getY()+": Plan ="+p.p_no);
+	    	
+	    	if(!plans.contains(new Integer(p.get_plan_no()))){
+	    		plans.add(new Integer(p.get_plan_no()));
+	    		File filer = new File(path+"planStructure/"+p.get_plan_no()+".txt");	
+	    		FileReader fr = new FileReader(filer);
+	    		BufferedReader br = new BufferedReader(fr); 
+	    		String s;
+    			pwax.print("Plan number is "+p.get_plan_no()+"\n");
+	    		while(((s=br.readLine())!=null)){
+	    			pwax.print(s);
+	    			pwax.print("\n");
+	    		}
+	    		pwax.print("\n\n\n");
+	    	}
+	    	//	   	pwaz.print((int)p.get_dimension(2)+ "\t");
+
+	    }
+	    pwax.close();
+
+	    //	    pwaz.close();
+	    writerax.close();
+	    //	    writeraz.close();
+
+		} catch (IOException e) {
+	    e.printStackTrace();
+	}
+		
+	}
 
 	private static void getAllPermuations(ArrayList<Integer> DimOrder,int k) {
 
