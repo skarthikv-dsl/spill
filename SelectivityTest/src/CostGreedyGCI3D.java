@@ -111,6 +111,7 @@ public class CostGreedyGCI3D
 	 static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	 static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
 	 static HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
+	 static HashMap<Integer,Double> minContourCostMap = new HashMap<Integer,Double>();
 	 static double learning_cost = 0;
 	 static boolean done = false;
 	 
@@ -183,7 +184,7 @@ public class CostGreedyGCI3D
 				System.out.println("Entering the order"+order);
 				learntDim.clear();
 				learntDimIndices.clear();
-				obj.getContourPoints(order,cost);
+				obj.getContourPoints(order,cost,i);
 			}
 			writeContourPointstoFile(i);
 			int size_of_contour = all_contour_points.size();
@@ -193,7 +194,7 @@ public class CostGreedyGCI3D
 				i = i+1;
 		}
 	
-
+		System.out.println("The minimum cost contour map is "+minContourCostMap);
 		/*
 		 * running the plan bouquet algorithm 
 		 */
@@ -225,13 +226,13 @@ public class CostGreedyGCI3D
 //		obj.actual_sel[0] = 0.31;obj.actual_sel[1] = 0.3;obj.actual_sel[2] = 0.6; /*uncomment for single execution*/
 		
 		for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
-		if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000)
+		if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000 && !apktPath.contains("SQL"))
 			continue;
 		//----------------------------------------------------------
 		i =1;
 		while(i<=ContourPointsMap.size() && !done)
 		{	
-			if(cost<(double)10000){
+			if(cost<(double)10000 && !apktPath.contains("SQL")){
 				cost *= 2;
 				i++;
 				continue;
@@ -307,7 +308,7 @@ public class CostGreedyGCI3D
 		 double cost = OptimalCost[0];
 		 int skip =0;
 		 for(int i=1;i<=uniquePlansMap.size();i++){
-			 if(cost<(double)10000){
+			 if(cost<(double)10000 && !apktPath.contains("SQL")){
 					cost *= 2;
 					skip++;
 					i--;
@@ -586,10 +587,21 @@ public  void getPlanCountArray() {
 			}
 			
 			if(!unique_plans.contains(getPlanNumber_generic(arr))){
-				learning_cost += cost;
+				
+				//if(cost_generic(convertSelectivitytoIndex(actual_sel)) < 2*cost)
+				if(true)
+					learning_cost += minContourCostMap.get(contour_no);
+				else 
+					learning_cost += cost;
+				
 				//Settings: learning_cost += p.get_cost();  changed to include only the contour cost and not the point
 				unique_plans.add(getPlanNumber_generic(arr));
-				last_exec_cost = cost;
+				//last_exec_cost = cost;
+//				if(cost_generic(convertSelectivitytoIndex(actual_sel)) < 2*cost)
+				if(true)
+					last_exec_cost = minContourCostMap.get(contour_no);
+				else 
+					last_exec_cost = cost;
 			}
 			if(flag == true){
 				if(cost_generic(convertSelectivitytoIndex(actual_sel)) >= 2*cost)
@@ -620,7 +632,13 @@ public  void getPlanCountArray() {
 				 int [] int_actual_sel = new int[dimension];
 				 for(int d=0;d<dimension;d++)
 					 int_actual_sel[d] = findNearestPoint(actual_sel[d]);
-				 double oneDimCost = cost;
+				 double oneDimCost=0;
+//				 if(cost_generic(convertSelectivitytoIndex(actual_sel)) < 2*cost)
+				 if(true)
+						oneDimCost += minContourCostMap.get(contour_no);
+					else 
+						oneDimCost += cost;
+				 
 				 if(fpc_cost_generic(int_actual_sel, p.get_plan_no())<oneDimCost)
 					 oneDimCost = fpc_cost_generic(int_actual_sel, p.get_plan_no());
 				 if(cost_generic(int_actual_sel)> oneDimCost)
@@ -632,7 +650,12 @@ public  void getPlanCountArray() {
 					}
 				System.out.println();
 				//assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
-				assert (learning_cost <= (unique_plans.size()+1)*cost*1.01) : funName+" : learning cost exceeding its cap";
+//				if(cost_generic(convertSelectivitytoIndex(actual_sel)) < 2*cost)
+				if(true)
+					assert (learning_cost <= (unique_plans.size()+1)*minContourCostMap.get(contour_no)*1.01) : funName+" : learning cost exceeding its cap";
+				else 
+					assert (learning_cost <= (unique_plans.size()+1)*cost*1.01) : funName+" : learning cost exceeding its cap";
+				
 				return;
 			}
 		}
@@ -649,7 +672,11 @@ public  void getPlanCountArray() {
 		 System.out.println("The number of unique plans are "+unique_plans.size());
 		 System.out.println("The  unique plans are "+unique_plans);
 		 System.out.println("Contour No. is "+contour_no+" : Max cost is "+max_cost+" and min cost is "+min_cost+" with learning cost "+learning_cost);
-		 assert (learning_cost <= (unique_plans.size())*cost*1.01) : funName+" : learning cost exceeding its cap";
+//		 if(cost_generic(convertSelectivitytoIndex(actual_sel)) < 2*cost)
+		 if(true)
+				assert (learning_cost <= (unique_plans.size()+1)*minContourCostMap.get(contour_no)*1.01) : funName+" : learning cost exceeding its cap";
+			else 
+				assert (learning_cost <= (unique_plans.size()+1)*cost*1.01) : funName+" : learning cost exceeding its cap";
 
 	}
 	
@@ -847,7 +874,7 @@ public void initialize(int location) {
 	
 
 
-	void getContourPoints(ArrayList<Integer> order,double cost) throws IOException
+	void getContourPoints(ArrayList<Integer> order,double cost, int contour_no) throws IOException
 	{
 		String funName = "getContourPoints";
 		//learntDim contains the dimensions already learnt (which is null initially)
@@ -904,6 +931,14 @@ public void initialize(int location) {
 							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
 						else
 							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
+						
+						if(minContourCostMap.containsKey(contour_no) && p.get_cost()<minContourCostMap.get(contour_no)){
+							minContourCostMap.remove(contour_no);
+							minContourCostMap.put(contour_no, p.get_cost());
+						}
+						else if(!minContourCostMap.containsKey(contour_no))
+							minContourCostMap.put(contour_no, p.get_cost());
+						
 						all_contour_points.add(p);
 						
 					}
@@ -921,7 +956,16 @@ public void initialize(int location) {
 								p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
 							else
 								p = new point_generic(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
+							
+							if(minContourCostMap.containsKey(contour_no) && p.get_cost()<minContourCostMap.get(contour_no)){
+								minContourCostMap.remove(contour_no);
+								minContourCostMap.put(contour_no, p.get_cost());
+							}
+							else if(!minContourCostMap.containsKey(contour_no))
+								minContourCostMap.put(contour_no, p.get_cost());
+							
 							all_contour_points.add(p);
+							
 						}
 					}
 					
@@ -939,7 +983,7 @@ public void initialize(int location) {
 		{
 			learntDim.add(curDim);
 			learntDimIndices.put(curDim,cur_index);
-			getContourPoints(order,cost);
+			getContourPoints(order,cost,contour_no);
 			learntDim.remove(learntDim.indexOf(curDim));
 			learntDimIndices.remove(curDim);
 			cur_index = cur_index - 1;

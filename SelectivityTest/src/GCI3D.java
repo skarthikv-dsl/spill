@@ -114,7 +114,7 @@ public class GCI3D
 	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
 	static ArrayList<Pair<Integer>> executions = new ArrayList<Pair<Integer>>();  
-	
+	static HashMap<Index,Double> sel_for_point = new HashMap<Index,Double>();
 	static double learning_cost = 0;
 	static double oneDimCost = 0;
 	static int no_executions = 0;
@@ -750,11 +750,11 @@ private void spillBoundAlgo(int contour_no) throws IOException {
 	*/   	
 
 //to avoid the inter contour pruning		
-//	for(int d=0;d<dimension;d++){
-//		if(remainingDim.contains(d) &&  sel_max[d]!=(double)-1 && findNearestSelectivity(sel_max[d])<findNearestSelectivity(actual_sel[d]))
-//			if(sel_max[d]>minIndex[d])
-//				minIndex[d] = sel_max[d];
-//	}
+	for(int d=0;d<dimension;d++){
+		if(remainingDim.contains(d) &&  sel_max[d]!=(double)-1 && findNearestSelectivity(sel_max[d])<findNearestSelectivity(actual_sel[d]))
+			if(sel_max[d]>minIndex[d])
+				minIndex[d] = sel_max[d];
+	}
 	
 }
 private void removeDimensionFromContourPoints(int d) {
@@ -1003,6 +1003,8 @@ public double getLearntSelectivity(int dim, int plan, double cost,point_generic 
     	assert(dim<=dimension) : funName+" dim data structure more dimensions possible";
     	assert(selLearnt<=(double)1):funName+"selectivity learnt is greater than 1!";
     	System.out.println("Postgres: selectivity learnt  "+selLearnt+" with plan number "+plan);
+    	if(!sel_for_point.containsKey(new Index(p,cost)))
+    		sel_for_point.put(new Index(p,cost), selLearnt);
     	return selLearnt; //has to have single line in the file
 
 }
@@ -2188,6 +2190,7 @@ class point_generic
 		
 		order =  new ArrayList<Integer>();
 		storedOrder = new ArrayList<Integer>();
+		try{
 		FileReader file = new FileReader(plansPath+num+".txt");
 	    
 	    BufferedReader br = new BufferedReader(file);
@@ -2200,6 +2203,14 @@ class point_generic
 	    }
 	    br.close();
 	    file.close();
+		}
+		catch(FileNotFoundException e){
+			if(plansPath.contains("SQL")){
+				for(int i=0;i<dimension;i++){
+					storedOrder.add(i);
+				}
+			}
+		}
 		
 		
 	}
@@ -2322,3 +2333,37 @@ final class Pair<T> {
 	      return 7 * left.hashCode() + 13 * right.hashCode();
 	   } 
 	}
+
+class Index {
+
+   point_generic  p;
+   Double cost;
+
+    public Index(point_generic  p, Double y) {
+        this.p = p;
+        this.cost = cost;
+    }
+
+//    @Override
+//    public int hashCode() {
+//        return this.p ^ this.cost;
+//    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        Index other = (Index) obj;
+        for(int i=0;i<p.dim_values.length;i++){
+        	if(p.get_dimension(i) != other.p.get_dimension(i))
+        		return false;
+        }
+        if (Double.valueOf(cost) != Double.valueOf(other.cost))
+            return false;
+        return true;
+    }
+}
