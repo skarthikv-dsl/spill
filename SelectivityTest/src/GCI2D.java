@@ -1667,7 +1667,7 @@ public class GCI2D
 	         stmt = c.createStatement();
 	         
 	         
-	 		BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
+	 		BinaryTreeLohit tree = new BinaryTreeLohit(new Vertex(0,-1,null,null),null,null);
 	 		int spill_values [] = tree.getSpillNode(dim,plan); //[0] gives node id of the tree and [1] gives the spill_node for postgres
 	 		int spill_node = spill_values[1];
 	        stmt.execute("set spill_node = "+ spill_node);
@@ -1749,7 +1749,7 @@ public class GCI2D
 	         stmt = c.createStatement();
 	         
 	         
-	 		BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
+	 		BinaryTreeLohit tree = new BinaryTreeLohit(new Vertex(0,-1,null,null),null,null);
 	 		int spill_values [] = tree.getSpillNode(dim,plan); //[0] gives node id of the tree and [1] gives the spill_node for postgres
 	 		int spill_node = spill_values[1];
 	        stmt.execute("set spill_node = "+ spill_node);

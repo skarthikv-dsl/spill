@@ -23,7 +23,7 @@ public class test {
     	double cost =455; 
     	
     	double lt = cost * (1 + threshold / 100);
-    	
+    	double[] mem_alloc = new double[100000000];
     	Set<String> hashStrings = new HashSet<String>();
     	hashStrings.add("one");
     	hashStrings.add("two");

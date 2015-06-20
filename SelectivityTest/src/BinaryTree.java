@@ -1,5 +1,6 @@
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -102,6 +103,7 @@ public class BinaryTree {
 	//   	static String[] relations = {"s","l","o","c","n1","n2"};
 	//   	static String[] relations = {"c","o","l","n"};
 	//static String[] relations = {"ss","hd","t","s"};
+	static String[] rareRelationsNames ={"n1","n2","cd1","cd2"};
 	static int numplans;
 	public static HashMap<String, Integer> relationMap =  new HashMap<String, Integer>();
 	public static boolean FROM_CLAUSE;
@@ -197,20 +199,27 @@ public class BinaryTree {
 	public void getRelationNames(HashSet<String> hashStrings){
 		if (root!=null && root.getPredicate()!=null){
 			System.out.println(root.getPredicate() + " ");
-			String relStr1 = null,relStr2 = null;
+			String relStr1 = null,relStr2 = null,relStr3 = null,relStr4 = null;
 			if(root.getPredicate().indexOf('.')>=2)
 				relStr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')-2, root.getPredicate().indexOf('.'));
+			if(root.getPredicate().indexOf('.')>=3)
+				relStr3 = root.getPredicate().substring(root.getPredicate().indexOf('.')-3, root.getPredicate().indexOf('.'));
 			String substr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')+1, root.getPredicate().indexOf('_',root.getPredicate().indexOf('.')));
 			String substreq = root.getPredicate().substring(root.getPredicate().indexOf('=')); //this is to choose the second occurence after '='
 			String substr2 = substreq.substring(substreq.indexOf('.')+1, substreq.indexOf('_',substreq.indexOf('.')));
 			if(substreq.indexOf('.')>=2)
 				relStr2 = substreq.substring(substreq.indexOf('.')-2, substreq.indexOf('.'));
-
+			if(substreq.indexOf('.')>=3)
+				relStr4 = substreq.substring(substreq.indexOf('.')-3, substreq.indexOf('.'));
 			for(int rel =0;rel<relations.length;rel++){
-				if(relations[rel].equals(relStr1))
+				if(relations[rel].equals(relStr1) && relStr1.matches("[0-9]$"))
 					hashStrings.add(relStr1);
-				if(relations[rel].equals(relStr2))
+				if(relations[rel].equals(relStr2) && relStr2.matches("[0-9]$"))
 					hashStrings.add(relStr2);
+				if(relations[rel].equals(relStr3) && relStr3.matches("[0-9]$"))
+					hashStrings.add(relStr3);
+				if(relations[rel].equals(relStr4) && relStr4.matches("[0-9]$"))
+					hashStrings.add(relStr4);
 				if(relations[rel].equals(substr1))
 					hashStrings.add(substr1);
 				if(relations[rel].equals(substr2))
@@ -468,6 +477,18 @@ public class BinaryTree {
 		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
 		} 
 		
+		else if(qtName.contains("DSQT916DR")){
+			predicates = new String[]{"(catalog_returns.cr_call_center_sk = call_center.cc_call_center_sk)","(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer.c_customer_sk = catalog_returns.cr_returning_customer_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
+		    predicatesRev = new String[]{"(call_center.cc_call_center_sk = catalog_returns.cr_call_center_sk)","(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(catalog_returns.cr_returning_customer_sk = customer.c_customer_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
+		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
+		} 
+		
+		else if(qtName.contains("DSQT186DR")){
+			predicates = new String[]{"(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)","(item.i_item_sk = catalog_sales.cs_item_sk)","(cd1.cd_demo_sk = catalog_sales.cs_bill_cdemo_sk)","(catalog_sales.cs_bill_customer_sk = customer.c_customer_sk)","(cd2.cd_demo_sk = customer.c_current_cdemo_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)"};
+		    predicatesRev = new String[]{"(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)","(catalog_sales.cs_item_sk = item.i_item_sk)","(catalog_sales.cs_bill_cdemo_sk = cd1.cd_demo_sk)","(customer.c_customer_sk = catalog_sales.cs_bill_customer_sk)","(customer.c_current_cdemo_sk = cd2.cd_demo_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
+		    relations = new String[]{"cs","d","i","cd1","c","cd2","ca"};
+		} 
+
 		else if(qtName.contains("DSQT912DR")){
 			predicates = new String[]{"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
 		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)"};
@@ -491,6 +512,7 @@ public class BinaryTree {
 		    predicatesRev = new String[]{"(customer.c_custkey = orders.o_custkey)","(orders.o_orderkey = lineitem.l_orderkey)","(lineitem.l_suppkey = supplier.s_suppkey)"};
 		    relations = new String[]{"c","o","l","s","n","r"};
 		}
+		
 		
 		else if(qtName.contains("HQT73DR")){
 			predicates = new String[]{"(supplier.s_suppkey = lineitem.l_suppkey)","(lineitem.l_orderkey = orders.o_orderkey)","(orders.o_custkey = customer.c_custkey)"};
@@ -519,7 +541,20 @@ public class BinaryTree {
 
 		BinaryTree tree = new BinaryTree();
 		Properties prop = new Properties();
-		prop.load(new FileInputStream(new File("/home/dsladmin/Srinivas/data/settings/settings.conf")));
+		
+		File f_iisc = new File("/home/dsladmin/Srinivas/data/settings/settings.conf");
+		File f_ibm = new File("/home/ijcai/spillBound/data/settings/settings.conf");
+		if(f_iisc.exists()){
+			//Load the properties file.
+			prop.load(new FileInputStream(f_iisc));
+		}
+		else if(f_ibm.exists()){
+			prop.load(new FileInputStream(f_ibm));
+		}
+		else{
+			System.out.println("Properties file not found");
+			System.exit(0);
+		}
 		String BaseLocation = prop.getProperty("BaseLocation");
 		String QTName = prop.getProperty("QTName");
 		path = BaseLocation+QTName+"/";

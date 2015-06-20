@@ -81,7 +81,7 @@ public class CostGreedyGCI3D
 
 	static double err = 0.03;//no use
 	//Settings
-	static double threshold = 0;
+	static double threshold = 20;
 
 	int plans[];
 	double OptimalCost[];
@@ -1250,6 +1250,23 @@ public void initialize(int location) {
 					selectivity[28] = 0.9000;	selectivity[29] = 0.9950;
 				}
 				
+				else
+					assert (false) :funName+ "ERROR: should not come here";
+			}
+			if (resolution ==40){
+				if(sel_distribution==1){
+					
+					selectivity[0] = 0.00005;   selectivity[1] = 0.00006;		selectivity[2] = 0.00008;	selectivity[3] = 0.00009;
+					selectivity[4] = 0.0001;   selectivity[5] = 0.0002;		selectivity[6] = 0.0003;	selectivity[7] = 0.0005;
+					selectivity[8] = 0.0006;	selectivity[9] = 0.0007;	selectivity[10] = 0.0008;	selectivity[11] = 0.0009;
+					selectivity[12] = 0.001;	selectivity[13] = 0.002;	selectivity[14] = 0.003;	selectivity[15] = 0.004;
+					selectivity[16] = 0.005;	selectivity[17] = 0.006;	selectivity[18] = 0.007;	selectivity[19] = 0.008;
+					selectivity[20] = 0.009;   selectivity[21] = 0.01;		selectivity[22] = 0.02;	selectivity[23] = 0.03;
+					selectivity[24] = 0.04;   selectivity[25] = 0.05;		selectivity[26] = 0.06;	selectivity[27] = 0.07;
+					selectivity[28] = 0.08;	selectivity[29] = 0.09;	selectivity[30] = 0.1;	selectivity[31] = 0.2;
+					selectivity[32] = 0.3;	selectivity[33] = 0.4;	selectivity[34] = 0.5;	selectivity[35] = 0.6;
+					selectivity[36] = 0.7;	selectivity[37] = 0.8;	selectivity[38] = 0.9;	selectivity[39] = 0.99;
+				}
 				else
 					assert (false) :funName+ "ERROR: should not come here";
 			}
