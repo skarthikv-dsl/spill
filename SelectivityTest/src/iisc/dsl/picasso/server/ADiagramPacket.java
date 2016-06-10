@@ -54,6 +54,8 @@ public class ADiagramPacket implements Serializable {
         //The total number of plans in the plan diagram
         int                         maxPlans;
         
+        int maxReducedPlans = -1;
+        
         //The maximum and minimum costs and cardinalities of the points in the plan diagram
         double                         maxCost;
         double                         maxCard;
@@ -134,10 +136,14 @@ public class ADiagramPacket implements Serializable {
         this.predsel=copyfarray(p.predsel);
         if(p.datasel!=null)
                 this.datasel=copyfarray(p.datasel);
-        this.constants=copysarray(p.constants);
-        this.attributes=copysarray(p.attributes);
-        this.attrTypes = copysarray(p.attrTypes);
-        this.relationNames=copysarray(p.relationNames);
+        if(p.constants!=null)
+        	this.constants=copysarray(p.constants);
+        if(p.attributes!=null)
+        	this.attributes=copysarray(p.attributes);
+        if(p.attrTypes!=null)
+        	this.attrTypes = copysarray(p.attrTypes);
+        if(p.relationNames!=null)
+        	this.relationNames=copysarray(p.relationNames);
         this.dataPoints=copydata(p.dataPoints);
         this.queryPacket = new QueryPacket(p.queryPacket);
         this.approxDiagram = p.approxDiagram;
@@ -418,6 +424,10 @@ i+=resolution[PicassoConstants.a[1]])
                 maxPlans = num;
         }
         
+        public void setMaxReducedPlanNumber(int num) {
+            maxReducedPlans = num;
+        }
+        
         public void setMaxCost(double num) {
                 maxCost = num;
         }
@@ -465,6 +475,11 @@ i+=resolution[PicassoConstants.a[1]])
         public int getMaxPlanNumber() {
                 return(maxPlans);
         }
+        
+        public int getMaxReductionPlanNumber(){
+        	return (maxReducedPlans);
+        }
+        
         public int getMaxResolution()
         {
                 if(resolution == null)

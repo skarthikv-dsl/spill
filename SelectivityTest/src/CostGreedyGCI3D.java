@@ -135,13 +135,14 @@ public class CostGreedyGCI3D
 		
 		
 //		cg.run(threshold, gdp,apktPath);
-		ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
+//		ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
 
 		//Settings
 		//Populate the OptimalCost Matrix.
-		//obj.readpkt(gdp);
-		obj.readpkt(reducedgdp);
+		obj.readpkt(gdp);
+//		obj.readpkt(reducedgdp);
 
+		//obj.replaceUnWantedPlans();
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 		
@@ -200,7 +201,7 @@ public class CostGreedyGCI3D
 		 */
 		double MSO =0, ASO = 0,SO=0,anshASO = 0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
 		int ASO_points=0;
-		
+		int min_point =0;
 		obj.getPlanCountArray();
 		//int max_point = 0; /*to not execute the spillBound algorithm*/
 		int max_point = 1; /*to execute a specific q_a */
@@ -209,11 +210,14 @@ public class CostGreedyGCI3D
 		//if(false)
 			max_point = totalPoints;
 		double[] subOpt = new double[max_point];
-	  for (int  j = 0; j < max_point ; j++)
+		
+    	
+		
+	  for (int  j = min_point; j < max_point ; j++)
 	  {
 		System.out.println("Entering loop "+j);
 
-//		if(j!=totalPoints-1)
+//		if(j<5007)
 //			continue;
 		//initialization for every loop
 		double algo_cost =0;
@@ -279,7 +283,7 @@ public class CostGreedyGCI3D
 		SO = (algo_cost/obj.cost_generic(index_actual_sel));
 		SO = SO * (1 + threshold/100);		
 		subOpt[j] = SO;
-		Harm = obj.maxHarmCalculation(j, SO);
+//		Harm = obj.maxHarmCalculation(j, SO);
 		if(Harm > MaxHarm)
 			MaxHarm = Harm;
 		ASO += SO;
@@ -301,7 +305,50 @@ public class CostGreedyGCI3D
 
 	}
 	
-	 private void calculateMSOBound() {
+	 private void replaceUnWantedPlans() {
+
+		ArrayList<Integer> unWantedPlans = new ArrayList<Integer>();
+		ArrayList<Integer> badLocations = new ArrayList<Integer>();
+		unWantedPlans.add(0);
+		unWantedPlans.add(3);
+		unWantedPlans.add(8);
+		unWantedPlans.add(11);
+		unWantedPlans.add(12);
+		double worstRatio = Double.MIN_VALUE;
+		int worstLoc=-1,worstBestOtherPlan = -1;
+		int count=0;
+		for(int loc=0; loc < totalPoints; loc++)
+		{
+			int bestPlan = getPCSTOptimalPlan(loc);
+			if(unWantedPlans.contains(bestPlan)){
+				int otherBestPlan = getPCSTBestOtherPlan(bestPlan, loc);
+				double a = AllPlanCosts[otherBestPlan][loc]/getOptimalCost(loc);
+				if(worstRatio<a){
+					worstRatio = a;
+					worstBestOtherPlan = otherBestPlan;
+					worstLoc = loc;
+				}
+				if(a>(double)1.1)
+					badLocations.add(loc);
+				if(true){
+					boolean flag = true;
+					int int_array[] = new int[dimension];
+					int_array = getCoordinates(dimension, resolution, loc);
+					for(int i=0;i<dimension;i++)
+						if(int_array[i]==0)
+							flag = false;
+					//if(flag)
+						count++;
+				}
+			}
+					
+		}
+		
+		System.out.println("The worst ratio is "+worstRatio+" with loc "+worstLoc+" and best other plan "+worstBestOtherPlan+" best plan "+ getPCSTOptimalPlan(worstLoc));
+		
+	}
+
+	private void calculateMSOBound() {
 
 		 double algo_cost = 0;
 		 double max_pb_so = Double.MIN_VALUE;
@@ -412,6 +459,23 @@ public  void getPlanCountArray() {
 
 		double locationWeightLocal[] = new double[resln];
 
+		if(resolution==9 ){
+			if(sel_distribution==0){
+				//for tpch
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 3;
+				locationWeightLocal[3] = 5;         locationWeightLocal[4] = 10;				locationWeightLocal[5] = 15;
+				locationWeightLocal[6] = 15;        locationWeightLocal[7] = 20;				locationWeightLocal[8] = 30;
+				
+			}
+
+			//for tpcds
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 3;
+				locationWeightLocal[3] = 5;         locationWeightLocal[4] = 10;				locationWeightLocal[5] = 15;
+				locationWeightLocal[6] = 15;        locationWeightLocal[7] = 20;				locationWeightLocal[8] = 30;
+				
+			}
+		}
 		if(resolution==10 ){
 			if(sel_distribution==0){
 				//for tpch
@@ -611,6 +675,10 @@ public  void getPlanCountArray() {
 			if(!flag && cost_generic(convertSelectivitytoIndex(actual_sel)) < 2*cost)
 				flag = checkFPC(p.get_plan_no(),contour_no);
 			
+			//Major change in code: please check once before running
+//			if(cost_generic(convertSelectivitytoIndex(actual_sel)) > cost && getOptimalCost(totalPoints-1)>=cost_generic(convertSelectivitytoIndex(actual_sel)) )
+//				flag = false;
+//			
 			if(flag){
 				done = true;
 				 System.out.println("The number unique points are "+unique_points);
@@ -1183,6 +1251,25 @@ public void initialize(int location) {
 			System.out.println(funName+" Resolution = "+resolution);
 			double sel;
 			this.selectivity = new double [resolution];
+			if(resolution == 9){
+				if(sel_distribution == 0){
+					
+					//This is for TPCH queries 
+					selectivity[0] = 0.0006;	selectivity[1] = 0.003;selectivity[2] = 0.0084;	selectivity[3] = 0.02;
+					selectivity[4] = 0.04;		selectivity[5] = 0.82;	selectivity[6] = 0.17;	selectivity[7] = 0.33;
+					selectivity[8] = 0.66;		                              // oct - 2012
+				}
+				else if( sel_distribution ==1){
+					
+					//This is for TPCDS queries
+					selectivity[0] = 0.0006;	selectivity[1] = 0.003;selectivity[2] = 0.0084;	selectivity[3] = 0.02;
+					selectivity[4] = 0.04;		selectivity[5] = 0.82;	selectivity[6] = 0.17;	selectivity[7] = 0.33;
+					selectivity[8] = 0.66;	                         // dec - 2012
+				}
+				else
+					assert (false) : "should not come here";
+
+			}
 			
 			if(resolution == 10){
 				if(sel_distribution == 0){
@@ -1328,7 +1415,7 @@ public void initialize(int location) {
 		}
 	
 	
-	private ADiagramPacket getGDP(File file) {
+	public ADiagramPacket getGDP(File file) {
 		ADiagramPacket gdp = null;
 		FileInputStream fis;
 		try {
@@ -1532,7 +1619,7 @@ public void initialize(int location) {
 			double c1= data[i].getCost(); //optimal cost at i
 			double c2 = AllPlanCosts[p][i]; //plan p's cost at i from pcst files
 			//if(! (Math.abs(c1 - c2) < 0.05*c1 || Math.abs(c1 - c2) < 0.05*c2) ){
-			if((c2-c1) > 0.05*c1){
+			if((c2-c1) > 1*c1){
 				int [] ind = getCoordinates(dimension, resolution, i);
 				//System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d,%3d): , pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, ind[0], ind[1],ind[2],c1, c2, (double)Math.abs(c1 - c2)*100/c1);
 				fpc_count++;
@@ -1572,6 +1659,11 @@ public void initialize(int location) {
 	public void findingNativeMSO(){
 
 		int [] newOptimalPlan = new int[totalPoints];
+		int [] count = new int[6];
+		long  [] avg_cost = new long [6];
+		long  [] avg_sub_opt = new long [6];
+		int low_cost_count = 0;
+		int condition[] = {10, 100,1000, 10000, 100000};
 		for(int loc=0; loc < totalPoints; loc++) {
 			newOptimalPlan[loc] = getPCSTOptimalPlan(loc);
 		}
@@ -1580,6 +1672,7 @@ public void initialize(int location) {
 		for(int loc=0; loc < totalPoints; loc++) {
 	
 			worstPlan[loc] = getPCSTWorstPlan(loc);
+//;			worstPlan[loc] = 13;
 		}
 		//calculate really optimal plan at each location in the space -- because FPC costs may be different from the optimal costs
 		
@@ -1599,11 +1692,56 @@ public void initialize(int location) {
 				MSO = a;
 				location = loc;
 			}
+			
+			//if(loc==13625)
+			//	System.out.println(" The suboptimality at this interseting location is"+a);
+			// to get the histogram of suboptimalities
+			/*
+			if(getOptimalCost(loc)<(double)10000)
+				low_cost_count++;
+			else if(a >=1 && a<condition[0]){
+				count[0]++;
+				avg_cost[0] = avg_cost[0] + (long)getOptimalCost(loc);
+				avg_sub_opt[0] = avg_sub_opt[0] + (long) a;
+			}
+			else if(a >=condition[0] && a<condition[1]){
+				count[1]++;
+				avg_cost[1] = avg_cost[1]+ (long) getOptimalCost(loc);
+				avg_sub_opt[1] = avg_sub_opt[1] + (long) a;
+			}
+			else if(a >=condition[1] && a<condition[2]){
+				count[2]++;
+				avg_cost[2] = avg_cost[2] + (long)getOptimalCost(loc);
+				avg_sub_opt[2] = avg_sub_opt[2] + (long)a;
+			}
+			else if(a >=condition[2] && a<condition[3]){
+				count[3]++;
+				avg_cost[3] = avg_cost[3] + (long)getOptimalCost(loc);
+				avg_sub_opt[3] = avg_sub_opt[3] + (long)a;
+			}
+			else if(a >=condition[3] && a<condition[4]){
+				count[4]++;
+				avg_cost[4] = avg_cost[4] + (long)getOptimalCost(loc);
+				avg_sub_opt[4] = avg_sub_opt[4] + (long)a;
+			}
+			else{
+				count[5]++;
+				avg_cost[5] = avg_cost[5] + (long)getOptimalCost(loc);
+				avg_sub_opt[5] = avg_sub_opt[5] + (long)a;
+			}
+			*/
 		}
 		System.out.println("\n Sumit MSO = "+MSO);
 		System.out.println("\n loc:"+location+"\n Worst Value="+AllPlanCosts[worstPlan[location]][location]);
 		System.out.println("\nOptimal_cost :"+AllPlanCosts[newOptimalPlan[location]][location]+"\n");
-
+//		System.out.println("\nHistogram of suboptimality distribution :\n");
+//		System.out.println("\nLow Cost Count is :\t"+low_cost_count);
+//		for(int i=0;i<6;i++){
+//			System.out.print("\n"+count[i]);
+//			System.out.print("\tAvg Cost is :\t"+avg_cost[i]/count[i]);
+//			System.out.print("\tAvg SubOpt is :\t"+avg_sub_opt[i]/count[i]);
+//		}
+		
 	}
   
 	/*
@@ -1617,6 +1755,19 @@ public void initialize(int location) {
 		int opt = -1;
 		for(int p=0; p<nPlans; p++){
 			if(bestCost > AllPlanCosts[p][loc]) {
+				bestCost = AllPlanCosts[p][loc];
+				opt = p;
+			}
+		}
+		return opt;
+	}
+	
+	private int getPCSTBestOtherPlan(int plan,int loc) {
+		
+		double bestCost = Double.MAX_VALUE;
+		int opt = -1;
+		for(int p=0; p<nPlans; p++){
+			if(bestCost > AllPlanCosts[p][loc] && p!=plan) {
 				bestCost = AllPlanCosts[p][loc];
 				opt = p;
 			}

@@ -92,6 +92,7 @@ public class BinaryTree {
 	static String predicatesRev [];
 	static String path;
 	static String relations [];
+	static String benchmark;
 	
 	//Note that rules for predicates is (predicate1<space>=<space>predicate2)
 	//static String[] predicates = {"(store_sales.ss_hdemo_sk = household_demographics.hd_demo_sk)","(time_dim.t_time_sk = store_sales.ss_sold_time_sk)","(store_sales.ss_store_sk = store.s_store_sk)"};
@@ -196,34 +197,124 @@ public class BinaryTree {
 	}
 
 	//this method is similar to traverseOrder which visits every node in the subtree
+	public void getRelationNames(HashSet<String> hashStrings,String benchmark){
+		if (root!=null && root.getPredicate()!=null){
+			System.out.println(root.getPredicate() + " ");
+
+			String relStr1 = null,relStr2 = null,relStr3 = null,relStr4 = null;
+
+			if(benchmark.equals("job")){
+				
+				String substr1 = root.getPredicate().trim().substring(0, root.getPredicate().indexOf('.')).trim();
+				String substreq = root.getPredicate().trim().substring(root.getPredicate().indexOf('=')).trim(); //this is to choose the second occurence after '='
+				String substr2 = substreq.substring(0, substreq.indexOf('.')).trim();
+				
+				for(int rel =0;rel<relations.length;rel++){
+					if(relations[rel].equals(substr1))
+						hashStrings.add(substr1);
+					if(relations[rel].equals(substr2))
+						hashStrings.add(substr2);
+				}
+			}
+			else{
+
+
+				if(root.getPredicate().trim().indexOf('.')>=2){
+					relStr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')-2, root.getPredicate().indexOf('.'));
+					relStr1 = relStr1.trim();
+				}
+				if(root.getPredicate().trim().indexOf('.')>=3){
+					relStr3 = root.getPredicate().substring(root.getPredicate().indexOf('.')-3, root.getPredicate().indexOf('.'));
+					relStr3 = relStr3.trim();
+				}
+				String substr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')+1, root.getPredicate().indexOf('_',root.getPredicate().indexOf('.')));
+				String substreq = root.getPredicate().substring(root.getPredicate().indexOf('=')); //this is to choose the second occurence after '='
+				String substr2 = substreq.substring(substreq.indexOf('.')+1, substreq.indexOf('_',substreq.indexOf('.')));
+				if(substreq.trim().indexOf('.')>=2){
+					relStr2 = substreq.substring(substreq.indexOf('.')-2, substreq.indexOf('.'));
+					relStr2 = relStr2.trim();
+				}
+				if(substreq.trim().indexOf('.')>=3){
+					relStr4 = substreq.substring(substreq.indexOf('.')-3, substreq.indexOf('.'));
+					relStr4 = relStr4.trim();
+				}
+				for(int rel =0;rel<relations.length;rel++){
+					if(relations[rel].equals(relStr1) && Character.isDigit(relStr1.charAt(relStr1.length()-1)))
+						hashStrings.add(relStr1);
+					if(relations[rel].equals(relStr2) && Character.isDigit(relStr2.charAt(relStr2.length()-1)))
+						hashStrings.add(relStr2);
+					if(relations[rel].equals(relStr3) && Character.isDigit(relStr3.charAt(relStr3.length()-1)))
+						hashStrings.add(relStr3);
+					if(relations[rel].equals(relStr4) && Character.isDigit(relStr4.charAt(relStr4.length()-1)))
+						hashStrings.add(relStr4);
+					if(relations[rel].equals(substr1))
+						hashStrings.add(substr1);
+					if(relations[rel].equals(substr2))
+						hashStrings.add(substr2);
+				}
+			}
+		}
+		if (left_child!=null)
+			left_child.getRelationNames(hashStrings, benchmark);
+		if (right_child!=null)
+			right_child.getRelationNames(hashStrings,  benchmark);
+	}
+
 	public void getRelationNames(HashSet<String> hashStrings){
 		if (root!=null && root.getPredicate()!=null){
 			System.out.println(root.getPredicate() + " ");
+
 			String relStr1 = null,relStr2 = null,relStr3 = null,relStr4 = null;
-			if(root.getPredicate().indexOf('.')>=2)
-				relStr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')-2, root.getPredicate().indexOf('.'));
-			if(root.getPredicate().indexOf('.')>=3)
-				relStr3 = root.getPredicate().substring(root.getPredicate().indexOf('.')-3, root.getPredicate().indexOf('.'));
-			String substr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')+1, root.getPredicate().indexOf('_',root.getPredicate().indexOf('.')));
-			String substreq = root.getPredicate().substring(root.getPredicate().indexOf('=')); //this is to choose the second occurence after '='
-			String substr2 = substreq.substring(substreq.indexOf('.')+1, substreq.indexOf('_',substreq.indexOf('.')));
-			if(substreq.indexOf('.')>=2)
-				relStr2 = substreq.substring(substreq.indexOf('.')-2, substreq.indexOf('.'));
-			if(substreq.indexOf('.')>=3)
-				relStr4 = substreq.substring(substreq.indexOf('.')-3, substreq.indexOf('.'));
-			for(int rel =0;rel<relations.length;rel++){
-				if(relations[rel].equals(relStr1) && relStr1.matches("[0-9]$"))
-					hashStrings.add(relStr1);
-				if(relations[rel].equals(relStr2) && relStr2.matches("[0-9]$"))
-					hashStrings.add(relStr2);
-				if(relations[rel].equals(relStr3) && relStr3.matches("[0-9]$"))
-					hashStrings.add(relStr3);
-				if(relations[rel].equals(relStr4) && relStr4.matches("[0-9]$"))
-					hashStrings.add(relStr4);
-				if(relations[rel].equals(substr1))
-					hashStrings.add(substr1);
-				if(relations[rel].equals(substr2))
-					hashStrings.add(substr2);
+
+			if(benchmark.equals("job")){
+				
+				String substr1 = root.getPredicate().trim().substring(0, root.getPredicate().indexOf('.')).trim();
+				String substreq = root.getPredicate().trim().substring(root.getPredicate().indexOf('=')).trim(); //this is to choose the second occurence after '='
+				String substr2 = substreq.substring(0, substreq.indexOf('.')).trim();
+				
+				for(int rel =0;rel<relations.length;rel++){
+					if(relations[rel].equals(substr1))
+						hashStrings.add(substr1);
+					if(relations[rel].equals(substr2))
+						hashStrings.add(substr2);
+				}
+			}
+			else{
+
+
+				if(root.getPredicate().trim().indexOf('.')>=2){
+					relStr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')-2, root.getPredicate().indexOf('.'));
+					relStr1 = relStr1.trim();
+				}
+				if(root.getPredicate().trim().indexOf('.')>=3){
+					relStr3 = root.getPredicate().substring(root.getPredicate().indexOf('.')-3, root.getPredicate().indexOf('.'));
+					relStr3 = relStr3.trim();
+				}
+				String substr1 = root.getPredicate().substring(root.getPredicate().indexOf('.')+1, root.getPredicate().indexOf('_',root.getPredicate().indexOf('.')));
+				String substreq = root.getPredicate().substring(root.getPredicate().indexOf('=')); //this is to choose the second occurence after '='
+				String substr2 = substreq.substring(substreq.indexOf('.')+1, substreq.indexOf('_',substreq.indexOf('.')));
+				if(substreq.trim().indexOf('.')>=2){
+					relStr2 = substreq.substring(substreq.indexOf('.')-2, substreq.indexOf('.'));
+					relStr2 = relStr2.trim();
+				}
+				if(substreq.trim().indexOf('.')>=3){
+					relStr4 = substreq.substring(substreq.indexOf('.')-3, substreq.indexOf('.'));
+					relStr4 = relStr4.trim();
+				}
+				for(int rel =0;rel<relations.length;rel++){
+					if(relations[rel].equals(relStr1) && Character.isDigit(relStr1.charAt(relStr1.length()-1)))
+						hashStrings.add(relStr1);
+					if(relations[rel].equals(relStr2) && Character.isDigit(relStr2.charAt(relStr2.length()-1)))
+						hashStrings.add(relStr2);
+					if(relations[rel].equals(relStr3) && Character.isDigit(relStr3.charAt(relStr3.length()-1)))
+						hashStrings.add(relStr3);
+					if(relations[rel].equals(relStr4) && Character.isDigit(relStr4.charAt(relStr4.length()-1)))
+						hashStrings.add(relStr4);
+					if(relations[rel].equals(substr1))
+						hashStrings.add(substr1);
+					if(relations[rel].equals(substr2))
+						hashStrings.add(substr2);
+				}
 			}
 		}
 		if (left_child!=null)
@@ -231,7 +322,7 @@ public class BinaryTree {
 		if (right_child!=null)
 			right_child.getRelationNames(hashStrings);
 	}
-
+ 
 	public BinaryTree getVertexById(int id){
 		if (this.root!=null && this.root.getId()==id){
 			//System.out.print(root.getId() + " ");
@@ -337,7 +428,7 @@ public class BinaryTree {
 		}
 		return false;
 	}
-	public int[] getSpillNode(int dimension, int planno) throws NumberFormatException, IOException{
+	public int[] getSpillNode(int dimension, int planno, String benchmark) throws NumberFormatException, IOException{
 
 		//predicateMap static variable needs to be empty
 		predicateMap.clear();
@@ -419,7 +510,7 @@ public class BinaryTree {
 				BinaryTree t_spill = getVertexById(spill_id);
 				//check what all relations
 				HashSet<String> hashStrings = new HashSet<String>();
-				t_spill.getRelationNames(hashStrings);
+				t_spill.getRelationNames(hashStrings, benchmark);
 				for(int i=0;i<relations.length;i++){
 					if(!FROM_CLAUSE)
 						relationMap.put(relations[i], new Integer(i+1));
@@ -471,9 +562,21 @@ public class BinaryTree {
 		    relations = new String[]{"cs","cd","d","i","p"};
 		}
 		
+		else if(qtName.contains("DSQT913DR")){
+			predicates = new String[]{"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
+		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
+		} 
+		
 		else if(qtName.contains("DSQT914DR")){
 			predicates = new String[]{"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
 		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
+		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
+		} 
+		
+		else if(qtName.contains("DSQT915DR")){
+			predicates = new String[]{"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer.c_customer_sk = catalog_returns.cr_returning_customer_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(catalog_returns.cr_returning_customer_sk = customer.c_customer_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
 		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
 		} 
 		
@@ -488,7 +591,37 @@ public class BinaryTree {
 		    predicatesRev = new String[]{"(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)","(catalog_sales.cs_item_sk = item.i_item_sk)","(catalog_sales.cs_bill_cdemo_sk = cd1.cd_demo_sk)","(customer.c_customer_sk = catalog_sales.cs_bill_customer_sk)","(customer.c_current_cdemo_sk = cd2.cd_demo_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
 		    relations = new String[]{"cs","d","i","cd1","c","cd2","ca"};
 		} 
-
+		
+		else if (qtName.contains("DSQT295DR")){
+			predicates = new String[]{"(d1.d_date_sk = store_sales.ss_sold_date_sk)","(d2.d_date_sk = store_returns.sr_returned_date_sk)","(d3.d_date_sk = catalog_sales.cs_sold_date_sk)","(store_sales.ss_store_sk = store.s_store_sk)","(store_sales.ss_item_sk = item.i_item_sk)"};
+		    predicatesRev = new String[]{"(store_sales.ss_sold_date_sk = d1.d_date_sk)","(store_returns.sr_returned_date_sk = d2.d_date_sk)","(catalog_sales.cs_sold_date_sk = d3.d_date_sk)","(store.s_store_sk = store_sales.ss_store_sk)","(item.i_item_sk = store_sales.ss_item_sk)"};
+		    relations = new String[]{"d1","d2","d3","ss","sr","cs","s","i"};
+		}
+		
+		else if (qtName.contains("DSQT624DR")){
+			predicates = new String[]{"(web_sales.ws_warehouse_sk = warehouse.w_warehouse_sk)","(web_sales.ws_ship_mode_sk = ship_mode.sm_ship_mode_sk)","(web_site.web_site_sk = web_sales.ws_web_site_sk)","(date_dim.d_date_sk = web_sales.ws_ship_date_sk)"};
+		    predicatesRev = new String[]{"(warehouse.w_warehouse_sk = web_sales.ws_warehouse_sk)","(ship_mode.sm_ship_mode_sk = web_sales.ws_ship_mode_sk)","(web_sales.ws_web_site_sk = web_site.web_site_sk)","(web_sales.ws_ship_date_sk = date_dim.d_date_sk)"};
+		    relations = new String[]{"ws","w","sm","web","d"};
+		}
+		
+		else if (qtName.contains("DSQT994DR")){
+			predicates = new String[]{"(catalog_sales.cs_warehouse_sk = warehouse.w_warehouse_sk)","(catalog_sales.cs_ship_mode_sk = ship_mode.sm_ship_mode_sk)","(call_center.cc_call_center_sk = catalog_sales.cs_call_center_sk)","(date_dim.d_date_sk = catalog_sales.cs_ship_date_sk)"};
+		    predicatesRev = new String[]{"(warehouse.w_warehouse_sk = catalog_sales.cs_warehouse_sk)","(ship_mode.sm_ship_mode_sk = catalog_sales.cs_ship_mode_sk)","(catalog_sales.cs_call_center_sk = call_center.cc_call_center_sk)","(catalog_sales.cs_ship_date_sk = date_dim.d_date_sk)"};
+		    relations = new String[]{"cs","w","sm","cc","d"};
+		}
+		
+		else if (qtName.contains("DSQT274DR")){
+			predicates = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)","(item.i_item_sk = store_sales.ss_item_sk)","(store_sales.ss_store_sk = store.s_store_sk)","(customer_demographics.cd_demo_sk = store_sales.ss_cdemo_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = store_sales.ss_sold_date_sk)","(store_sales.ss_item_sk = item.i_item_sk)","(store.s_store_sk = store_sales.ss_store_sk)","(store_sales.ss_cdemo_sk = customer_demographics.cd_demo_sk)"};
+		    relations = new String[]{"ss","d","i","s","cd"};
+		}
+		
+		else if (qtName.contains("DSQT845DR")){
+			predicates = new String[]{"(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)","(household_demographics.hd_income_band_sk = income_band.ib_income_band_sk)","(store_returns.sr_cdemo_sk = customer_demographics.cd_demo_sk)"};
+		    predicatesRev = new String[]{"(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)","(income_band.ib_income_band_sk = household_demographics.hd_income_band_sk)","(customer_demographics.cd_demo_sk = store_returns.sr_cdemo_sk)"};
+		    relations = new String[]{"c","ca","cd","hd","ib","sr"};
+		}
+		
 		else if(qtName.contains("DSQT912DR")){
 			predicates = new String[]{"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
 		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)"};
@@ -531,7 +664,11 @@ public class BinaryTree {
 		    predicatesRev = new String[]{"(part.p_partkey = lineitem.l_partkey)","(lineitem.l_suppkey = supplier.s_suppkey)","(orders.o_orderkey = lineitem.l_orderkey)","(customer.c_custkey = orders.o_custkey)"};
 		    relations = new String[]{"p","s","l","o","c","n1","n2","r"};
 		}
-		
+		else if(qtName.contains("JQT14DR")){
+			predicates = new String[]{"(movie_companies.company_type_id = company_type.id)","(title.id = movie_companies.movie_id)","(title.id = movie_info_idx.movie_id)","(movie_info_idx.info_type_id = info_type.id)"};
+		    predicatesRev = new String[]{"(company_type.id = movie_companies.company_type_id)","(movie_companies.movie_id = title.id)","(movie_info_idx.movie_id = title.id)","(info_type.id = movie_info_idx.info_type_id)"};
+		    relations = new String[]{"company_type","info_type","movie_companies","movie_info_idx","title"};
+		}
 		else{
 			assert(false) : "Initialize (Binary Tree)" +" :missing template";
 		}
@@ -555,6 +692,7 @@ public class BinaryTree {
 			System.out.println("Properties file not found");
 			System.exit(0);
 		}
+		benchmark = prop.getProperty("Benchmark");
 		String BaseLocation = prop.getProperty("BaseLocation");
 		String QTName = prop.getProperty("QTName");
 		path = BaseLocation+QTName+"/";

@@ -23,7 +23,7 @@ public class tpcdsDBCreation {
 			try {
 				Class.forName("org.postgresql.Driver");
 				c = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5431/tpch",
+						.getConnection("jdbc:postgresql://localhost:5432/job",
 								"sa", "database");
 				System.out.println("Opened database successfully");
 				stmt = c.createStatement();

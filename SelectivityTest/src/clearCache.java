@@ -114,6 +114,8 @@ public class clearCache {
 	}
 	void run(){
 	boolean success = false;
+//String start = "/home/dsladmin/Srinivas/AnshPG/bin/pg_ctl -D /home/dsladmin/Srinivas/AnshPG/tpch/ -w start";
+	//String stop = "/home/dsladmin/Srinivas/AnshPG/bin/pg_ctl -D /home/dsladmin/Srinivas/AnshPG/tpch/ -w stop";
 	String stop1 = "netstat -tulpn   > /home/dsladmin/Srinivas/data/others/processKill";
 	String stop2 = "kill -9 ";//| grep '5431' | rev |cut -d' ' -f3 | rev | cut -d'/' -f1 | head -n1
 	//String stop = "/home/dsladmin/Srinivas/AnshPG/bin/pg_ctl -D /home/dsladmin/Srinivas/AnshPG/tpch/ -w stop";

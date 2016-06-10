@@ -39,6 +39,8 @@ public class PicassoConstants {
 
 	public static boolean isSAVE = true;
 	public static String SAVE_PATH = "E:\\SQLServerSetup\\data\\";
+	public static String SAVE_PATH_CLIENT = "E:\\SQLServerSetup\\data\\";
+	public static boolean isFPCSAVEXMLPLANS = false;
 	
 	public static char newDistribution = 'E';
 	
@@ -110,6 +112,7 @@ public class PicassoConstants {
 
 	// Skew for the exponential distribution
 	public static double QDIST_SKEW_10 = 2.0;
+	public static double QDIST_SKEW_20 = 1.67;
 	public static double QDIST_SKEW_30 = 1.33;
 	public static double QDIST_SKEW_100 = 1.083;
 	public static double QDIST_SKEW_300 = 1.027;

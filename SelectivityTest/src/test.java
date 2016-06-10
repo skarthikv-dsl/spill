@@ -19,6 +19,16 @@ public class test {
 	static HashMap<Integer,Integer> uniquePointsMap = new HashMap<Integer,Integer>();
     public static void main(String[] args) {
     	
+    	double[] temp_1 = new double[10000000];
+    	int firstArg=0;
+    	if (args.length > 0) {
+    	    try {
+    	        firstArg = Integer.parseInt(args[0]);
+    	    } catch (NumberFormatException e) {
+    	        System.err.println("Argument" + args[0] + " must be an integer.");
+    	        System.exit(1);
+    	    }
+    	}
     	double threshold = 20;
     	double cost =455; 
     	
@@ -38,7 +48,7 @@ public class test {
         System.out.println("\n x is "+x+"\n");
         // ****************************************************************
         double r=1.0;
-		int resolution = 30;
+		int resolution = 100;
 		selectivity = new double[resolution];
 		double startpoint = 0.0, endpoint = 1.0;
 		
@@ -82,7 +92,7 @@ public class test {
 		{
 			selectivity[i-1] = startpoint + sum;
 		//	constants[i-1] = getConstant(selectivity[i-1]);
-			//System.out.println("Sel="+df.format(100*selectivity[i-1])+"\tConstant="+constants[i-1]);
+			System.out.println("Sel="+(100*selectivity[i-1]));
 			curval*=r;
 			if(i!=popu)
 			sum+=(curval * (endpoint - startpoint));

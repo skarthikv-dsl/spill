@@ -74,17 +74,17 @@ public class GCI3D
 	static int UNI = 1;
 	static int EXP = 2;
 
-	static double err = 0.0;
+	double err = 0.0;
 
-	static double AllPlanCosts[][];
-	static int nPlans;
+	double AllPlanCosts[][];
+	int nPlans;
 	int plans[];
 	double OptimalCost[];
 	int totalPlans;
 	int dimension;
-	static int resolution;
+	int resolution;
 	DataValues[] data;
-	static int totalPoints;
+	int totalPoints;
 	double selectivity[];
 
 
@@ -109,10 +109,10 @@ public class GCI3D
 
 	static ArrayList<Integer> remainingDim;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
-	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
+	ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
 	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
-	static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
+	HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
 	static ArrayList<Pair<Integer>> executions = new ArrayList<Pair<Integer>>();  
 	static HashMap<Index,ArrayList<Double>> sel_for_point = new HashMap<Index,ArrayList<Double>>();
 	static double learning_cost = 0;
@@ -159,8 +159,10 @@ public class GCI3D
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 		obj.loadPropertiesFile();
+		obj.checkGradientAssumption();
+		
 		int i;
-		double h_cost = obj.getOptimalCost(totalPoints-1);
+		double h_cost = obj.getOptimalCost(obj.totalPoints-1);
 		double min_cost = obj.getOptimalCost(0);
 		double ratio = h_cost/min_cost;
 		assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
@@ -186,7 +188,7 @@ public class GCI3D
 				cost = h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
 			System.out.println("Contour "+i+" cost : "+cost+"\n");
-			all_contour_points.clear();
+			obj.all_contour_points.clear();
 			for(ArrayList<Integer> order:allPermutations){
 				System.out.println("Entering the order"+order);
 				learntDim.clear();
@@ -196,8 +198,8 @@ public class GCI3D
 			//Settings
 			//writeContourPointstoFile(i);
 			//writeContourPlanstoFile(i);
-			int size_of_contour = all_contour_points.size();
-			ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
+			int size_of_contour = obj.all_contour_points.size();
+			obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
 			cost = cost*2;
 			i = i+1;
@@ -241,7 +243,7 @@ public class GCI3D
 		int max_point = 1; /*to execute a specific q_a */
 		//Settings
 		if(MSOCalculation)
-			max_point = totalPoints;
+			max_point = obj.totalPoints;
 		double[] subOpt = new double[max_point];
 		for (int  j = 0; j < max_point ; j++)
 		{
@@ -268,7 +270,7 @@ public class GCI3D
 			//----------------------------------------------------------
 			i =1;
 			executions.clear();
-			while(i<=ContourPointsMap.size() && !obj.remainingDim.isEmpty())
+			while(i<=obj.ContourPointsMap.size() && !obj.remainingDim.isEmpty())
 			{	
 
 				if(cost<(double)10000){
@@ -379,6 +381,30 @@ public class GCI3D
 		return factorial;
 	}
 
+	
+	public void checkGradientAssumption() {
+
+		int violation_count =0;
+		int [] coordinates = new int[dimension];
+		for(int i=0;i<totalPoints;i++){
+			coordinates = getCoordinates(dimension, resolution, i);
+			int loc = getIndex(coordinates, resolution);
+			for(int j=0;j<dimension;j++){
+				if(coordinates[j]<dimension-1){
+					coordinates[j]++;
+					int loc_new = getIndex(coordinates, resolution);
+					double costr = (double)(OptimalCost[loc_new]/OptimalCost[loc]);
+					double selr = (double)(selectivity[coordinates[j]]/selectivity[coordinates[j]-1]);
+					System.out.println("The cost at new location is "+OptimalCost[loc_new]+" with sel= "+selectivity[coordinates[j]]+" and cost at old location "+OptimalCost[loc]+" with sel = "+selectivity[coordinates[j]-1]);
+					if(costr  > selr)
+						violation_count++;
+					coordinates[j]--;
+				}
+			}
+		}
+		System.out.println("the violation count is "+violation_count);
+	}
+	
 	public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
 
 		File file = new File(path+"spillBound_"+"suboptimality"+".txt");
@@ -815,7 +841,7 @@ public class GCI3D
         //Settings: constants in BinaryTree   
                 BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
                 tree.FROM_CLAUSE = FROM_CLAUSE;
-                int spill_values [] = tree.getSpillNode(dim,plan); //[0] gives node id of the tree and [1] gives the spill_node for postgres
+                int spill_values [] = tree.getSpillNode(dim,plan,"tpcds"); //[0] gives node id of the tree and [1] gives the spill_node for postgres
                 int spill_node = spill_values[1];
                 System.out.println("The spill node value in the tree is "+spill_node);
                 
@@ -1481,7 +1507,7 @@ public class GCI3D
 
 	}
 
-	private static void writeContourPointstoFile(int contour_no) {
+	private void writeContourPointstoFile(int contour_no) {
 
 		try {
 
@@ -1530,7 +1556,7 @@ public class GCI3D
 
 	}
 
-	private static void writeContourPlanstoFile(int contour_no) {
+	private void writeContourPlanstoFile(int contour_no) {
 
 		try {
 
