@@ -64,10 +64,11 @@ public class JavaSwing extends JPanel {
 	GCI3D obj;
     public static final Color RED = new Color(255,0,0);
     public static final Color YELLOW = new Color(255,255,0);
+    public static final Color BLUE = new Color(0,255,0);
     
     public static final HashMap<Integer, Integer> missedPredicates = new HashMap<Integer, Integer>();
     static {
-        missedPredicates.put(1, 20);
+        //missedPredicates.put(1, 10);
         //missedPredicates.put(2, 40);
     }
 
@@ -75,10 +76,11 @@ public class JavaSwing extends JPanel {
     public static final HashMap<Integer, Color> Colors = new HashMap<Integer, Color>();
     static {    
     	Colors.put(0, RED);
-        Colors.put(2, YELLOW);
+        Colors.put(1, YELLOW);
+        Colors.put(2, BLUE);
     }
 
-    public static final int PREFERRED_GRID_SIZE_PIXELS = 2;
+    public static final int PREFERRED_GRID_SIZE_PIXELS = 1;
     private Color[][] spillDiagram;
 
     public JavaSwing() throws IOException{
@@ -90,7 +92,7 @@ public class JavaSwing extends JPanel {
         
         int preferredWidth = obj.resolution * PREFERRED_GRID_SIZE_PIXELS;
         int preferredHeight = obj.resolution * PREFERRED_GRID_SIZE_PIXELS;
-
+        this.spillDiagram[0][0] = Colors.get(2);
         setPreferredSize(new Dimension(preferredWidth, preferredHeight));
     }
 
