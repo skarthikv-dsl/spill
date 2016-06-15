@@ -52,6 +52,7 @@ import iisc.dsl.picasso.server.ADiagramPacket;
 import javax.swing.*;
 
 import java.awt.*;
+import java.awt.geom.AffineTransform;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -64,12 +65,12 @@ public class JavaSwing extends JPanel {
 	GCI3D obj;
     public static final Color RED = new Color(255,0,0);
     public static final Color YELLOW = new Color(255,255,0);
-    public static final Color BLUE = new Color(0,255,0);
+    public static final Color BLUE = new Color(0,0,255);
     
     public static final HashMap<Integer, Integer> missedPredicates = new HashMap<Integer, Integer>();
     static {
         //missedPredicates.put(1, 10);
-        //missedPredicates.put(2, 40);
+        missedPredicates.put(2, 10);
     }
 
     
@@ -129,8 +130,10 @@ public class JavaSwing extends JPanel {
     				while((s = br.readLine()) != null) {
     					//System.out.println(Integer.parseInt(s));
     					int value = Integer.parseInt(s);
-    					if(!missedPredicates.containsKey(value))
+    					if(!missedPredicates.containsKey(value)){
     						this.spillDiagram[X][Y] = Colors.get(value);
+    						break;
+    					}
     				}
     				br.close();
     				file.close();
@@ -165,7 +168,13 @@ public class JavaSwing extends JPanel {
         // Important to call super class method
         super.paintComponent(g);
         // Clear the board
+        
         g.clearRect(0, 0, getWidth(), getHeight());
+        Graphics2D g2d = (Graphics2D) g;
+        g2d.translate(0, getHeight());
+        g2d.scale(1.0, -1.0);
+
+        g2d.drawLine(20, 20, 300, 200);
         // Draw the grid
         int rectWidth = getWidth() / obj.resolution;
         int rectHeight = getHeight() / obj.resolution;
@@ -176,8 +185,8 @@ public class JavaSwing extends JPanel {
                 int x = i * rectWidth;
                 int y = j * rectHeight;
                 Color terrainColor = spillDiagram[i][j];
-                g.setColor(terrainColor);
-                g.fillRect(x, y, rectWidth, rectHeight);
+                g2d.setColor(terrainColor);
+                g2d.fillRect(x, y, rectWidth, rectHeight);
             }
         }
     }

@@ -63,7 +63,16 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
-import com.ibm.db2.jcc.b.ac;
+//import com.ibm.db2.jcc.b.ac;
+
+
+
+
+
+
+
+
+
 
 import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
@@ -79,6 +88,7 @@ public class GCI3D
 	double AllPlanCosts[][];
 	int nPlans;
 	int plans[];
+	boolean isContourPoint[];
 	double OptimalCost[];
 	int totalPlans;
 	int dimension;
@@ -182,6 +192,7 @@ public class GCI3D
 		getAllPermuations(remainingDim,0);
 		assert (allPermutations.size() == obj.factorial(obj.dimension)) : "all the permutations are not generated";
 
+		obj.isContourPoint = new boolean[obj.totalPoints];
 		while(cost < 2*h_cost)
 		{
 			if(cost>h_cost)
@@ -189,20 +200,29 @@ public class GCI3D
 			System.out.println("---------------------------------------------------------------------------------------------\n");
 			System.out.println("Contour "+i+" cost : "+cost+"\n");
 			obj.all_contour_points.clear();
-			for(ArrayList<Integer> order:allPermutations){
-				System.out.println("Entering the order"+order);
-				learntDim.clear();
-				learntDimIndices.clear();
-				obj.getContourPoints(order,cost);
-			}
+			obj.nexusAlgoContour(cost);
+			
+//			for(ArrayList<Integer> order:allPermutations){
+//				System.out.println("Entering the order"+order);
+//				learntDim.clear();
+//				learntDimIndices.clear();
+//				obj.getContourPoints(order,cost);
+//			}
 
 			int size_of_contour = obj.all_contour_points.size();
 			obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
+			System.out.println("Its point are");
+			for(point_generic pg : obj.all_contour_points){
+				pg.printPoint();
+			}
 			cost = cost*2;
 			i = i+1;
 		}
 
+		//checking alignment threshold
+		obj.checkAlignmentPenalty();
+		
 		/*
 		 * Setting up the DB connection to Postgres/TPCH/TPCDS Benchmark. 
 		 */
@@ -366,6 +386,99 @@ public class GCI3D
 		System.out.println("The total time taken is (in mins) "+(endTime-startTime)/(1000*60));
 	}
 
+	private void checkAlignmentPenalty() throws NumberFormatException, IOException {
+		
+		HashMap<Integer,ArrayList<Integer>> spillDimensionPlanMap = new HashMap<Integer,ArrayList<Integer>>();
+		
+		buildSpillDimensionMap(spillDimensionPlanMap);
+	
+		double max_penality = Double.MIN_VALUE;
+		//find the extreme locations for each dimensions
+		for(int c=1; c<=ContourPointsMap.size(); c++){
+
+			//get the extreme locations for each dimension in points_max for each contour
+			HashMap<Integer,point_generic> points_max = new HashMap<Integer,point_generic>();
+
+			for(int l=0; l <ContourPointsMap.get(c).size(); l++){
+				point_generic p = ContourPointsMap.get(c).get(l);
+				for(int d=0; d<dimension; d++){
+					if(!points_max.containsKey(d))
+						points_max.put(d, p);
+					else{
+						if(points_max.get(d).dim_values[d] < p.dim_values[d]){
+							points_max.remove(new Integer(d));
+							points_max.put(d, p);
+						}
+					}
+				}
+			}
+
+			//calculate the penalty for aligning each dimension
+			double penalty[] = new double[dimension];
+			for(int d=0; d<dimension; d++){
+				double original_cost = OptimalCost[getIndex(points_max.get(d).dim_values, resolution)];
+				double min_fpc_cost = Double.MAX_VALUE;
+				int min_fpc_plan = -1;
+				for(int planno=0; spillDimensionPlanMap.containsKey(d) && planno<spillDimensionPlanMap.get(d).size(); planno++ ){
+					if(AllPlanCosts[spillDimensionPlanMap.get(d).get(planno)][getIndex(points_max.get(d).dim_values, resolution)] < min_fpc_cost){
+						min_fpc_cost = AllPlanCosts[spillDimensionPlanMap.get(d).get(planno)][getIndex(points_max.get(d).dim_values, resolution)];
+						min_fpc_plan = spillDimensionPlanMap.get(d).get(planno);
+					}
+				}
+				System.out.print("\nThe dimension is "+d+" at (max) point ");
+				for(int dim=0; dim<dimension; dim++)
+					System.out.print("\t"+points_max.get(d).dim_values[dim]);
+				System.out.println(" with optimal cost "+original_cost+" while forcing plan "+min_fpc_plan+" having forced cost "+min_fpc_cost+" with penalty "+min_fpc_cost/original_cost);
+				penalty[d] = min_fpc_cost/original_cost;
+			}
+			
+			
+			//update the max penalty of min penalty among these dimension
+			double min_penalty = Double.MAX_VALUE;
+			for(int d=0; d<dimension; d++)
+				if(penalty[d] < min_penalty)
+					min_penalty = penalty[d];
+			
+			if(min_penalty > max_penality)
+				max_penality = min_penalty;
+		}
+		
+		System.out.println("The max penalty is "+max_penality);
+	}
+
+	private void buildSpillDimensionMap(HashMap<Integer,ArrayList<Integer>> spillDimensionPlanMap) throws NumberFormatException, IOException {
+
+		for(int p=0;p<totalPlans;p++){
+			try{
+				String plansPath = apktPath+"predicateOrder/";
+				FileReader file = new FileReader(plansPath+p+".txt");
+
+				BufferedReader br = new BufferedReader(file);
+				String s;
+				while((s = br.readLine()) != null) {
+					//System.out.println(Integer.parseInt(s));
+					int value = Integer.parseInt(s);
+					if(spillDimensionPlanMap.containsKey(value)){
+						spillDimensionPlanMap.get(value).add(p);
+					}
+					else{
+						ArrayList<Integer> al = new ArrayList<Integer>();
+						al.add(p);
+						spillDimensionPlanMap.put(value, al);
+					}	
+					break;
+				}
+				br.close();
+				file.close();
+			}
+			catch(FileNotFoundException e){
+				e.printStackTrace();
+			}	
+		}
+
+	}
+
+
 	private int factorial(int num) {
 
 		int factorial = 1;
@@ -389,7 +502,7 @@ public class GCI3D
 					int loc_new = getIndex(coordinates, resolution);
 					double costr = (double)(OptimalCost[loc_new]/OptimalCost[loc]);
 					double selr = (double)(selectivity[coordinates[j]]/selectivity[coordinates[j]-1]);
-					System.out.println("The cost at new location is "+OptimalCost[loc_new]+" with sel= "+selectivity[coordinates[j]]+" and cost at old location "+OptimalCost[loc]+" with sel = "+selectivity[coordinates[j]-1]);
+					//System.out.println("The cost at new location is "+OptimalCost[loc_new]+" with sel= "+selectivity[coordinates[j]]+" and cost at old location "+OptimalCost[loc]+" with sel = "+selectivity[coordinates[j]-1]);
 					if(costr  > selr)
 						violation_count++;
 					coordinates[j]--;
@@ -574,6 +687,7 @@ public class GCI3D
 						else
 							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
 						all_contour_points.add(p);
+						isContourPoint[getIndex(arr, resolution)] = true;
 
 					}
 				}
@@ -591,6 +705,7 @@ public class GCI3D
 							else
 								p = new point_generic(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
 							all_contour_points.add(p);
+							isContourPoint[getIndex(arr, resolution)] = true;
 						}
 					}
 
@@ -1117,7 +1232,235 @@ if (resolution ==40){
 		return opt;
 	}
 
+	public  void nexusAlgoContour(double searchCost) throws IOException 
+	{
+		int seed = 0;
+	
+		seed = findSeedLocation(searchCost);
+		
+		exploreSeed(seed, searchCost, dimension-1, dimension-2);
+	}
 
+	public int findSeedLocation(double seedCost) throws IOException  
+	{
+		point_generic leftInfo, rightInfo, midInfo;
+		int leftcorner = 0;
+		int[] left = createCorner(leftcorner);
+
+		int rightcorner = 1;
+		int[] right = createCorner(rightcorner);
+
+		/*
+		 * The following If condition checks whether any earlier point in all_contour_points 
+		 * had the same plan. If so, no need to open the .../predicateOrder/plan.txt again
+		 */
+
+		leftInfo = new point_generic(left,getPlanNumber_generic(left),cost_generic(left), remainingDim);
+		double leftCost = leftInfo.get_cost();
+		
+		rightInfo = new point_generic(right,getPlanNumber_generic(right),cost_generic(right), remainingDim);
+		double rightCost = rightInfo.get_cost(); 
+		
+		int d=dimension-1;
+				
+		while(rightCost < seedCost && d>0)  
+		{
+			copyLoc(left, right);
+			leftCost = rightCost;
+			right[--d] = resolution-1;
+			rightInfo = new point_generic(right,getPlanNumber_generic(right),cost_generic(right), remainingDim);
+			rightCost = rightInfo.get_cost(); 
+		}
+	
+		//now search between left and right using binary search
+		int mid[] = new int[dimension];
+		double midCost = -1;
+		while(leftCost < rightCost)
+		{
+			for(d=0; d<dimension; d++)
+				mid[d] = (left[d]+right[d])/2;
+	
+			if(sameLoc(mid,left)) 
+			{
+				break;
+			}
+			else
+			{
+				midInfo = new point_generic(mid,getPlanNumber_generic(mid),cost_generic(mid), remainingDim);
+				midCost = midInfo.get_cost();
+	
+				if(midCost >= seedCost) 
+				{
+					copyLoc(right, mid);
+					rightInfo = midInfo;
+					rightCost = midCost;
+				}
+				else 
+				{
+					copyLoc(left, mid);
+					leftInfo = midInfo;
+					leftCost = midCost;
+				}
+			}
+		}
+	
+		System.out.println("\n Found seed location with cost " + seedCost + " as "
+							+ getIndex(right, resolution) + " with cost = " + rightCost);
+		if(!pointAlreadyExist(rightInfo.dim_values))	
+			all_contour_points.add(rightInfo);
+		
+		isContourPoint[getIndex(rightInfo.dim_values, resolution)] = true;		
+
+		return getIndex(right, resolution);
+	}
+	
+	
+	public void exploreSeed(int cur_seed, double search_cost, int focus_dim, int swap_dim) throws IOException{
+		int[] seed_coords;
+		int[] candidate1_coords;
+		int[] candidate2_coords;
+
+		while(cur_seed >= 0 && focus_dim > 0) 
+		{	
+			seed_coords = getCoordinates(dimension, resolution, cur_seed);
+
+			candidate1_coords = nextLocDim(seed_coords, swap_dim); // find next location by increasing value along swapDim
+
+			while(candidate1_coords[0] < 0 && swap_dim > 0) // cant increase anymore along swapdim
+			{
+				swap_dim--;                               
+				candidate1_coords = nextLocDim(seed_coords, swap_dim);
+			}
+
+			if(swap_dim == 0)
+			{
+				swap_dim = focus_dim-1;
+			}
+
+			// find candidate2 location
+			candidate2_coords = prevLocDim(seed_coords, focus_dim);
+
+			if(candidate2_coords[0] < 0)		// reached boundary - candidate2[0] < 0 at that scenario
+			{
+				return;
+			}
+			else if(candidate2_coords[0] >= 0 && candidate1_coords[0] < 0) 
+			{					
+				point_generic seedInfo =  new point_generic(candidate2_coords,getPlanNumber_generic(candidate2_coords),cost_generic(candidate2_coords), remainingDim);
+				int newSeed = getIndex(seedInfo.dim_values,resolution);
+
+				if( seedInfo.get_cost() < search_cost )
+					return;
+				else
+				{
+					if(!pointAlreadyExist(seedInfo.dim_values))
+						all_contour_points.add(seedInfo);
+					if(swap_dim > 0)
+					{
+						exploreSeed(newSeed, search_cost, focus_dim-1,swap_dim-1);					
+					}
+				}
+				return;	
+			}
+
+			// get cost of candidate locations
+			point_generic cand1Info = new point_generic(candidate1_coords,getPlanNumber_generic(candidate1_coords),cost_generic(candidate1_coords), remainingDim);
+			point_generic cand2Info = new point_generic(candidate2_coords,getPlanNumber_generic(candidate2_coords),cost_generic(candidate2_coords), remainingDim);
+			point_generic seedInfo;
+
+			// assign next seed location
+			if (cand1Info.get_cost() > search_cost && cand2Info.get_cost() >= search_cost)
+			{			
+				seedInfo = cand2Info;
+			}
+			else if (cand1Info.get_cost() >= search_cost && cand2Info.get_cost() < search_cost)
+			{			
+				seedInfo = cand1Info;
+			}
+			else
+			{
+				int d1 = (int)Math.abs(cand1Info.get_cost() - search_cost);
+				int d2 = (int)Math.abs(cand2Info.get_cost() - search_cost);
+				if(d1 < d2)
+					seedInfo = cand1Info;
+				else
+					seedInfo = cand2Info;
+			}
+
+			if(!pointAlreadyExist(seedInfo.dim_values))
+				all_contour_points.add(seedInfo);
+
+			cur_seed = getIndex(seedInfo.dim_values,resolution);
+
+			if(swap_dim > 0)
+			{
+				exploreSeed(getIndex(seedInfo.dim_values,resolution), search_cost, focus_dim-1, swap_dim-1);				
+			}
+		}
+		System.out.println("Nexus exploration done !");
+	}
+
+	//find the next location wrt a specific dimension
+	public int[] nextLocDim(int index[], int dim)
+	{
+		int newIndex[] = new int[dimension];
+		copyLoc(newIndex, index);
+		if(index[dim] < resolution-1)
+			newIndex[dim] = index[dim] + 1;
+		else
+			newIndex[0] = -1;		// end - cant move anymore
+	
+		return newIndex;
+	}
+
+	//find the previous location wrt a specific dimension
+	public int[] prevLocDim(int index[], int dim)
+	{
+		int newIndex[] = new int[dimension];
+		copyLoc(newIndex,index);
+		if(index[dim] > 0)
+			newIndex[dim] = index[dim]-1;
+		else
+			newIndex[0] = -1;	// end - cant move anymore
+	
+		return newIndex;
+	}
+
+	
+	public void copyLoc(int destIdx[], int srcIdx[])
+	{
+		for(int d=0; d<dimension; d++)
+			destIdx[d] = srcIdx[d];
+	}
+	
+	public boolean sameLoc(int[] index1, int[] index2) 
+	{
+		for(int d=0; d<dimension; d++)
+			if(index1[d] != index2[d])
+				return false;
+	
+		return true;
+	}
+
+	
+	//required in findSeed() routine
+	public int[] createCorner(int corner) 
+	{
+		int index[] = new int[dimension];
+		int d=dimension-1;
+		
+		while(corner > 0) 
+		{
+			if((corner % 2) > 0) 
+			{
+				index[d] = resolution-1;
+			}
+			corner /= 2;
+			d--;
+		}
+		return index;
+	}
+	
 
 }
 
@@ -1138,13 +1481,13 @@ class point_generic
 	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 
 		loadPropertiesFile();
-		System.out.println();
+		//System.out.println();
 		dim_values = new int[dimension];
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = arr[i];
-			System.out.print(arr[i]+",");
+			//System.out.print(arr[i]+",");
 		}
-		System.out.println("   having cost = "+cost+" and plan "+num);
+		//System.out.println("   having cost = "+cost+" and plan "+num);
 		this.p_no = num;
 		this.cost = cost;
 
@@ -1174,6 +1517,8 @@ class point_generic
 
 
 	}
+	
+	
 	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
 
 		loadPropertiesFile();
@@ -1181,9 +1526,9 @@ class point_generic
 		dim_values = new int[dimension];
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = arr[i];
-			System.out.print(arr[i]+",");
+			//System.out.print(arr[i]+",");
 		}
-		System.out.println("   having cost = "+cost+" and plan "+num);
+		//System.out.println("   having cost = "+cost+" and plan "+num);
 		this.p_no = num;
 		this.cost = cost;
 
@@ -1243,6 +1588,14 @@ class point_generic
 		return storedOrder;
 	}
 
+	public void printPoint(){
+		
+		for(int i=0;i<dimension;i++){
+			System.out.print(dim_values[i]+",");
+		}
+		System.out.println("   having cost = "+cost+" and plan "+p_no);
+	}
+	
 	public void loadPropertiesFile() {
 
 		Properties prop = new Properties();
