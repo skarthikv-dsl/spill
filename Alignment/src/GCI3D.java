@@ -395,7 +395,8 @@ public class GCI3D
 		double max_penality = Double.MIN_VALUE;
 		//find the extreme locations for each dimensions
 		for(int c=1; c<=ContourPointsMap.size(); c++){
-
+			
+			System.out.println("------------------------------------Contour "+c+"---------------------------------");
 			//get the extreme locations for each dimension in points_max for each contour
 			HashMap<Integer,point_generic> points_max = new HashMap<Integer,point_generic>();
 
@@ -441,6 +442,7 @@ public class GCI3D
 			
 			if(min_penalty > max_penality)
 				max_penality = min_penalty;
+			System.out.println("-----------------------------------------------------------------------------------------------------");
 		}
 		
 		System.out.println("The max penalty is "+max_penality);
@@ -1030,29 +1032,57 @@ if (resolution ==40){
 		if(resolution==100){
 
 			if(sel_distribution == 1){
-				selectivity[0] = 0.000064; 	selectivity[1] = 0.000093; 	selectivity[2] = 0.000126; 	selectivity[3] = 0.000161; 	selectivity[4] = 0.000198;
-				selectivity[5] = 0.000239; 	selectivity[6] = 0.000284; 	selectivity[7] = 0.000332; 	selectivity[8] = 0.000384; 	selectivity[9] = 0.000440;
-				selectivity[10] = 0.000501; 	selectivity[11] = 0.000567; 	selectivity[12] = 0.000638; 	selectivity[13] = 0.000716; 	selectivity[14] = 0.000800;
-				selectivity[15] = 0.000890; 	selectivity[16] = 0.000989; 	selectivity[17] = 0.001095; 	selectivity[18] = 0.001211; 	selectivity[19] = 0.001335;
-				selectivity[20] = 0.001471; 	selectivity[21] = 0.001617; 	selectivity[22] = 0.001776; 	selectivity[23] = 0.001948; 	selectivity[24] = 0.002134;
-				selectivity[25] = 0.002335; 	selectivity[26] = 0.002554; 	selectivity[27] = 0.002790; 	selectivity[28] = 0.003046; 	selectivity[29] = 0.003323;
-				selectivity[30] = 0.003624; 	selectivity[31] = 0.003949; 	selectivity[32] = 0.004301; 	selectivity[33] = 0.004683; 	selectivity[34] = 0.005096;
-				selectivity[35] = 0.005543; 	selectivity[36] = 0.006028; 	selectivity[37] = 0.006552; 	selectivity[38] = 0.007121; 	selectivity[39] = 0.007736;
-				selectivity[40] = 0.008403; 	selectivity[41] = 0.009125; 	selectivity[42] = 0.009907; 	selectivity[43] = 0.010753; 	selectivity[44] = 0.011670;
-				selectivity[45] = 0.012663; 	selectivity[46] = 0.013739; 	selectivity[47] = 0.014904; 	selectivity[48] = 0.016165; 	selectivity[49] = 0.017531;
-				selectivity[50] = 0.019011; 	selectivity[51] = 0.020613; 	selectivity[52] = 0.022348; 	selectivity[53] = 0.024228; 	selectivity[54] = 0.026263;
-				selectivity[55] = 0.028467; 	selectivity[56] = 0.030854; 	selectivity[57] = 0.033440; 	selectivity[58] = 0.036240; 	selectivity[59] = 0.039272;
-				selectivity[60] = 0.042556; 	selectivity[61] = 0.046113; 	selectivity[62] = 0.049965; 	selectivity[63] = 0.054136; 	selectivity[64] = 0.058654;
-				selectivity[65] = 0.063547; 	selectivity[66] = 0.068845; 	selectivity[67] = 0.074584; 	selectivity[68] = 0.080799; 	selectivity[69] = 0.087530;
-				selectivity[70] = 0.094819; 	selectivity[71] = 0.102714; 	selectivity[72] = 0.111263; 	selectivity[73] = 0.120523; 	selectivity[74] = 0.130550;
-				selectivity[75] = 0.141411; 	selectivity[76] = 0.153172; 	selectivity[77] = 0.165910; 	selectivity[78] = 0.179705; 	selectivity[79] = 0.194645;
-				selectivity[80] = 0.210825; 	selectivity[81] = 0.228348; 	selectivity[82] = 0.247325; 	selectivity[83] = 0.267877; 	selectivity[84] = 0.290136;
-				selectivity[85] = 0.314241; 	selectivity[86] = 0.340348; 	selectivity[87] = 0.368621; 	selectivity[88] = 0.399241; 	selectivity[89] = 0.432403;
-				selectivity[90] = 0.468316; 	selectivity[91] = 0.507211; 	selectivity[92] = 0.549334; 	selectivity[93] = 0.594953; 	selectivity[94] = 0.644359;
-				selectivity[95] = 0.697865; 	selectivity[96] = 0.755812; 	selectivity[97] = 0.818569; 	selectivity[98] = 0.886535; 	selectivity[99] = 0.990142;
+				
+//				Have used this for all the TPCDS templates with 100 res to ICDE paper 
+				
+				selectivity[0] = 0.000064; 	selectivity[1] = 0.000093; 	selectivity[2] = 0.000126; 	selectivity[3] = 0.000161; 	selectivity[4] = 0.000198; 	
+				selectivity[5] = 0.000239; 	selectivity[6] = 0.000284; 	selectivity[7] = 0.000332; 	selectivity[8] = 0.000384; 	selectivity[9] = 0.000440; 	
+				selectivity[10] = 0.000501; 	selectivity[11] = 0.000567; 	selectivity[12] = 0.000638; 	selectivity[13] = 0.000716; 	selectivity[14] = 0.000800; 	
+				selectivity[15] = 0.000890; 	selectivity[16] = 0.000989; 	selectivity[17] = 0.001095; 	selectivity[18] = 0.001211; 	selectivity[19] = 0.001335; 	
+				selectivity[20] = 0.001471; 	selectivity[21] = 0.001617; 	selectivity[22] = 0.001776; 	selectivity[23] = 0.001948; 	selectivity[24] = 0.002134; 	
+				selectivity[25] = 0.002335; 	selectivity[26] = 0.002554; 	selectivity[27] = 0.002790; 	selectivity[28] = 0.003046; 	selectivity[29] = 0.003323; 	
+				selectivity[30] = 0.003624; 	selectivity[31] = 0.003949; 	selectivity[32] = 0.004301; 	selectivity[33] = 0.004683; 	selectivity[34] = 0.005096; 	
+				selectivity[35] = 0.005543; 	selectivity[36] = 0.006028; 	selectivity[37] = 0.006552; 	selectivity[38] = 0.007121; 	selectivity[39] = 0.007736; 	
+				selectivity[40] = 0.008403; 	selectivity[41] = 0.009125; 	selectivity[42] = 0.009907; 	selectivity[43] = 0.010753; 	selectivity[44] = 0.011670; 	
+				selectivity[45] = 0.012663; 	selectivity[46] = 0.013739; 	selectivity[47] = 0.014904; 	selectivity[48] = 0.016165; 	selectivity[49] = 0.017531; 	
+				selectivity[50] = 0.019011; 	selectivity[51] = 0.020613; 	selectivity[52] = 0.022348; 	selectivity[53] = 0.024228; 	selectivity[54] = 0.026263; 	
+				selectivity[55] = 0.028467; 	selectivity[56] = 0.030854; 	selectivity[57] = 0.033440; 	selectivity[58] = 0.036240; 	selectivity[59] = 0.039272; 	
+				selectivity[60] = 0.042556; 	selectivity[61] = 0.046113; 	selectivity[62] = 0.049965; 	selectivity[63] = 0.054136; 	selectivity[64] = 0.058654; 	
+				selectivity[65] = 0.063547; 	selectivity[66] = 0.068845; 	selectivity[67] = 0.074584; 	selectivity[68] = 0.080799; 	selectivity[69] = 0.087530; 	
+				selectivity[70] = 0.094819; 	selectivity[71] = 0.102714; 	selectivity[72] = 0.111263; 	selectivity[73] = 0.120523; 	selectivity[74] = 0.130550; 	
+				selectivity[75] = 0.141411; 	selectivity[76] = 0.153172; 	selectivity[77] = 0.165910; 	selectivity[78] = 0.179705; 	selectivity[79] = 0.194645; 	
+				selectivity[80] = 0.210825; 	selectivity[81] = 0.228348; 	selectivity[82] = 0.247325; 	selectivity[83] = 0.267877; 	selectivity[84] = 0.290136; 	
+				selectivity[85] = 0.314241; 	selectivity[86] = 0.340348; 	selectivity[87] = 0.368621; 	selectivity[88] = 0.399241; 	selectivity[89] = 0.432403; 	
+				selectivity[90] = 0.468316; 	selectivity[91] = 0.507211; 	selectivity[92] = 0.549334; 	selectivity[93] = 0.594953; 	selectivity[94] = 0.644359; 	
+				selectivity[95] = 0.697865; 	selectivity[96] = 0.755812; 	selectivity[97] = 0.818569; 	selectivity[98] = 0.886535; 	selectivity[99] = 0.960142; 	
+				
+				
+				//using this for alignment
+				
+//				selectivity[0] = 0.00001006; 	selectivity[1] = 0.00001020; 	selectivity[2] = 0.00001035; 	selectivity[3] = 0.00001053; 	selectivity[4] = 0.00001074; 	
+//				selectivity[5] = 0.00001098; 	selectivity[6] = 0.00001126; 	selectivity[7] = 0.00001157; 	selectivity[8] = 0.00001194; 	selectivity[9] = 0.00001235; 	
+//				selectivity[10] = 0.00001283; 	selectivity[11] = 0.00001339; 	selectivity[12] = 0.00001402; 	selectivity[13] = 0.00001475; 	selectivity[14] = 0.00001559; 	
+//				selectivity[15] = 0.00001656; 	selectivity[16] = 0.00001767; 	selectivity[17] = 0.00001895; 	selectivity[18] = 0.00002042; 	selectivity[19] = 0.00002211; 	
+//				selectivity[20] = 0.00002406; 	selectivity[21] = 0.00002629; 	selectivity[22] = 0.00002887; 	selectivity[23] = 0.00003182; 	selectivity[24] = 0.00003522; 	
+//				selectivity[25] = 0.00003914; 	selectivity[26] = 0.00004363; 	selectivity[27] = 0.00004881; 	selectivity[28] = 0.00005476; 	selectivity[29] = 0.00006160; 	
+//				selectivity[30] = 0.00006947; 	selectivity[31] = 0.00007851; 	selectivity[32] = 0.00008892; 	selectivity[33] = 0.00010088; 	selectivity[34] = 0.00011464; 	
+//				selectivity[35] = 0.00013047; 	selectivity[36] = 0.00014866; 	selectivity[37] = 0.00016959; 	selectivity[38] = 0.00019366; 	selectivity[39] = 0.00022133; 	
+//				selectivity[40] = 0.00025316; 	selectivity[41] = 0.00028976; 	selectivity[42] = 0.00033186; 	selectivity[43] = 0.00038026; 	selectivity[44] = 0.00043593; 	
+//				selectivity[45] = 0.00049995; 	selectivity[46] = 0.00057357; 	selectivity[47] = 0.00065823; 	selectivity[48] = 0.00075559; 	selectivity[49] = 0.00086756; 	
+//				selectivity[50] = 0.00099632; 	selectivity[51] = 0.00114440; 	selectivity[52] = 0.00131469; 	selectivity[53] = 0.00151052; 	selectivity[54] = 0.00173572; 	
+//				selectivity[55] = 0.00199471; 	selectivity[56] = 0.00229254; 	selectivity[57] = 0.00263505; 	selectivity[58] = 0.00302893; 	selectivity[59] = 0.00348190; 	
+//				selectivity[60] = 0.00400281; 	selectivity[61] = 0.00460186; 	selectivity[62] = 0.00529077; 	selectivity[63] = 0.00608302; 	selectivity[64] = 0.00699410; 	
+//				selectivity[65] = 0.00804184; 	selectivity[66] = 0.00924674; 	selectivity[67] = 0.01063238; 	selectivity[68] = 0.01222587; 	selectivity[69] = 0.01405837; 	
+//				selectivity[70] = 0.01616576; 	selectivity[71] = 0.01858925; 	selectivity[72] = 0.02137626; 	selectivity[73] = 0.02458133; 	selectivity[74] = 0.02826716; 	
+//				selectivity[75] = 0.03250586; 	selectivity[76] = 0.03738036; 	selectivity[77] = 0.04298605; 	selectivity[78] = 0.04943258; 	selectivity[79] = 0.05684610; 	
+//				selectivity[80] = 0.06537164; 	selectivity[81] = 0.07517601; 	selectivity[82] = 0.08645104; 	selectivity[83] = 0.09941733; 	selectivity[84] = 0.11432855; 	
+//				selectivity[85] = 0.13147646; 	selectivity[86] = 0.15119656; 	selectivity[87] = 0.17387467; 	selectivity[88] = 0.19995450; 	selectivity[89] = 0.22994631; 	
+//				selectivity[90] = 0.26443688; 	selectivity[91] = 0.30410104; 	selectivity[92] = 0.34971482; 	selectivity[93] = 0.40217067; 	selectivity[94] = 0.50249490; 	
+//				selectivity[95] = 0.60186777; 	selectivity[96] = 0.70164656; 	selectivity[97] = 0.80339217; 	selectivity[98] = 0.90889962; 	selectivity[99] = 0.99500000; 	
 
 			}
 			else if(sel_distribution == 0){
+				
 				selectivity[0] = 0.005995; 	selectivity[1] = 0.015985; 	selectivity[2] = 0.025975; 	selectivity[3] = 0.035965; 	selectivity[4] = 0.045955; 	
 				selectivity[5] = 0.055945; 	selectivity[6] = 0.065935; 	selectivity[7] = 0.075925; 	selectivity[8] = 0.085915; 	selectivity[9] = 0.095905; 	
 				selectivity[10] = 0.105895; 	selectivity[11] = 0.115885; 	selectivity[12] = 0.125875; 	selectivity[13] = 0.135865; 	selectivity[14] = 0.145855; 	
