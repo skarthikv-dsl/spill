@@ -19,6 +19,7 @@ public class test {
 	static HashMap<Integer,Integer> uniquePointsMap = new HashMap<Integer,Integer>();
     public static void main(String[] args) {
     	
+    	
     	double[] temp_1 = new double[10000000];
     	int firstArg=0;
     	if (args.length > 0) {
@@ -31,6 +32,12 @@ public class test {
     	}
     	double threshold = 20;
     	double cost =455; 
+    	
+    	uniquePointsMap.put(new Integer(10), 10);
+    	uniquePointsMap.put(new Integer(20), 20);
+    	uniquePointsMap.put(new Integer(30), 300);
+    	int rk=30;
+    	uniquePointsMap.remove(rk);
     	
     	double lt = cost * (1 + threshold / 100);
     	double[] mem_alloc = new double[100000000];

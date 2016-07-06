@@ -514,7 +514,9 @@ System.exit(1);
 
 			p.set_badguy();
 
+			//max_cost and min_cost are used to get the maximum and minimum cost of points in the contour for sanity check purposes
 			unique_plans.add(plan_no);
+
 			if(p.get_cost()>max_cost)
 				max_cost = p.get_cost();
 			if(p.get_cost()<min_cost){
@@ -539,13 +541,13 @@ System.exit(1);
 				spillDim_planCnt[category]++;
 				// --
 				learning_dim = category;
-					partition_no=getPartitionNumber(learning_dim);
-					if(partition_no == -1)
-					{
-						System.out.println("Wrong Partition Number");
-						System.exit(1);
-					}
-					partition_info[partition_no].addPoint(p);
+				partition_no=getPartitionNumber(learning_dim);
+				if(partition_no == -1)
+				{
+					System.out.println("Wrong Partition Number");
+					System.exit(1);
+				}
+				partition_info[partition_no].addPoint(p);
 			}
 		}
 //		if(local_partition_flag == true)
@@ -935,29 +937,29 @@ System.exit(1);
 				partition_info[k].clearPartition();
 			}
 		}
-		//----------------------------------Initialize variables
+		//----------------------------------Initialize variables-----------------------------------------------------
 		double local_tmax = 0;
 		double min_val = Double.MAX_VALUE;
 		double temp_tol = Double.MAX_VALUE;
 		
 		boolean first_flag = true;
 		int loc_dimension = remainingDim.size();
-				for(int i =0;i< loc_dimension; i++)
-		    	{
-		    		p_encoding[i] = 1;
-		    		until_max[i] =1;
-		    	}
+		for(int i =0; i< loc_dimension; i++)
+		{
+			p_encoding[i] = 1;
+			until_max[i] = 1;
+		}
 			//	System.arraycopy(p_encoding, 0, prev_encoding, 0, loc_dimension);				
 		while(true)
 		{
 			if(first_flag == false )
 			{
-		//		break; 
-			if(next(p_encoding, until_max ,loc_dimension )==false)
-			{
-				System.arraycopy( prev_encoding, 0, p_encoding, 0,loc_dimension);
-				break;
-			}
+				//		break; 
+				if(next(p_encoding, until_max ,loc_dimension )==false)
+				{
+					System.arraycopy( prev_encoding, 0, p_encoding, 0,loc_dimension);
+					break;
+				}
 			}
 			System.arraycopy(p_encoding, 0, prev_encoding, 0, loc_dimension);
 			cur_tol = 0;
@@ -973,8 +975,8 @@ System.exit(1);
 		//old code
 		Integer m_key;
 		Iterator itr = cur_partition.keySet().iterator();
-		local_tmax =0;
-		cur_val =0;
+		local_tmax = 0;
+		cur_val = 0;
 		for(int m =0;m<n_partition;m++)
 		{
 			assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
@@ -1666,7 +1668,7 @@ System.exit(1);
                 {
                 	temp_list.add(remainingDim.get(i));
                 }
-            cur_partition.put(p-1, temp_list);
+            cur_partition.put(p-1, temp_list);  //assert that the elements are disjoint and union is the remaining dimensions
                 //    System.out.printf("%d, ", i + 1);
          //   System.out.printf("\b\b} ");
          //   System.out.printf("} ");
@@ -1696,8 +1698,9 @@ System.exit(1);
 			assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
 			//				partition_info[i] = new partition(i, p[i]);
 			i_key = (Integer)itr.next();
-			partition_info[i_key] = new partition(i_key, convertIntegers(cur_partition.get(i_key)));
+			partition_info[i_key] = new partition(i_key, convertIntegers(cur_partition.get(i_key)));  
 		}
+		// assert put here
         
 	}
 	
@@ -2102,119 +2105,6 @@ System.exit(1);
 		return selLearnt; //has to have single line in the file
 
 	}
-	//public double getLearntSelectivityOld(int dim, int plan, double cost,point_generic p) {
-	//
-	//	
-	//	String funName = "getLearntSelectivity";
-	//	if(remainingDim.size()==1)
-	//	{
-	//		System.out.println(funName+"ERROR: entering one dimension condition");
-	//		return 0;   //TODO dont do spilling in the 1D case, until we fix the INL case
-	//	}
-	//		
-	//	
-	//	double multiplier = 1,selLearnt = Double.MIN_VALUE,selDim= actual_sel[0];
-	//	double est_rows=1, rows_learnt=1, outer_rows =1;
-	//
-	//	
-	////	if(dim==0){
-	////		multiplier = (double)150000/JS_multiplier1;
-	////		selDim = actual_sel[0];
-	////	}
-	////	else {
-	////		multiplier = (double)1500000/JS_multiplier2;
-	////		selDim = actual_sel[1];
-	////	}
-	//
-	//
-	//	if(dim==0){
-	//	multiplier = (double)150000/JS_multiplier1;
-	//	selDim = actual_sel[0];
-	//	}
-	//else if (dim==1){
-	//	multiplier = (double)1500000/JS_multiplier2;
-	//	selDim = actual_sel[1];
-	//}
-	//else {
-	//	selDim = actual_sel[2];
-	//	multiplier = (double)10000/JS_multiplier2;
-	//}
-	//	
-	//	
-	//      //Connection c = null;
-	//       Statement stmt = null;
-	//       Double val = new Double(0);
-	//       try {
-	//        
-	//         stmt = conn.createStatement();
-	//        //constants in BinaryTree   
-	// 		BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
-	// 		tree.FROM_CLAUSE = FROM_CLAUSE;
-	// 		int spill_values [] = tree.getSpillNode(dim,plan); //[0] gives node id of the tree and [1] gives the spill_node for postgres
-	// 		int spill_node = spill_values[1];
-	//        stmt.execute("set spill_node = "+ spill_node);
-	//        stmt.execute("set spill_join = 1");
-	//        stmt.execute("set work_mem = '100MB'");
-	//        stmt.execute("set effective_cache_size='1GB'");
-	//        stmt.execute("set  seq_page_cost = 0");
-	//        stmt.execute("set  random_page_cost=0");
-	//        stmt.execute("set limit_cost = "+ cost);
-	//        stmt.execute("set full_robustness = on");
-	//        stmt.execute("set oneFPCfull_robustness = on");
-	//        stmt.execute("set varyingJoins = "+varyingJoins);
-	//        stmt.execute("set JS_multiplier1 = "+ JS_multiplier1);
-	//        stmt.execute("set JS_multiplier2 = "+ JS_multiplier2);
-	//        stmt.execute("set JS_multiplier3 = "+ JS_multiplier3);
-	//        stmt.execute("set robust_eqjoin_selec1 = "+ selectivity[p.get_dimension(0)]);
-	//        stmt.execute("set robust_eqjoin_selec2 = "+ selectivity[p.get_dimension(1)]);
-	//        stmt.execute("set robust_eqjoin_selec3 = "+ selectivity[p.get_dimension(2)]);
-	//        stmt.execute("set FPC_JS_multiplier1 = "+ JS_multiplier1);
-	//        stmt.execute("set FPC_JS_multiplier2 = "+ JS_multiplier2);
-	//        stmt.execute("set FPC_JS_multiplier3 = "+ JS_multiplier3);
-	//        stmt.execute("set FPCrobust_eqjoin_selec1 = "+ findNearestSelectivity(actual_sel[0]));
-	//        stmt.execute("set FPCrobust_eqjoin_selec2 = "+ findNearestSelectivity(actual_sel[1]));
-	//        stmt.execute("set FPCrobust_eqjoin_selec3 = "+ findNearestSelectivity(actual_sel[2]));
-	//        // essentially forcing the  plan optimal at (x,y) location to the query having (x_a,y_a) 
-	//        // as selectivities been injected 
-	//        
-	//        stmt.execute(query);
-	//        //read the selectivity returned
-	//        File file = new File(cardinalityPath+"spill_cardinality");
-	//    	FileReader fr = new FileReader(file);
-	//    	BufferedReader br = new BufferedReader(fr);
-	//    	
-	//    	//read the selectivity or the info needed for INL
-	//    	val = Double.parseDouble(br.readLine());
-	//    	String est_rows_str;
-	//    	if((est_rows_str=br.readLine())==null)
-	//    		selLearnt = val; //this is the Non-INL case
-	//    	else {
-	//    		rows_learnt = val; //rows learnt for this budget
-	//    		est_rows = Double.parseDouble(est_rows_str); //estimated rows of the join node 
-	//        	outer_rows = Double.parseDouble(br.readLine()); //actual outer rows of the join node
-	//        	
-	//        	//selectivity calculations
-	//        	double inner_rows = (est_rows*multiplier)/(selDim*outer_rows);
-	//        	val = rows_learnt/(inner_rows*outer_rows);
-	//    	}
-	//    	        	
-	//    	br.close();
-	//    	fr.close();
-	//       }
-	//       catch ( Exception e ) {
-	//			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
-	//
-	//		}
-	//
-	//
-	//    	        	
-	//    	selLearnt = val * multiplier *(1+err);
-	//    	assert(selLearnt<=1):"error in multiplier";
-	//    	selLearnt = findNearestSelectivity(selLearnt);
-	//    	System.out.println("Postgres: selectivity learnt  "+selLearnt+" with plan number "+plan);
-	//    	return selLearnt; //has to have single line in the file
-	//
-	//}
 
 	void remove_from_partition(int dim)
 	{
@@ -3495,7 +3385,7 @@ System.exit(1);
 
 
 
-class point_generic
+class point_generic_opt_sb
 {
 	int dimension=OptSB.dimension;
 	static boolean load_flag = false;
@@ -3515,7 +3405,7 @@ class point_generic
 	static String plansPath;
 
 	int [] dim_values;
-	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
+	point_generic_opt_sb(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 
 		if(load_flag == false)
 		{
@@ -3561,7 +3451,7 @@ class point_generic
 
 
 	}
-	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
+	point_generic_opt_sb(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
 
 		if(load_flag == false)
 		{
@@ -3869,7 +3759,6 @@ class partition
 				//					p.set_goodguy();
 				//				}
 				points_max_local.put(i, p);
-
 				sel_max[i] = OptSB.selectivity[p.get_dimension(i)]; 
 			}
 
@@ -3881,6 +3770,8 @@ class partition
 	{
 		return this.cur_partition_local;
 	}
+	
+	
 	point_generic getMaxPoint(int dim)
 	{
 		Boolean flag=false;
@@ -3895,7 +3786,6 @@ class partition
 		assert(flag==true): "\nDimension not in this partition\n";
 
 		return points_max_local.get(dim);
-
 	}
 }
 

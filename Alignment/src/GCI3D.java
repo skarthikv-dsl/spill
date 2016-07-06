@@ -74,6 +74,11 @@ import java.util.Set;
 
 
 
+
+
+
+
+
 import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
 
@@ -221,7 +226,7 @@ public class GCI3D
 		}
 
 		//checking alignment threshold
-		obj.checkAlignmentPenalty();
+		//obj.checkAlignmentPenalty();
 		
 		/*
 		 * Setting up the DB connection to Postgres/TPCH/TPCDS Benchmark. 
@@ -256,6 +261,7 @@ public class GCI3D
 		 */
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
 		int ASO_points=0;
+		obj.getPlanCountArray();
 		//int max_point = 0; /*not to execute the spillBound algorithm*/
 		int max_point = 1; /*to execute a specific q_a */
 		//Settings
@@ -302,12 +308,13 @@ public class GCI3D
 				System.out.println("Contour "+i+" cost : "+cost+"\n");
 				int prev = obj.remainingDim.size();
 
-//				if(prev==1){
-//					obj.oneDimensionSearch(i,cost);
-//					learning_cost = oneDimCost;
-//				}
-//				else
-//					obj.spillBoundAlgo(i);
+				if(prev==1){ 
+					
+					obj.oneDimensionSearch(i,cost);
+					learning_cost = oneDimCost;
+				}
+				else
+					obj.spillBoundAlgo(i);
 
 				int present = obj.remainingDim.size();
 				if(present < prev - 1 || present > prev)
@@ -386,6 +393,347 @@ public class GCI3D
 		System.out.println("The total time taken is (in mins) "+(endTime-startTime)/(1000*60));
 	}
 
+	public void oneDimensionSearch(int contour_no, double cost) {
+
+		String funName = "oneDimensionSearch";
+		/*
+		 * just sanity check for findNearestPoint and findNearestSelectivity
+		 */
+		assert(findNearestSelectivity(actual_sel[0]) == findNearestSelectivity(findNearestSelectivity(actual_sel[0]))) : funName+ " : findNearSelectivity Error";
+		assert (findNearestPoint(actual_sel[0]) == findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) : funName+ " : findNearPoint Error";
+
+		// added code Feb28; 8:00 pm
+		if(cost_generic(convertSelectivitytoIndex(actual_sel)) > 2*cost){
+			oneDimCost = cost;
+			return;
+		}
+
+		oneDimCost = 0;//initialization
+		assert (remainingDim.size() == 1): funName+": more than one dimension left";
+		int [] arr = new int[dimension];
+		int remDim = -1;
+		double sel_min = 2; //some value greater than 1
+		for(int d=0;d<dimension;d++){
+			if(remainingDim.contains(d))
+				remDim = d;
+			else
+				arr[d] = findNearestPoint(actual_sel[d]);
+		}
+
+		//TODO: pick the sel_min in the contour in 1D
+		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
+
+			point_generic p = ContourPointsMap.get(contour_no).get(c);
+
+			if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
+				Integer learning_dim = new Integer(p.getLearningDimension());
+				assert (learning_dim.intValue() == remDim) : funName+": ERROR plan's learning dimension not matching with remaining dimension";
+				assert (remainingDim.contains(learning_dim)) : funName+": ERROR remaining dimension does not contain the learning dimension";
+
+				if(selectivity[p.get_dimension(learning_dim.intValue())] >= actual_sel[remDim]){
+					if(selectivity[p.get_dimension(learning_dim.intValue())] < sel_min){
+						sel_min = selectivity[p.get_dimension(learning_dim.intValue())]; 
+
+						oneDimCost = p.get_cost();
+						//oneDimCost = cost;
+
+						/*
+						 * set it to plan's cost at q_a
+						 */
+						int fpc_plan = p.get_plan_no();
+						int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
+						if(fpc_cost_generic(int_actual_sel, fpc_plan)<oneDimCost)
+							oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
+						if(cost_generic(int_actual_sel)> oneDimCost)
+							oneDimCost = cost_generic(int_actual_sel);
+
+					}
+
+				}
+			}
+		}
+
+		if(sel_min < (double) 1 && sel_min >= actual_sel[remDim]){
+			System.out.println(funName+" learnt "+ remDim+" dimension completely");
+			remainingDim.remove(remainingDim.indexOf(remDim));
+			System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
+			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
+			return; //done if the sel_min is greater than actual selectivity
+		}
+
+
+		if(sel_min == (double)2){
+			arr[remDim] = 0;
+			/*
+			 * The following If condition is needed to skip the contour. If the condition fails then 
+			 * we can possibly we dominated by some point in the contour. Else, we can say the contour
+			 * can be skipped. 
+			 */
+			if(cost_generic(arr) > cost){
+				oneDimCost = 0;
+				return;
+			}
+		}
+		if(sel_min == (double)2){
+			/*
+			 * We turn to this case when there are no contour point for all the learnt
+			 * selectivities. But check if the point at arr[remDim] = resolution-1 has
+			 * cost less than the contour cost
+			 */
+			arr[remDim] = resolution-1;   //TODO is it okay to resolution -1 in 3D or higher
+			sel_min = selectivity[resolution-1];
+			oneDimCost = cost_generic(arr);
+			/*
+			 * use the fpc_cost at q_a for oneDimCost
+			 */
+			int fpc_plan = getPlanNumber_generic(arr);
+			int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
+			if(fpc_cost_generic(int_actual_sel, fpc_plan)<oneDimCost)
+				oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
+			if(cost_generic(int_actual_sel)> oneDimCost)
+				oneDimCost = cost_generic(int_actual_sel);
+			remainingDim.remove(remainingDim.indexOf(remDim));
+			System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
+			if(oneDimCost>2*cost)
+				oneDimCost = 2*cost-1;
+			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
+		}
+
+
+	}
+
+	
+	public  void checkValidityofWeights() {
+		double areaPlans =0;
+		double relativeAreaPlans =0;
+		areaSpace = 0.0;
+
+		planRelativeArea = new double[totalPlans];
+
+		for (int i=0; i< data.length; i++){
+			areaSpace += locationWeight[i];
+		}
+		//	System.out.println(areaSpace);
+
+		for (int i=0; i< totalPlans; i++){
+			planRelativeArea[i] = planCount[i]/areaSpace;
+			relativeAreaPlans += planRelativeArea[i];
+			areaPlans += planCount[i];
+		}
+		//	System.out.println(areaPlans);
+		//	System.out.println(relativeAreaPlans);
+
+		if(relativeAreaPlans < 0.99) {
+			System.out.println("ALERT! The area of plans add up to only " + relativeAreaPlans);
+			//System.exit(0);
+		}
+	}
+
+
+
+	public  void getPlanCountArray() {
+		planCount = new double[totalPlans];
+		locationWeight = new double[data.length];
+		// Set dim depending on whether we are dealing with full packet or slice
+		// int dim;
+
+
+		int resln = resolution;
+		int dim = dimension;
+
+		int[] r = new int[dim];
+
+		for (int i = 0; i < dim; i++)
+			r[i] = resln;
+
+		/*
+		 * if(gdp.getDimension()==1) dim = 1; else if(data.length > r[0] * r[1])
+		 * //full packet { dim = dim; //set to actual number of dimensions }
+		 * else //slice { if(getDimension()==1) dim = 1; else dim = 2; //if
+		 * actual dimension >= 2 }
+		 */
+
+
+		double locationWeightLocal[] = new double[resln];
+
+		if(resolution==10 ){
+			if(sel_distribution==0){
+				//for tpch
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 2;         locationWeightLocal[4] = 4;				locationWeightLocal[5] = 7;
+				locationWeightLocal[6] = 15;        locationWeightLocal[7] = 20;				locationWeightLocal[8] = 30;
+				locationWeightLocal[9] = 20;
+			}
+
+			//for tpcds
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 2;         locationWeightLocal[4] = 4;				locationWeightLocal[5] = 6;
+				locationWeightLocal[6] = 7;        locationWeightLocal[7] = 25;				locationWeightLocal[8] = 30;
+				locationWeightLocal[9] = 20;
+			}
+		}
+
+
+		else if (resolution == 20){
+			if(sel_distribution == 0){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 4;				locationWeightLocal[8] = 4;
+				locationWeightLocal[9] = 5;
+				locationWeightLocal[10] = 5;			locationWeightLocal[11] = 5;				locationWeightLocal[12] = 5;
+				locationWeightLocal[13] = 6;         locationWeightLocal[14] = 6;				locationWeightLocal[15] = 10;
+				locationWeightLocal[16] = 10;        locationWeightLocal[17] = 10;				locationWeightLocal[18] = 15;
+				locationWeightLocal[19] = 10;
+
+			}
+
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 4;
+				locationWeightLocal[9] = 4;
+				locationWeightLocal[10] = 5;			locationWeightLocal[11] = 5;				locationWeightLocal[12] = 5;
+				locationWeightLocal[13] = 6;         locationWeightLocal[14] = 6;				locationWeightLocal[15] = 10;
+				locationWeightLocal[16] = 10;        locationWeightLocal[17] = 15;				locationWeightLocal[18] = 15;
+				locationWeightLocal[19] = 10;
+			}
+
+		}
+
+
+		else if (resolution == 30){
+			if(sel_distribution == 0){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 1;
+				locationWeightLocal[9] = 2;
+				locationWeightLocal[10] = 3;			locationWeightLocal[11] = 3;				locationWeightLocal[12] = 5;
+				locationWeightLocal[13] = 5;         locationWeightLocal[14] = 5;				locationWeightLocal[15] = 5;
+				locationWeightLocal[16] = 5;        locationWeightLocal[17] = 5;				locationWeightLocal[18] = 5;
+				locationWeightLocal[19] = 5;
+				locationWeightLocal[20] = 5;			locationWeightLocal[21] = 5;				locationWeightLocal[22] = 5;
+				locationWeightLocal[23] = 5;         locationWeightLocal[24] = 5;				locationWeightLocal[25] = 5;
+				locationWeightLocal[26] = 5;        locationWeightLocal[27] = 5;				locationWeightLocal[28] = 5;
+				locationWeightLocal[29] = 2;
+			}
+
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 1;
+				locationWeightLocal[9] = 2;
+				locationWeightLocal[10] = 3;			locationWeightLocal[11] = 3;				locationWeightLocal[12] = 4;
+				locationWeightLocal[13] = 4;         locationWeightLocal[14] = 4;				locationWeightLocal[15] = 4;
+				locationWeightLocal[16] = 4;        locationWeightLocal[17] = 4;				locationWeightLocal[18] = 4;
+				locationWeightLocal[19] = 4;
+				locationWeightLocal[20] = 4;			locationWeightLocal[21] = 6;				locationWeightLocal[22] = 6;
+				locationWeightLocal[23] = 6;         locationWeightLocal[24] = 6;				locationWeightLocal[25] = 6;
+				locationWeightLocal[26] = 6;        locationWeightLocal[27] = 6;				locationWeightLocal[28] = 6;
+				locationWeightLocal[29] = 5;
+			}
+
+		}
+		else if (resolution == 40){
+			if(sel_distribution == 0){
+				//TODO
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 1;
+				locationWeightLocal[9] = 2;
+				locationWeightLocal[10] = 3;			locationWeightLocal[11] = 3;				locationWeightLocal[12] = 5;
+				locationWeightLocal[13] = 5;         locationWeightLocal[14] = 5;				locationWeightLocal[15] = 5;
+				locationWeightLocal[16] = 5;        locationWeightLocal[17] = 5;				locationWeightLocal[18] = 5;
+				locationWeightLocal[19] = 5;
+				locationWeightLocal[20] = 5;			locationWeightLocal[21] = 5;				locationWeightLocal[22] = 5;
+				locationWeightLocal[23] = 5;         locationWeightLocal[24] = 5;				locationWeightLocal[25] = 5;
+				locationWeightLocal[26] = 5;        locationWeightLocal[27] = 5;				locationWeightLocal[28] = 5;
+				locationWeightLocal[29] = 2;		locationWeightLocal[20] = 5;			locationWeightLocal[21] = 5;				locationWeightLocal[22] = 5;
+				locationWeightLocal[23] = 5;         locationWeightLocal[24] = 5;				locationWeightLocal[25] = 5;
+				locationWeightLocal[26] = 5;        locationWeightLocal[27] = 5;				locationWeightLocal[28] = 5;
+				locationWeightLocal[29] = 2;
+			}
+
+			if(sel_distribution == 1){
+				locationWeightLocal[0] = 1;			locationWeightLocal[1] = 1;				locationWeightLocal[2] = 1;
+				locationWeightLocal[3] = 1;         locationWeightLocal[4] = 1;				locationWeightLocal[5] = 1;
+				locationWeightLocal[6] = 1;        locationWeightLocal[7] = 1;				locationWeightLocal[8] = 1;
+				locationWeightLocal[9] = 1;
+				locationWeightLocal[10] = 1;			locationWeightLocal[11] = 1;				locationWeightLocal[12] = 1;
+				locationWeightLocal[13] = 2;         locationWeightLocal[14] = 2;				locationWeightLocal[15] = 2;
+				locationWeightLocal[16] = 2;        locationWeightLocal[17] = 2;				locationWeightLocal[18] = 2;
+				locationWeightLocal[19] = 2;
+				locationWeightLocal[20] = 2;			locationWeightLocal[21] = 3;				locationWeightLocal[22] = 3;
+				locationWeightLocal[23] = 3;         locationWeightLocal[24] = 3;				locationWeightLocal[25] = 3;
+				locationWeightLocal[26] = 3;        locationWeightLocal[27] = 3;				locationWeightLocal[28] = 6;
+				locationWeightLocal[29] = 3;		locationWeightLocal[30] = 4;			locationWeightLocal[31] = 4;				
+				locationWeightLocal[32] = 3;
+				locationWeightLocal[33] = 4;         locationWeightLocal[34] = 5;				locationWeightLocal[35] = 5;
+				locationWeightLocal[36] = 5;        locationWeightLocal[37] = 5;				locationWeightLocal[38] = 5;
+				locationWeightLocal[39] = 3;
+			}
+		}
+		else if (resolution==100){
+			for(int i=0;i<resolution;i++){
+				locationWeightLocal[i] = 1;
+			}
+		}
+
+		for (int loc=0; loc < data.length; loc++)
+		{
+			if(OptimalCost[loc]>=(double)10000){
+				double weight = 1.0;
+				int tempLoc = loc;
+				for(int d=0;d<dim;d++){
+					weight *= locationWeightLocal[tempLoc % resln];
+					tempLoc = tempLoc/resln;
+				}
+
+				locationWeight[loc] = weight;
+				planCount[data[loc].getPlanNumber()] += weight;
+			}
+			else
+				locationWeight[loc] = (double) -1;
+
+		}
+
+
+		double totalWeight = 0,sumWeight=0;
+
+		for (int i = 0; i < data.length; i++) {
+			if(locationWeight[i]>=0)
+				totalWeight += locationWeight[i];
+		}
+
+		for (int i = 0; i < data.length; i++) {
+			if(locationWeight[i]>=0){
+				locationWeight[i] /= totalWeight;
+				sumWeight += locationWeight[i];
+
+
+				System.out.println("The location weight is "+locationWeight[i]+" and total weight is "+totalWeight);
+				assert (locationWeight[i]<= (double)1) : "In getPlanCountArray: locationWeight is not less than 1";
+			}
+			//		if(locationWeight[i]>(double)1){
+			//			System.out.println("In getPlanCountArray: locationWeight is not less than 1");
+			//			System.out.println("location weight : "+locationWeight[i]+" at i="+i+" total weight="+totalWeight);
+			//		}
+		}
+
+		System.out.println("The sum weight is "+sumWeight);
+		assert(sumWeight<=(double)1*1.01) : "In getPlanCountArray: sumWeight is not less than 1";
+
+		/*
+		 * if(scaleupflag) { for(int i = 0; i < planCount.length; i++)
+		 * planCount[i] /= 100Math.pow(10, getDimension()); }
+		 */
+
+
+		checkValidityofWeights();
+
+	}
+
+	
 	private void checkAlignmentPenalty() throws NumberFormatException, IOException {
 		
 		HashMap<Integer,ArrayList<Integer>> spillDimensionPlanMap = new HashMap<Integer,ArrayList<Integer>>();
@@ -514,7 +862,478 @@ public class GCI3D
 		System.out.println("the violation count is "+violation_count);
 	}
 	
+	private void spillBoundAlgo(int contour_no) throws IOException {
+
+		String funName = "spillBoundAlgo"; 
+		Set<Integer> unique_plans = new HashSet();
+
+		System.out.println("\nContour number ="+contour_no+ " with its size being "+ContourPointsMap.get(contour_no).size());
+
+		int i;
+
+		//declaration and initialization of variables
+		learning_cost = 0;
+		oneDimCost = 0;
+		double max_cost=0, min_cost = OptimalCost[totalPoints-1]+1;
+		int [] min_cost_index = new int[dimension];
+		double [] sel_max = new double[dimension];
+
+
+		/*
+		 * to store the max selectivity each dimension  can learn in a contour
+		 */
+		for(int d=0;d<dimension;d++) sel_max[d] = -1;
+
+		/*
+		 * store the plan/point corresponding to the sel_max locations in a hashmap
+		 * for which the key is the dimension
+		 */
+		HashMap<Integer,point_generic> points_max = new HashMap<Integer,point_generic>();
+		//end of declaration of variables
+		int currentContourPoints = 0;
+
+		for(int c=0; c <ContourPointsMap.get(contour_no).size();c++){
+
+			point_generic p = ContourPointsMap.get(contour_no).get(c);
+
+			/*
+			 * update the max and the min cost seen for this contour
+			 * also update the unique_plans for the contour
+			 */
+			unique_plans.add(p.get_plan_no());
+			if(p.get_cost()>max_cost)
+				max_cost = p.get_cost();
+			if(p.get_cost()<min_cost){
+				min_cost = p.get_cost();
+				for(int d=0;d<dimension;d++)
+					min_cost_index[d] = p.get_dimension(d);
+			}
+
+			assert(min_cost<=max_cost) : funName+"min cost is less than or equal to max. cost in the contour";
+
+
+			//Settings: for higher just see if you want to comment this
+			if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
+				currentContourPoints ++;
+				Integer learning_dim = new Integer(p.getLearningDimension());
+				assert (remainingDim.contains(learning_dim)) : "error: learning dimension already learnt";
+				if(selectivity[p.get_dimension(learning_dim.intValue())] > sel_max[learning_dim.intValue()]){
+					if(points_max.containsKey(learning_dim))
+						points_max.remove(learning_dim);
+					points_max.put(learning_dim, p);
+					sel_max[learning_dim.intValue()] = selectivity[p.get_dimension(learning_dim.intValue())]; 	
+				}
+			} //end for inFeasibleRegion
+		}
+		//
+		/*
+		 * it might happen that due to grid issues that even though q_a lies below a
+		 * contour, the contour points could be empty. Hence we put a check condition
+		 * that if the cost of the contour is greater than cost(q_a) then add
+		 * atleast one point which is the max for all the remaining dimensions
+		 */
+		System.out.println("Current Contour Points is "+currentContourPoints );
+		double q_a_cost = cost_generic(convertSelectivitytoIndex(actual_sel));
+		double c_min = getOptimalCost(0);
+		//&& (Math.pow(2, contour_no-1)*c_min <= q_a_cost)
+		if(currentContourPoints  ==0) {
+			if((Math.pow(2, contour_no)*c_min >= q_a_cost)){
+				int [] arr = new int[dimension];	
+				//update the learnt dimensions selectivity
+				for(int d=0;d<dimension;d++){
+					if(remainingDim.contains(d))
+						arr[d] = resolution-1;
+					else 
+						arr[d] = findNearestPoint(actual_sel[d]);
+				}
+				if(false){ //no use checking this. This is 
+					//if(cost_generic(arr)>Math.pow(2, contour_no)*c_min){
+					//learning_cost = 0;
+					//return; //skipping the contour;
+					//					System.out.println("The cost at  the error is "+ cost_generic(arr));
+					//					assert(false) : funName+" ERROR from the boundary point";
+				}
+				else {
+					point_generic p = new point_generic(arr, getPlanNumber_generic(arr), cost_generic(arr), remainingDim);
+					//ContourPointsMap.get(contour_no).add(p);
+					max_cost = min_cost = p.get_cost();
+					unique_plans.add(p.get_plan_no());
+					p.reloadOrderList(remainingDim);
+					int learning_dim = p.getLearningDimension();
+					sel_max[learning_dim] = selectivity[arr[learning_dim]];
+					points_max.put(new Integer(learning_dim),p );
+				}
+
+			}
+			else
+				System.out.println(funName+" Skipping the contour");
+		}	
+		//TODO put in an assert saying that the same plan cannot be part of sel_max 
+		// of different dimensions: Ans: Done
+		int lastItr = -1;
+		for(int d: remainingDim){
+			if(lastItr == -1){
+				lastItr = d;
+				continue;
+			}
+			if(points_max.get(new Integer(d))!=null && points_max.get(new Integer(lastItr))!=null)
+				assert(points_max.get(new Integer(d)).get_plan_no() != points_max.get(new Integer(lastItr)).get_plan_no()) : funName+" the same plan is spilling on different dimensions";			
+				lastItr = d;
+		}
+
+
+		System.out.print("Max cost = "+max_cost+" Min cost = "+min_cost+" ");
+		System.out.println("with Number of Unique plans = "+unique_plans.size());
+
+
+		System.out.print("MinCostIndex = ");
+		for(int d=0;d<dimension;d++)
+			System.out.print(min_cost_index[d]+",");
+
+		System.out.println();
+
+
+
+		for(int d=0;d<dimension;d++)
+			System.out.println(d+"_max : "+sel_max[d]);
+
+		System.out.print("MaxIndex = ");
+		for(int d=0;d<dimension;d++)
+			System.out.print(maxIndex[d]+",");
+
+		System.out.print("\nMinIndex = ");	
+		for(int d=0;d<dimension;d++)
+			System.out.print(minIndex[d]+",");
+		System.out.println();
+		for(int d=0;d<dimension;d++){
+
+			if(remainingDim.contains(d))
+			{				
+				if(sel_max[d] != (double)-1){  //TODO is type casting Okay?: Ans: It is fine
+
+
+					double sel = 0;
+					point_generic p = points_max.get(new Integer(d));
+					//sel = Simulated_Spilling(max_x_plan, cg_obj, 0, cur_val);
+
+					/*
+					 * checking if we had already executed the same plan on the same dimension before.
+					 * 
+					 */
+					if(executions.contains(new Pair(new Integer(d),new Integer(p.get_plan_no()))))
+						continue;
+
+
+					sel = getLearntSelectivity(d,(Math.pow(2, contour_no-1)*getOptimalCost(0)), p);
+					//					if(sel_max[d]<=sel)
+					if(currentContourPoints!=0)
+						sel_max[d] = sel;
+					else{
+						assert(sel_max[d]>=sel) : "When Contour Point is zero: getLearntSelectivity is higher than sel[resolution]";
+					}
+
+					//else
+					//	System.out.println("GetLeantSelectivity: postgres selectivity is less");
+
+					/*
+					 * add the tuple (dimension,plan) to the executions data structure
+					 */
+					executions.add(new Pair(new Integer(d),new Integer(p.get_plan_no())));
+
+
+					/*
+					 * update the number of execution and repeat steps here
+					 */
+					no_executions ++;
+					if(already_visited[d]==true)
+						no_repeat_executions++;
+					already_visited[d] = true;
+
+					//					File file = new File(cardinalityPath+"spill_cost");
+					//					FileReader fr = new FileReader(file);
+					//					BufferedReader br = new BufferedReader(fr);
+					//					learning_cost += Double.parseDouble(br.readLine());
+					//					System.out.println("Cost of the spilled execution is "+learning_cost);
+					//					br.close();
+					//					fr.close();
+
+					if(sel_max[d]>=actual_sel[d]){
+						System.out.print("\n Plan "+p.get_plan_no()+" executed at ");
+						for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
+						System.out.println(" and learnt "+d+" dimension completely");
+						minIndex[d] = maxIndex[d] = findNearestSelectivity(actual_sel[d]);
+						remainingDim.remove(remainingDim.indexOf(d));
+						removeDimensionFromContourPoints(d);
+						return;
+					}
+
+					System.out.print("\n Plan "+p.get_plan_no()+" executed at ");
+					for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
+					System.out.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
+					//assert()
+				}
+			}
+
+
+		}
+
+		/* should this come here or at the end of the earlier for loop?
+		 *  Ans: As per the theory algorithm, this should come here only since there is no pruning while executing intra contour plans
+		 */   	
+
+		//to avoid the inter contour pruning		
+		for(int d=0;d<dimension;d++){
+			if(remainingDim.contains(d) &&  sel_max[d]!=(double)-1 && findNearestSelectivity(sel_max[d])<findNearestSelectivity(actual_sel[d]))
+				if(sel_max[d]>minIndex[d])
+					minIndex[d] = sel_max[d];
+		}
+
+	}
+	private void removeDimensionFromContourPoints(int d) {
+		String funName = "removeDimensionFromContourPoints";
+		//TODO should we have to check for empty contours and points? 
+		for(int c=1;c<=ContourPointsMap.size();c++){
+			for(point_generic p: ContourPointsMap.get(c)){
+				p.remove_dimension(d);
+			}
+		}
+
+	}
+
 	
+	
+	public double getLearntSelectivity(int dim,  double cost,point_generic p) {
+
+        boolean hashjoinFlag =false;
+        String funName = "getLearntSelectivity";
+        if(remainingDim.size()==1)
+        {
+                System.out.println(funName+"ERROR: entering one dimension condition");
+                return 0;   //TODO dont do spilling in the 1D case, until we fix the INL case
+        }
+                
+        
+        double multiplier = 1,selLearnt = Double.MIN_VALUE,execCost=Double.MIN_VALUE, prevExecCost = Double.MIN_VALUE;
+        boolean sel_completely_learnt = false;
+        int plan = p.get_plan_no();
+    Statement stmt = null;
+
+    try {
+     
+        stmt = conn.createStatement();
+        //System.out.println(funName+ " : database connection statement create successfully");
+        //Settings: constants in BinaryTree   
+                BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
+                tree.FROM_CLAUSE = FROM_CLAUSE;
+                int spill_values [] = tree.getSpillNode(dim,plan,"tpcds"); //[0] gives node id of the tree and [1] gives the spill_node for postgres
+                int spill_node = spill_values[1];
+                System.out.println("The spill node value in the tree is "+spill_node);
+                
+                /*
+                 *temp_act_sel to iterate from point p to  until either we exhaust the budget 
+                 *or learn the actual selectivity. Note the change. 
+                 */
+                double[] temp_act_sel = new double[dimension];
+                for(int d=0;d<dimension;d++){
+                        if(dim==d){
+//                              if(selectivity[p.get_dimension(d)] >= actual_sel[d])
+//                                      temp_act_sel[d] = actual_sel[d]; //This line posed a problem, and hence commenting it. 
+//                              else
+                                        temp_act_sel[d] = selectivity[p.get_dimension(d)];
+                        }
+                        else
+                                temp_act_sel[d] = actual_sel[d];
+                }
+                
+                double budget = cost;   //if this contour is the last for point p set the budget to  point's cost
+                if((p.get_cost() <2*cost) && (p.get_cost()>cost))
+                        budget = p.get_cost();
+
+                File file=null;
+                FileReader fr=null;
+                BufferedReader br=null;
+                int c_no = getContourNumber(cost);
+                Index point_index = new Index(p,c_no,dim);
+                System.out.println(point_index.hashCode());
+                System.out.println(point_index.equals(new Index(p,c_no,dim)));
+                if(sel_for_point.containsKey(point_index))
+        			{
+        				ArrayList<Double> al = sel_for_point.get(new Index(p,c_no,dim));
+        				//arraylist al contains the <sel_learnt,cost_incurred> pair for the above inputs
+        				learning_cost += al.get(1);  
+        				return al.get(0);
+        			}
+                
+                while((temp_act_sel[dim] <= actual_sel[dim]) || (execCost<=budget))
+                {       
+                        stmt.execute("set spill_node = "+ spill_node);
+                        
+                        stmt.execute("set work_mem = '100MB'");
+                        //NOTE,Settings: 4GB for DS and 1GB for H
+                        if(database_conn==0){
+                                stmt.execute("set effective_cache_size='1GB'");
+                        }
+                        else{
+                                stmt.execute("set effective_cache_size='4GB'");
+                        }
+                        
+                        //NOTE,Settings: need not set the page cost's
+                        stmt.execute("set  seq_page_cost = 1");
+                        stmt.execute("set  random_page_cost=4");
+                        stmt.execute("set cpu_operator_cost=0.0025");
+                        stmt.execute("set cpu_index_tuple_cost=0.005");
+                        stmt.execute("set cpu_tuple_cost=0.01");        
+                        stmt.execute("set full_robustness = on");
+                        stmt.execute("set oneFPCfull_robustness = on");
+                        stmt.execute("set varyingJoins = "+varyingJoins);
+
+                        for(int d=0;d<dimension;d++){
+                                stmt.execute("set JS_multiplier"+(d+1)+ "= "+ JS_multiplier[d]);
+                                stmt.execute("set robust_eqjoin_selec"+(d+1)+ "= "+ selectivity[p.get_dimension(d)]);
+                                stmt.execute("set FPC_JS_multiplier"+(d+1)+ "= "+ JS_multiplier[d]);
+                                stmt.execute("set FPCrobust_eqjoin_selec"+(d+1)+ "= "+ temp_act_sel[d]);
+                                // essentially forcing the  plan optimal at (x,y) location to the query having (x_a,y_a) 
+                                // as selectivities been injected 
+                        }
+
+                        stmt.execute(query);
+                        //read the selectivity returned
+                        file = new File(cardinalityPath+"spill_cost");
+                        fr = new FileReader(file);
+                        br = new BufferedReader(fr);
+                        //read the selectivity or the info needed for INL
+                        //--------------------------------------------------------------
+                        execCost = Double.parseDouble(br.readLine());
+                        
+                        // Commenting this assert since it is possible that execCost is greater than the budget due to Grid issues
+                        //For instance, a 6K cost point can be part of 2K cost contour
+                        // assert(execCost<=budget) : funName+" execution cost of spilling is greater than the optimal cost at that position";
+
+                        String valstring = new String();
+                        /*
+                         * If there are two rows in the file then it is the hash join case. Where the second row is the number of rows
+                         * fetched by the predicate at p.getDimension(dim) selectivity 
+                         */
+                        if((valstring = br.readLine()) != null){
+                                hashjoinFlag = true;
+                                double rows = Double.parseDouble(valstring);
+                                double remainingBudget = budget -execCost; 
+                                
+                                if(remainingBudget<=0)
+                                        break;
+                                //assert(newrows>=rows) : funName+" hashjoin case ";
+                                //0.01 is used since this is the cost taken for outputting every tuple (=cpu_tuple_cost) 
+                                double  budget_needed= (rows*0.01)*(actual_sel[dim]/selectivity[p.get_dimension(dim)] -1);
+                                if(budget_needed <=0){
+                                        sel_completely_learnt = true;
+                                         //already p is at actual_sel[dim]
+                                }
+                                else if(budget_needed > remainingBudget){
+        
+                                        /*
+                                         * temp_act_sel[dim] contains the selectivity that would have been learnt
+                                         * with the remaining budget
+                                         */
+                                        temp_act_sel[dim] = selectivity[p.get_dimension(dim)] + (actual_sel[dim]- selectivity[p.get_dimension(dim)])*(remainingBudget/budget_needed);
+                                
+                                        assert(temp_act_sel[dim] > selectivity[p.get_dimension(dim)]) : funName+" there is no increment in learnt selectivity even with increase in budget";
+                                        
+                                        if(findNearestSelectivity(temp_act_sel[dim])!=temp_act_sel[dim]){
+                                                //move to the lower indexed selectivity
+                                                int idx = findNearestPoint(temp_act_sel[dim]);
+                                                idx --;
+                                                assert(idx>=0) : funName+" index going below 0";
+                                                 temp_act_sel[dim] = selectivity[idx];
+                                        }
+                                        selLearnt = temp_act_sel[dim];
+                                        double extra_budget_consumed = (rows*0.01)*(temp_act_sel[dim]/selectivity[p.get_dimension(dim)] -1);
+                                        prevExecCost = execCost + extra_budget_consumed;
+                                                
+                                }
+                                else if(budget_needed <= remainingBudget){
+                                        sel_completely_learnt = true;
+                                        execCost += budget_needed;
+                                }
+                                break;
+                        }
+                        
+                        //-----------------------------------------------------------------
+                        /*
+                         * this is the case when the current execution exceeds the budget and learnt selectivity is as per the
+                         * earlier loop's selectivity of dim. The learnt selectivity is strictly less than actual selectivity. This is 
+                         * because if the learnt selectivity (earlier iteration's) is >= than the actual sel, the loop should have finished 
+                         * in the earlier iteration itself. This is anyway conservative. 
+                         */
+                        if(execCost>budget) //TODO: should we add a small threshold? may be use the next point's cost
+                                break;
+                        /*
+                         * this is the case when we learn the actual selectivity since the execCost (subplan's cost) does not 
+                         * exceed the plan's total budget
+                         */
+                        if(findNearestPoint(temp_act_sel[dim]) >= findNearestPoint(actual_sel[dim])){
+                                sel_completely_learnt = true;
+                                break;
+                        }
+                        prevExecCost = execCost;
+                        
+                        //adding the code for oneshot learning of predicate
+                        
+                        int idx = findNearestPoint(temp_act_sel[dim]);
+                        idx ++;
+                        assert(idx<resolution) : funName+" index exceeding resolution";
+                        temp_act_sel[dim] = selectivity[idx];
+                }
+
+                if(br!=null)
+                        br.close();
+                if(fr!=null)
+                        fr.close();
+        
+                
+        if(sel_completely_learnt){                      
+                learning_cost += execCost;
+                selLearnt = temp_act_sel[dim];
+                        System.out.println("Cost of the spilled execution is "+execCost);
+                prevExecCost = execCost;
+        }
+        else{
+                if(prevExecCost==Double.MIN_VALUE){
+                        learning_cost += cost; //just adding the cost of the contour in the while loop zips through in the starting iteration itself
+                        prevExecCost = cost; //for the sake of printing
+                        selLearnt = selectivity[p.get_dimension(dim)];
+                }
+                else{
+                        //prevExecCost = cost;
+                        learning_cost += prevExecCost; //actual cost taken for learning selecitvity
+                }
+                        
+                System.out.println("Cost of the spilled execution (not sucessful) is "+prevExecCost);
+                int idx = findNearestPoint(temp_act_sel[dim]);
+                if(!hashjoinFlag && idx>0){     
+                        idx --;
+                        assert(idx>=0): funName+" idx going below 0";
+                        selLearnt = selectivity[idx];
+                }
+                execCost = prevExecCost;
+        }
+    }
+    catch ( Exception e ) {
+        System.err.println( e.getClass().getName()+": "+ e.getMessage() );
+         e.printStackTrace();
+
+    }           
+        assert(dim<=dimension) : funName+" dim data structure more dimensions possible";
+        assert(selLearnt<=(double)1):funName+"selectivity learnt is greater than 1!";
+        System.out.println("Postgres: selectivity learnt  "+selLearnt+" with plan number "+plan);
+       
+        if(!sel_for_point.containsKey(new Index(p,getContourNumber(cost),dim)) && !sel_completely_learnt){
+        	 ArrayList<Double> l = new ArrayList<Double>();
+             l.add(selLearnt); l.add(execCost);
+                sel_for_point.put(new Index(p,getContourNumber(cost),dim), l);
+        }
+        return selLearnt; //has to have single line in the file
+	}                       
+
 	
 	private double[] convertIndextoSelectivity(int[] point_Index) {
 
@@ -1198,7 +2017,8 @@ if (resolution ==40){
 			apktPath = prop.getProperty("apktPath");
 			qtName = prop.getProperty("qtName");
 			varyingJoins = prop.getProperty("varyingJoins");
-
+			dimension = Integer.parseInt(prop.getProperty("dimension").trim());
+			
 			JS_multiplier = new double[dimension];
 			for(int d=0;d<dimension;d++){
 				String multiplierStr = new String("JS_multiplier"+(d+1));
@@ -1648,72 +2468,32 @@ class point_generic
 	}
 
 }
+//
+//final class Pair<T> {
+//
+//	final T left;
+//	final T right;
+//
+//	public Pair(T left, T right)
+//	{
+//		if (left == null || right == null) { 
+//			throw new IllegalArgumentException("left and right must be non-null!");
+//		}
+//		this.left = left;
+//		this.right = right;
+//	}
+//
+//	public boolean equals(Object o)
+//	{
+//		// see @maaartinus answer
+//		if (! (o instanceof Pair)) { return false; }
+//		Pair p = (Pair)o;
+//		return left.equals(p.left) && right.equals(p.right);
+//	} 
+//
+//	public int hashCode()
+//	{
+//		return 7 * left.hashCode() + 13 * right.hashCode();
+//	} 
+//}
 
-final class Pair<T> {
-
-	final T left;
-	final T right;
-
-	public Pair(T left, T right)
-	{
-		if (left == null || right == null) { 
-			throw new IllegalArgumentException("left and right must be non-null!");
-		}
-		this.left = left;
-		this.right = right;
-	}
-
-	public boolean equals(Object o)
-	{
-		// see @maaartinus answer
-		if (! (o instanceof Pair)) { return false; }
-		Pair p = (Pair)o;
-		return left.equals(p.left) && right.equals(p.right);
-	} 
-
-	public int hashCode()
-	{
-		return 7 * left.hashCode() + 13 * right.hashCode();
-	} 
-}
-
-class Index {
-
-	point_generic  p;
-	Integer contour;
-	Integer dim;
-
-	public Index(point_generic  p, int contour, Integer dim) {
-		this.p = p;
-		this.contour = contour;
-		this.dim = dim;
-	}
-
-	  @Override
-	    public int hashCode() {
-		  String s = new String(Integer.toString(dim) + Integer.toString(contour));
-		  for(int i=0;i<p.dimension;i++)
-			  s = s + Integer.toString(p.get_dimension(i));
-		  return s.hashCode();
-	    }
-
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		Index other = (Index) obj;
-		for(int i=0;i<p.dim_values.length;i++){
-			if(p.get_dimension(i) != other.p.get_dimension(i))
-				return false;
-		}
-		if (Integer.valueOf(contour) != Integer.valueOf(other.contour))
-			return false;
-		if(this.dim != other.dim)
-			return false;
-		return true;
-	}
-}

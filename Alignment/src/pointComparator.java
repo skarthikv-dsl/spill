@@ -4,10 +4,10 @@ import java.util.Comparator;
  
 import org.apache.commons.lang3.builder.CompareToBuilder;
 
-public class pointComparator implements Comparator<point_generic> {
+public class pointComparator implements Comparator<point_generic_opt_sb> {
 	
 	
-	public int compare(point_generic p1, point_generic p2) {
+	public int compare(point_generic_opt_sb p1, point_generic_opt_sb p2) {
 		
 		if(p1.get_no_of_dimension()==2){
 	        return new CompareToBuilder()
