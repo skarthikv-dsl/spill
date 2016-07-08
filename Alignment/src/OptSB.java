@@ -148,7 +148,7 @@ static int n_partition_best = 0;
 	static boolean local_partition_flag = true;
 	
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
-	static boolean memoization_flag=true;
+	static boolean memoization_flag=false;
 	//---------------------------------------------------------
 
 	static HashMap<Integer,ArrayList<Integer>> cur_partition = new HashMap<Integer,ArrayList<Integer>>();
@@ -1024,6 +1024,7 @@ System.exit(1);
 				{
 					max_pt.set_badguy();
 					getBestFPC(max_pt,j);
+					getBestSpillingPlan(max_pt,j);
 				}
 				//		maxPoints[j]=findMaxPoint(partition_info[m].getList(),j);
 				maxPoints[j] = max_pt;
@@ -1047,12 +1048,12 @@ System.exit(1);
 				
 				if(q==(cur_partition.get(m_key).size()-1))
 				{
-					ld = min_fpc_point[m].get_fpcSpillDim();
+					ld = min_fpc_point[m].get_fpcSpillDim();   //are you getting the real minimum cost partition?
 					assert(ld!=-1):"Spill Dimension is -1";
 					min_fpc_point[m].set_badguy();
-					local_points_max.put(ld, min_fpc_point[m]);
+					local_points_max.put(ld, min_fpc_point[m]);  
 					cur_tol = (min_fpc_point[m].getpercent_err()/100.0);
-					cur_val = cur_val + (1+cur_tol);
+					cur_val = cur_val + (1+cur_tol); //cost*(1+cur_tol)
 					if( cur_tol > local_tmax)
 						local_tmax = cur_tol;
 			//		 if(print_flag)
@@ -1257,13 +1258,20 @@ System.exit(1);
 				fpc_plan = p.getfpc_plan();
 				assert(fpc_plan != -1): "bad guy doesn't have a fpc plan!!";
 				learning_dim = plans_list[fpc_plan].getcategory(remainingDim);
+				assert(learning_dim == p.get_fpcSpillDim()) : funName+" FPC learning dimension at max. point";
+				assert(learning_dim == key) : funName+" FPC learning dimension is not key for points_max data structure";
+				
 				tolerance = 1+(p.getpercent_err()/100.0);
 				if(print_flag)
 				{
 					System.out.println("\nTolerance = "+tolerance);
 				}
 			}
-
+			
+			assert(tolerance<=tmax): funName+" the tolerance is beyond the max. tolerance during execution";
+			assert(points_max.containsKey(learning_dim )): funName+" not learning a leader dimension";
+			
+			
 			if(remainingDim.contains(learning_dim))
 			{				
 				//		if(sel_max[d] != (double)-1){  //TODO is type casting Okay?: Ans: It is fine
@@ -1287,12 +1295,13 @@ System.exit(1);
 				d= learning_dim;
 				if(currentContourPoints!=0)
 					sel_max[d] = sel;
+				
 				else{
 					if(print_flag)
 					{
 						System.out.println("Sel_max["+d+"]= "+sel_max[d]+", sel= "+sel);
 					}
-					assert(sel_max[d]>=sel) : "When Contour Point is zero: getLearntSelectivity is higher than sel[resolution]";
+					assert(sel_max[d]>=sel) : "When Contour Point is zero: getLearntSelectivity is higher than sel[resolution-1]";
 				}
 
 				//else
@@ -1301,6 +1310,7 @@ System.exit(1);
 				/*
 				 * add the tuple (dimension,plan) to the executions data structure
 				 */
+				//WRONG: TODO: change this to p.getfpc_plan
 				executions.add(new Pair(new Integer(d),new Integer(p.get_plan_no())));
 
 
@@ -1345,7 +1355,9 @@ System.exit(1);
 
 					minIndex[d] = maxIndex[d] = findNearestSelectivity(actual_sel[d]);
 					remainingDim.remove(remainingDim.indexOf(d));
+					assert(!remainingDim.contains(d)) : funName+ " even after removing the dimension the dimension remains in remaining_dimension";
 					remove_from_partition(d);
+					test_if_dimension_in_partition(d);
 					removeDimensionFromContourPoints(d);
 					return;
 				}
@@ -1386,6 +1398,13 @@ System.exit(1);
 					minIndex[d] = sel_max[d];
 		}
 
+	}
+
+	public void getBestSpillingPlan(point_generic max_pt, int j) {
+
+		String funName = "getBestSpillingPlan";
+		
+		
 	}
 
 	void print_points_max(HashMap<Integer,point_generic>points_max)
@@ -1644,7 +1663,7 @@ System.exit(1);
 			}
 		}
 		p.set_fpcSpillDim(dim_index);
-		assert(dim_index!=p.getLearningDimension()) : funName+" the "
+		assert(dim_index!=p.getLearningDimension()) : funName+" it should not the aligned scenario";
 	}
 	private void removeDimensionFromContourPoints(int d) {
 		String funName = "removeDimensionFromContourPoints";
@@ -1761,6 +1780,7 @@ System.exit(1);
 		int plan = p.get_plan_no();
 		if(remainingDim.size()==1)
 		{
+			assert(false) : funName+" ERROR: entering one dimension condition";
 			System.out.println(funName+"ERROR: entering one dimension condition");
 			return 0;   //TODO dont do spilling in the 1D case, until we fix the INL case
 		}
@@ -1825,8 +1845,11 @@ System.exit(1);
 			//
 			if(p.get_goodguy())
 				temp_cost = p.get_cost();
-			else
+			else{
 				temp_cost = AllPlanCosts[plan][p_loc];
+				assert(temp_cost == p.getfpc_cost()) : funName+ "temp_cost wrt fpc is not set correctly";
+			}
+			
 			if(temp_cost < 2*cost && (temp_cost > cost) )
 				budget = temp_cost;
 
@@ -1863,7 +1886,7 @@ System.exit(1);
 				}
 			}
 			
-			m = new memo();
+			//m = new memo();
 			//			if(sel_for_point.containsKey(new Index(p,contour_no,dim)))
 			//			{
 			//				selLearnt= sel_for_point.get(new Index(p,contour_no,dim));
@@ -2010,7 +2033,7 @@ System.exit(1);
 				 */
 
 
-				m.add(temp_actual_index[dim], execCost);
+				//m.add(temp_actual_index[dim], execCost);
 				
 
 				prevExecCost = execCost;
@@ -2074,8 +2097,8 @@ System.exit(1);
 						assert(idx>=0): funName+" idx going below 0";
 						selLearnt = selectivity[idx];
 					}
-					if(!hashjoinFlag)
-						m.add(idx, cost);
+//					if(!hashjoinFlag)
+//						m.add(idx, cost);
 					if(print_flag)
 					{
 						System.out.println("hashjoinFlag= "+hashjoinFlag);
@@ -2156,6 +2179,26 @@ System.exit(1);
 		}
 	//	assert(1==0):"The dimension is not removed from the paritions!!";
 	}
+	
+	void test_if_dimension_in_partition(int dim)
+	{
+		int i,j,k;
+		Integer i_key;
+		String funName = "test_if_dimension_in_partition";
+		Iterator itr = cur_partition.keySet().iterator();
+		for(i=0;i<n_partition;i++)
+		{
+			assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
+			i_key = (Integer) itr.next();
+			for(j=0;j<cur_partition.get(i_key).size();j++)
+			{
+				assert(!cur_partition.get(i_key).contains(dim)) : funName+" removed dimension still present even after removing";
+			}
+		}
+	//	assert(1==0):"The dimension is not removed from the paritions!!";
+	}
+	
+	
 	public void initialize(int location) {
 
 		//		ArrayList<Integer> a1 = new ArrayList<Integer>();
@@ -3408,7 +3451,7 @@ System.exit(1);
 
 
 
-class point_generic_opt_sb
+class point_generic
 {
 	int dimension=OptSB.dimension;
 	static boolean load_flag = false;
@@ -3428,7 +3471,7 @@ class point_generic_opt_sb
 	static String plansPath;
 
 	int [] dim_values;
-	point_generic_opt_sb(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
+	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 
 		if(load_flag == false)
 		{
@@ -3474,7 +3517,7 @@ class point_generic_opt_sb
 
 
 	}
-	point_generic_opt_sb(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
+	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
 
 		if(load_flag == false)
 		{

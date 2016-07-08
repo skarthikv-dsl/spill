@@ -2549,220 +2549,221 @@ if (resolution ==40){
 		return opt;
 	}
 
+	
+	class point_generic
+	{
+		int dimension;
 
+		ArrayList<Integer> order;
+		ArrayList<Integer> storedOrder;
+		int value;
+		int p_no;
+		double cost;
+		String plansPath;
 
-}
+		int [] dim_values;
+		point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 
-
-
-class point_generic
-{
-	int dimension;
-
-	ArrayList<Integer> order;
-	ArrayList<Integer> storedOrder;
-	int value;
-	int p_no;
-	double cost;
-	static String plansPath;
-
-	int [] dim_values;
-	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
-
-		loadPropertiesFile();
-		System.out.println();
-		dim_values = new int[dimension];
-		for(int i=0;i<dimension;i++){
-			dim_values[i] = arr[i];
-			System.out.print(arr[i]+",");
-		}
-		System.out.println("   having cost = "+cost+" and plan "+num);
-		this.p_no = num;
-		this.cost = cost;
-
-		order =  new ArrayList<Integer>();
-		storedOrder = new ArrayList<Integer>();
-		try{
-			FileReader file = new FileReader(plansPath+num+".txt");
-
-			BufferedReader br = new BufferedReader(file);
-			String s;
-			while((s = br.readLine()) != null) {
-				//System.out.println(Integer.parseInt(s));
-				value = Integer.parseInt(s);
-				storedOrder.add(value);
-
+			loadPropertiesFile();
+			System.out.println();
+			dim_values = new int[dimension];
+			for(int i=0;i<dimension;i++){
+				dim_values[i] = arr[i];
+				System.out.print(arr[i]+",");
 			}
-			br.close();
-			file.close();
-		}
-		catch(FileNotFoundException e){
-			if(plansPath.contains("SQL")){
-				for(int i=0;i<dimension;i++){
-					storedOrder.add(i);
+			System.out.println("   having cost = "+cost+" and plan "+num);
+			this.p_no = num;
+			this.cost = cost;
+
+			order =  new ArrayList<Integer>();
+			storedOrder = new ArrayList<Integer>();
+			try{
+				FileReader file = new FileReader(plansPath+num+".txt");
+
+				BufferedReader br = new BufferedReader(file);
+				String s;
+				while((s = br.readLine()) != null) {
+					//System.out.println(Integer.parseInt(s));
+					value = Integer.parseInt(s);
+					storedOrder.add(value);
+
+				}
+				br.close();
+				file.close();
+			}
+			catch(FileNotFoundException e){
+				if(plansPath.contains("SQL")){
+					for(int i=0;i<dimension;i++){
+						storedOrder.add(i);
+					}
 				}
 			}
+
+
+		}
+		point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
+
+			loadPropertiesFile();
+			System.out.println();
+			dim_values = new int[dimension];
+			for(int i=0;i<dimension;i++){
+				dim_values[i] = arr[i];
+				System.out.print(arr[i]+",");
+			}
+			System.out.println("   having cost = "+cost+" and plan "+num);
+			this.p_no = num;
+			this.cost = cost;
+
+			//check: if the order and stored order are being updated/populated
+			order =  new ArrayList<Integer>(predicateOrder);
+			storedOrder = new ArrayList<Integer>(predicateOrder);		
+		}
+		int getLearningDimension(){
+			if(order.isEmpty())
+				System.out.println("ERROR: all dimensions learnt");
+			return order.get(0);
 		}
 
-
-	}
-	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
-
-		loadPropertiesFile();
-		System.out.println();
-		dim_values = new int[dimension];
-		for(int i=0;i<dimension;i++){
-			dim_values[i] = arr[i];
-			System.out.print(arr[i]+",");
+		/*
+		 * get the selectivity/index of the dimension
+		 */
+		public int get_dimension(int d){
+			return dim_values[d];
 		}
-		System.out.println("   having cost = "+cost+" and plan "+num);
-		this.p_no = num;
-		this.cost = cost;
 
-		//check: if the order and stored order are being updated/populated
-		order =  new ArrayList<Integer>(predicateOrder);
-		storedOrder = new ArrayList<Integer>(predicateOrder);		
-	}
-	int getLearningDimension(){
-		if(order.isEmpty())
-			System.out.println("ERROR: all dimensions learnt");
-		return order.get(0);
-	}
-
-	/*
-	 * get the selectivity/index of the dimension
-	 */
-	public int get_dimension(int d){
-		return dim_values[d];
-	}
-
-	/*
-	 * get the plan number for this point
-	 */
-	public int get_plan_no(){
-		return p_no;
-	}
-
-	public double get_cost(){
-		return cost;
-	}
-	public int[] get_point_Index(){
-		return dim_values;
-	}
-	public void remove_dimension(int d){
-		String funName = "remove_dimension";
-		if(order.isEmpty())
-			System.out.println(funName+": ERROR: all dimensions learnt");
-		if(order.contains(d))
-			order.remove(order.indexOf(d));
-		else 
-			System.out.println(funName+": ERROR: removing a dimension that does not exist");
-
-	}
-	public void reloadOrderList(ArrayList<Integer> remainingDim) {
-
-		order.clear();
-		for(int itr=0;itr<storedOrder.size();itr++){
-			if(remainingDim.contains(storedOrder.get(itr)))
-				order.add(storedOrder.get(itr));
+		/*
+		 * get the plan number for this point
+		 */
+		public int get_plan_no(){
+			return p_no;
 		}
-	}
-	public int get_no_of_dimension(){
-		return dimension;
-	}
 
-	public ArrayList<Integer> getPredicateOrder(){
-		return storedOrder;
-	}
-
-	public void loadPropertiesFile() {
-
-		Properties prop = new Properties();
-		InputStream input = null;
-
-		try {
-
-			input = new FileInputStream("./src/Constants.properties");
-
-			// load a properties file
-			prop.load(input);
-
-			// get the property value and print it out
-			plansPath = prop.getProperty("apktPath");
-			plansPath = plansPath+"predicateOrder/";
-			dimension = Integer.parseInt(prop.getProperty("dimension"));
-		} catch (IOException ex) {
-			ex.printStackTrace();
+		public double get_cost(){
+			return cost;
 		}
-	}
-
-}
-
-final class Pair<T> {
-
-	final T left;
-	final T right;
-
-	public Pair(T left, T right)
-	{
-		if (left == null || right == null) { 
-			throw new IllegalArgumentException("left and right must be non-null!");
+		public int[] get_point_Index(){
+			return dim_values;
 		}
-		this.left = left;
-		this.right = right;
+		public void remove_dimension(int d){
+			String funName = "remove_dimension";
+			if(order.isEmpty())
+				System.out.println(funName+": ERROR: all dimensions learnt");
+			if(order.contains(d))
+				order.remove(order.indexOf(d));
+			else 
+				System.out.println(funName+": ERROR: removing a dimension that does not exist");
+
+		}
+		public void reloadOrderList(ArrayList<Integer> remainingDim) {
+
+			order.clear();
+			for(int itr=0;itr<storedOrder.size();itr++){
+				if(remainingDim.contains(storedOrder.get(itr)))
+					order.add(storedOrder.get(itr));
+			}
+		}
+		public int get_no_of_dimension(){
+			return dimension;
+		}
+
+		public ArrayList<Integer> getPredicateOrder(){
+			return storedOrder;
+		}
+
+		public void loadPropertiesFile() {
+
+			Properties prop = new Properties();
+			InputStream input = null;
+
+			try {
+
+				input = new FileInputStream("./src/Constants.properties");
+
+				// load a properties file
+				prop.load(input);
+
+				// get the property value and print it out
+				plansPath = prop.getProperty("apktPath");
+				plansPath = plansPath+"predicateOrder/";
+				dimension = Integer.parseInt(prop.getProperty("dimension"));
+			} catch (IOException ex) {
+				ex.printStackTrace();
+			}
+		}
+
 	}
 
-	public boolean equals(Object o)
-	{
-		// see @maaartinus answer
-		if (! (o instanceof Pair)) { return false; }
-		Pair p = (Pair)o;
-		return left.equals(p.left) && right.equals(p.right);
-	} 
+	final class Pair<T> {
 
-	public int hashCode()
-	{
-		return 7 * left.hashCode() + 13 * right.hashCode();
-	} 
-}
+		final T left;
+		final T right;
 
-class Index {
+		public Pair(T left, T right)
+		{
+			if (left == null || right == null) { 
+				throw new IllegalArgumentException("left and right must be non-null!");
+			}
+			this.left = left;
+			this.right = right;
+		}
 
-	point_generic  p;
-	Integer contour;
-	Integer dim;
+		public boolean equals(Object o)
+		{
+			// see @maaartinus answer
+			if (! (o instanceof Pair)) { return false; }
+			Pair p = (Pair)o;
+			return left.equals(p.left) && right.equals(p.right);
+		} 
 
-	public Index(point_generic  p, int contour, Integer dim) {
-		this.p = p;
-		this.contour = contour;
-		this.dim = dim;
+		public int hashCode()
+		{
+			return 7 * left.hashCode() + 13 * right.hashCode();
+		} 
 	}
 
-	  @Override
-	    public int hashCode() {
-		  String s = new String(Integer.toString(dim) + Integer.toString(contour));
-		  for(int i=0;i<p.dimension;i++)
-			  s = s + Integer.toString(p.get_dimension(i));
-		  return s.hashCode();
-	    }
+	class Index {
 
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		Index other = (Index) obj;
-		for(int i=0;i<p.dim_values.length;i++){
-			if(p.get_dimension(i) != other.p.get_dimension(i))
+		point_generic  p;
+		Integer contour;
+		Integer dim;
+
+		public Index(point_generic  p, int contour, Integer dim) {
+			this.p = p;
+			this.contour = contour;
+			this.dim = dim;
+		}
+
+		  @Override
+		    public int hashCode() {
+			  String s = new String(Integer.toString(dim) + Integer.toString(contour));
+			  for(int i=0;i<p.dimension;i++)
+				  s = s + Integer.toString(p.get_dimension(i));
+			  return s.hashCode();
+		    }
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
 				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			Index other = (Index) obj;
+			for(int i=0;i<p.dim_values.length;i++){
+				if(p.get_dimension(i) != other.p.get_dimension(i))
+					return false;
+			}
+			if (Integer.valueOf(contour) != Integer.valueOf(other.contour))
+				return false;
+			if(this.dim != other.dim)
+				return false;
+			return true;
 		}
-		if (Integer.valueOf(contour) != Integer.valueOf(other.contour))
-			return false;
-		if(this.dim != other.dim)
-			return false;
-		return true;
 	}
+
+	
 }
+
+
+
