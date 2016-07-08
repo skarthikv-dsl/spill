@@ -538,6 +538,8 @@ System.exit(1);
 				currentContourPoints ++;
 				//-- For counting
 				category=plans_list[plan_no].getcategory(remainingDim);
+				assert(p.getLearningDimension()==category): "getLearning Dimension of spillBound is not equal to category of opt-SB";
+				
 				spillDim_planCnt[category]++;
 				// --
 				learning_dim = category;
@@ -550,6 +552,8 @@ System.exit(1);
 				partition_info[partition_no].addPoint(p);
 			}
 		}
+		
+		
 //		if(local_partition_flag == true)
 //		{
 //
@@ -678,6 +682,7 @@ System.exit(1);
 
 	int getPartitionNumber(int dim)
 	{
+		String funName = "getPartitionNumber"; 
 		int i,j,k;
 		ArrayList<Integer> i_list;
 		Integer i_key;
@@ -696,7 +701,10 @@ System.exit(1);
 				k = cur_partition.get(i_key).get(j);
 				if(k == dim)
 				{
+					assert(i_key<=remainingDim.size()-1):funName+" parition number is more than number of remaining dimensions";
+					assert(i_key<=n_partition-1):funName+" parition number is more than number of remaining dimensions";
 					return i_key;
+					
 				}
 			}
 		}
@@ -887,11 +895,12 @@ System.exit(1);
 	private void spillBoundAlgo(int contour_no) throws IOException {
 
 
+		String funName = "spillBoundAlgo";
 		int learning_dim;
 		double tolerance = -1;
 		int fpc_plan;
 		double cur_val=0;
-		String funName = "spillBoundAlgo"; 
+		 
 		Set<Integer> unique_plans = new HashSet();
 		if(print_flag)
 		{
@@ -966,7 +975,7 @@ System.exit(1);
 			first_flag = false;
 			currentContourPoints = 0;
 		make_local_partition(p_encoding, loc_dimension);
-		
+		assert(n_partition<=remainingDim.size()): funName+" no. of partitions is more than the number of remaining dimensions";
 		doPartition(ContourPointsMap.get(contour_no), min_cost_index, unique_plans);
 		point_generic [] min_fpc_point = new point_generic[n_partition];
 
@@ -984,6 +993,7 @@ System.exit(1);
 			m_key = (Integer)itr.next();
 			if(partition_info[m_key].getList().isEmpty())
 			{
+				//TODO: this code can be reached!
 			//	if(print_flag)
            //         System.out.println("Partition "+m_key+" is empty");
 				continue;
@@ -1007,7 +1017,7 @@ System.exit(1);
             //            System.out.println("GG: max_point for partition "+m_key+ " for dimension "+j+" is "+max_pt.get_point_Index()[j]);
 				//	max_pt.set_fpcSpillDim(j);
 					local_points_max.put(j, max_pt);
-					cur_val = cur_val + 1;
+					cur_val = cur_val + 1;  // TODO: curval += max_pt.getOptCost();
 					break;
 				}
 				else
@@ -1029,10 +1039,12 @@ System.exit(1);
 					min_fpc_point[m] = maxPoints[j];
 				}
 
+				
 				if(maxPoints[j].getfpc_cost() < min_fpc_point[m].getfpc_cost())
 				{
 					min_fpc_point[m] = maxPoints[j];
 				}
+				
 				if(q==(cur_partition.get(m_key).size()-1))
 				{
 					ld = min_fpc_point[m].get_fpcSpillDim();
@@ -1589,6 +1601,7 @@ System.exit(1);
 
 	void getBestFPC(point_generic p, int dim_index)
 	{
+		String funName = "getBestFPC";
 		int category;
 		int loc;
 		double NewFpcCost,CurFpcCost, CurOptCost;
@@ -1627,11 +1640,11 @@ System.exit(1);
 					p.putfpc_plan(j);
 					error=((NewFpcCost-CurOptCost)/CurOptCost)*100;
 					p.putpercent_err(error);
-
 				}
 			}
 		}
 		p.set_fpcSpillDim(dim_index);
+		assert(dim_index!=p.getLearningDimension()) : funName+" the "
 	}
 	private void removeDimensionFromContourPoints(int d) {
 		String funName = "removeDimensionFromContourPoints";
@@ -1653,12 +1666,12 @@ System.exit(1);
         for (i = 0; i < n; ++i)
             if (p_encoding[i] > part_num)
                 part_num = p_encoding[i];
-     
+      
         /* Print the p partitions. */
         int p;
         n_partition = part_num;
         cur_partition.clear();
-        partition_info = new partition[n_partition];
+        
         for (p = part_num; p >= 1; --p) {
        //     System.out.printf("{");
             /* If s[i] == p, then i + 1 is part of the pth partition. */
@@ -1668,12 +1681,22 @@ System.exit(1);
                 {
                 	temp_list.add(remainingDim.get(i));
                 }
-            cur_partition.put(p-1, temp_list);  //assert that the elements are disjoint and union is the remaining dimensions
+            cur_partition.put(p-1, temp_list);  
                 //    System.out.printf("%d, ", i + 1);
          //   System.out.printf("\b\b} ");
          //   System.out.printf("} ");
         }
-     //   System.out.printf("\n");
+        
+      //following code is for checking whether the elements in the partition are disjoint and union is the remaining dimensions
+        int part_size = 0;
+     for(int it=0;it<cur_partition.size();it++){
+    	 part_size += cur_partition.get(it).size();
+    	 for(int it1=0;it1<part_size; it1++){
+    		 for(int it2=it+1;it2<cur_partition.size();it2++)
+            	 assert(!cur_partition.get(it2).contains(cur_partition.get(it).get(it1))): "the dimensions are not disjoint in partitions"; 
+    	 }
+     }
+     assert(part_size == n): "union of the elements in the partition is the total elements in the remaining dimension";
         
         //---------------
 //        for(i=0;i<n_partition;i++)
@@ -1700,7 +1723,7 @@ System.exit(1);
 			i_key = (Integer)itr.next();
 			partition_info[i_key] = new partition(i_key, convertIntegers(cur_partition.get(i_key)));  
 		}
-		// assert put here
+		
         
 	}
 	
