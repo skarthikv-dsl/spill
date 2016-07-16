@@ -16,10 +16,43 @@ public class test {
 	static double matrix_one [][];
 	double matrix_two [][];
 	static double array1 [];
+	static int prev_encoding [] = new int[5];
+	static int p_count=0;
+	static HashMap<Integer,Integer> partitionCountMap = new HashMap<Integer,Integer>();
 	static HashMap<Integer,Integer> uniquePointsMap = new HashMap<Integer,Integer>();
+	static Set<Integer> partitionSet = new HashSet<Integer>();
+	
+	
     public static void main(String[] args) {
     	
-    	
+    	String varyingJoins = "1234567890";
+    	test obj = new test();
+    	int loc_dimension =5;
+    	int p_encoding[] = new int[loc_dimension];
+    	int until_max[] = new int[loc_dimension];
+    	for(int i =0; i< loc_dimension; i++)
+		{
+			p_encoding[i] = 1;
+			until_max[i] = 1;
+		}
+    	obj.printp(p_encoding, until_max, loc_dimension);
+    	int count =0;
+    	while(true)
+    	{
+    		
+    		if(obj.next(p_encoding, until_max , loc_dimension )==false)
+    		{
+    			//System.arraycopy( prev_encoding, 0, p_encoding, 0,loc_dimension);
+    			//obj.printp(p_encoding, until_max, loc_dimension);
+    			break;
+    		}
+    		obj.printp(p_encoding, until_max, loc_dimension);
+    		count++;
+    	}
+
+    	System.out.println("partition count map is "+partitionCountMap);
+    	System.out.println("the partition set size is "+partitionSet.size());
+
     	double[] temp_1 = new double[10000000];
     	int firstArg=0;
     	if (args.length > 0) {
@@ -48,7 +81,7 @@ public class test {
     	
     	System.out.println("uniquePoints Map "+uniquePointsMap);
     	System.out.println("Before: hashstring is "+hashStrings);
-        test obj = new test();
+        //test obj = new test();
         obj.test_copy_by_reference(hashStrings);
         System.out.println("After: hashstring is "+hashStrings);
         double x = obj.calculate_x(1.3,30);
@@ -186,6 +219,85 @@ public class test {
 		
 		
 	}
+    
+    void printp(int s[], int n[], int dim) {
+        /* Get the total number of partitions. In the exemple above, 2.*/
+        int part_num = 1;
+        int i;
+        for (i = 0; i < dim; ++i)
+            if (s[i] > part_num)
+                part_num = s[i];
+     
+        /* Print the p partitions. */
+        int p;
+        for (p = part_num; p >= 1; --p) {
+            System.out.print("{");
+            /* If s[i] == p, then i + 1 is part of the pth partition. */
+            for (i = 0; i < dim; ++i)
+                if (s[i] == p)
+                	System.out.print( i + 1);
+            System.out.print("} ");
+        }
+        
+        
+        System.out.println("Count is "+(++p_count)+" and corresponding integer is "+convertToInteger(s));
+        
+        if(!partitionCountMap.containsKey(part_num))
+        	partitionCountMap.put(part_num, 1);
+        else{
+        	int temp = partitionCountMap.get(part_num);
+        	temp++;
+        	partitionCountMap.remove(part_num);
+        	partitionCountMap.put(part_num,temp);
+        }
+        
+        int num = convertToInteger(s);
+        partitionSet.add(new Integer(num));
+        
+    }
+    
+	private int convertToInteger(int[] s) {
+		
+		int result = 0;
+		for(int i = 0; i < s.length; i++) 
+			result += Math.pow(10,i) * s[s.length - i - 1];
+		return result;
+	}
+
+	boolean next(int []s, int []m, int n) {
+        /* Update s: 1 1 1 1 -> 2 1 1 1 -> 1 2 1 1 -> 2 2 1 1 -> 3 2 1 1 ->
+        1 1 2 1 ... */
+        /*int j;
+        printf(" -> (");
+        for (j = 0; j &lt; n; ++j)
+            printf("%d, ", s[j]);
+        printf("\\b\\b)\\n");*/
+        int i = 0;
+        ++s[i];
+        while ((i < n - 1) && (s[i] > m[i] + 1)) {
+            s[i] = 1;
+            ++i;
+            ++s[i];
+        }
+     
+        /* If i is has reached n-1 th element, then the last unique partition
+        has been found*/
+        if (i == n - 1)
+            return false;
+     
+        /* Because all the first i elements are now 1, s[i] (i + 1 th element)
+        is the largest. So we update max by copying it to all the first i
+        positions in m.*/
+        int max = s[i];
+        for (i = i - 1; i >= 0; --i)
+            m[i] = max;
+     
+    /*  for (i = 0; i &lt; n; ++i)
+            printf("%d ", m[i]);
+        getchar();*/
+        return true;
+    }
+    
     void testfun()
     {
     	array1[1] = 400;

@@ -22,6 +22,7 @@ import java.io.ObjectInputStream;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -33,7 +34,11 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
-import com.ibm.db2.jcc.b.ac;
+//import com.ibm.db2.jcc.b.ac;
+
+
+
+
 
 import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
@@ -65,6 +70,7 @@ public class OptSB
 	static String varyingJoins;
 	static double JS_multiplier [];
 	static String query;
+	static String query_opt_spill;
 	static String cardinalityPath;
 
 	double  minIndex [];
@@ -133,7 +139,7 @@ static int n_partition_best = 0;
 
 	//-----------------------------------FLAGS
 	// Use the plansPath as ./src/ --> This is for making jar and running it
-	static boolean src_flag=false;
+	static boolean src_flag=true;
 	
 	// If true then all the printf would be displayed
 	static boolean print_flag = true;
@@ -259,7 +265,7 @@ static int n_partition_best = 0;
 			cost = cost*2;
 			i = i+1;
 		}
-System.exit(1);
+//System.exit(1);
 		/*
 		 * Setting up the DB connection to Postgres/TPCH/TPCDS Benchmark. 
 		 */
@@ -277,7 +283,7 @@ System.exit(1);
 			else{
 				System.out.println("entered DB tpcds");
 				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5432/tpcdscodd",
+						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
 								"sa", "database");
 
 			}
@@ -303,8 +309,8 @@ System.exit(1);
 			max_point = totalPoints;
 		double[] subOpt = new double[max_point];
 		//mainpoint
-	//	for (int  j = 0 ; j < max_point ; j++)
-					for (int  j = 21893 ; j < 21984; j++)
+		for (int  j = 0 ; j < max_point ; j++)
+//					for (int  j = 21893 ; j < 21984; j++)
 		{
 			if(print_flag || print_loop_flag)
 			{
@@ -923,7 +929,8 @@ System.exit(1);
 		//		int min_fpc_dim =Integer.MAX_VALUE;
 
 
-		point_generic max_pt; 
+		ArrayList<point_generic>  max_pts = new ArrayList<point_generic>(); 
+		point_generic extreme_pt,max_pt = null;
 		/*
 		 * to store the max selectivity each dimension  can learn in a contour
 		 */
@@ -958,7 +965,8 @@ System.exit(1);
 			p_encoding[i] = 1;
 			until_max[i] = 1;
 		}
-			//	System.arraycopy(p_encoding, 0, prev_encoding, 0, loc_dimension);				
+			//	System.arraycopy(p_encoding, 0, prev_encoding, 0, loc_dimension);		
+		int partition_count =0;
 		while(true)
 		{
 			if(first_flag == false )
@@ -966,7 +974,11 @@ System.exit(1);
 				//		break; 
 				if(next(p_encoding, until_max ,loc_dimension )==false)
 				{
+					if(dimension==5){
+					p_encoding[0] = 4;p_encoding[1] = 2;p_encoding[2] = 3;p_encoding[3] = 2;p_encoding[4] = 1;
 					System.arraycopy( prev_encoding, 0, p_encoding, 0,loc_dimension);
+					}					
+					partition_count++;
 					break;
 				}
 			}
@@ -1004,29 +1016,44 @@ System.exit(1);
 				//	j = p[m][q];
 				j = cur_partition.get(m_key).get(q); 
 
-				max_pt = partition_info[m_key].getMaxPoint(j);
-				if(max_pt == null)
+				max_pts = partition_info[m_key].getMaxPoints(j);
+				if(max_pts == null)
 				{
 					System.out.println("\nNo Max point for returned NULL\n");
 					System.exit(1);
 				}
-				if(plans_list[max_pt.getopt_plan()].getcategory(remainingDim)==j)
-				{
-					max_pt.set_goodguy();
-			//		 if(print_flag)
-            //            System.out.println("GG: max_point for partition "+m_key+ " for dimension "+j+" is "+max_pt.get_point_Index()[j]);
-				//	max_pt.set_fpcSpillDim(j);
-					local_points_max.put(j, max_pt);
-					cur_val = cur_val + 1;  // TODO: curval += max_pt.getOptCost();
+				
+				double min_error = Double.MAX_VALUE;
+				for(int t=0;t<max_pts.size();t++){
+					extreme_pt = max_pts.get(t); 
+					if(plans_list[extreme_pt.getopt_plan()].getcategory(remainingDim)==j)
+					{
+						extreme_pt.set_goodguy();
+						local_points_max.put(j, extreme_pt);
+						max_pt = extreme_pt;
+						cur_val = cur_val + 1;  // TODO: curval += max_pt.getOptCost();
+						break;
+					}
+					else
+					{
+						extreme_pt.set_badguy();
+						double temp_error = getBestFPC(extreme_pt,j);
+						if(temp_error < min_error){
+							min_error = temp_error;
+							max_pt = extreme_pt;
+						}
+					}
+					//		maxPoints[j]=findMaxPoint(partition_info[m].getList(),j);
+				}
+				
+				if(max_pt.get_goodguy())
 					break;
-				}
-				else
-				{
-					max_pt.set_badguy();
-					getBestFPC(max_pt,j);
-					getBestSpillingPlan(max_pt,j);
-				}
-				//		maxPoints[j]=findMaxPoint(partition_info[m].getList(),j);
+				
+				point_generic temp_pt = max_pt;
+				double best_fpc_pt_cost = getBestSpillingPlan(max_pt, j);
+				if(best_fpc_pt_cost > max_pt.getfpc_cost())
+					max_pt = temp_pt; 
+				
 				maxPoints[j] = max_pt;
 
 				//				if(maxPoints[j].get_goodguy()==true)
@@ -1400,12 +1427,81 @@ System.exit(1);
 
 	}
 
-	public void getBestSpillingPlan(point_generic max_pt, int j) {
+	public double getBestSpillingPlan(point_generic p, int dim_index) {
 
 		String funName = "getBestSpillingPlan";
-		
-		
+		Statement stmt = null;
+
+		//set the selectedEPP and nonSelectedEPP variables
+		String selectedEPP=null, nonSelectedEPP=null;
+		for(int i=0;i<varyingJoins.length();i+=2){
+			if(i/2 == dim_index){
+				selectedEPP = new String(varyingJoins.substring(i, i+2));
+			}
+			else{
+				if(nonSelectedEPP==null)
+					nonSelectedEPP = new String(varyingJoins.substring(i, i+2));
+				else{
+					String str = new String(varyingJoins.substring(i, i+2));
+					nonSelectedEPP = nonSelectedEPP.concat(str);
+				}					
+			}
+		}
+
+		try {
+			stmt = conn.createStatement();
+			//NOTE,Settings: need not set the page cost's
+			stmt.execute("set  seq_page_cost = 1");
+			stmt.execute("set  random_page_cost=4");
+			stmt.execute("set cpu_operator_cost=0.0025");
+			stmt.execute("set cpu_index_tuple_cost=0.005");
+			stmt.execute("set cpu_tuple_cost=0.01");	
+			stmt.execute("set full_robustness = on");
+			stmt.execute("set oneFPCfull_robustness = on");
+			stmt.execute("set spill_optimization = on");
+			stmt.execute("set varyingJoins = "+varyingJoins);
+			stmt.execute("set selectedEPP = "+selectedEPP);
+			stmt.execute("set nonSelectedEPP = "+nonSelectedEPP);
+
+
+			for(int d=0;d<dimension;d++){
+				stmt.execute("set JS_multiplier"+(d+1)+ "= "+ JS_multiplier[d]);
+				stmt.execute("set robust_eqjoin_selec"+(d+1)+ "= "+ selectivity[p.get_dimension(d)]); 
+			}			
+			ResultSet rs = stmt.executeQuery(query_opt_spill);
+			System.out.println(rs);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		File file = new File(cardinalityPath+"spill_opt_plan_cost");
+		FileReader fr;
+		double execCost = -1;
+		try {
+			fr = new FileReader(file);
+			BufferedReader br = new BufferedReader(fr);
+			execCost = Double.parseDouble(br.readLine());
+
+		} catch (NumberFormatException | IOException e) {
+
+			e.printStackTrace();
+		}
+
+		//assert(p.getfpc_cost()>0) : funName+" fpc_cost is not set by lohit's getBestFPC function";
+		double error=((execCost-p.getopt_cost())/p.getopt_cost())*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
+		if(error <= p.getpercent_err()){
+			p.putfpc_cost(execCost);
+			p.putpercent_err(error);
+			p.putfpc_plan(-2);
+		}
+		else{
+			assert(false) : funName+ "the optimal spilling plan cannot have lesser cost than the fpc plan";
+		}
+		return p.getpercent_err();
 	}
+
+
 
 	void print_points_max(HashMap<Integer,point_generic>points_max)
 	{
@@ -1618,7 +1714,7 @@ System.exit(1);
 	}
 
 
-	void getBestFPC(point_generic p, int dim_index)
+	double getBestFPC(point_generic p, int dim_index)
 	{
 		String funName = "getBestFPC";
 		int category;
@@ -1627,7 +1723,7 @@ System.exit(1);
 		int OptPlan = p.get_plan_no();
 		assert(plans_list[OptPlan].getcategory(remainingDim)!=dim_index):"Trying for fpc for a good guy!!\n";
 		int []index = new int[dimension];
-		p.putfpc_cost(-1);
+		//p.putfpc_cost(-1);
 		//	point_generic cur = p;
 		index = p.get_point_Index();
 		double error;
@@ -1662,8 +1758,15 @@ System.exit(1);
 				}
 			}
 		}
+		if(p.getfpc_cost() == Double.MAX_VALUE){
+			//p.putfpc_cost(Double.MAX_VALUE);
+			p.putfpc_plan(-1);
+			error=((p.getfpc_cost()-p.getopt_cost())/p.getopt_cost())*100;
+			p.putpercent_err(error);
+		}
 		p.set_fpcSpillDim(dim_index);
 		assert(dim_index!=p.getLearningDimension()) : funName+" it should not the aligned scenario";
+		return p.getpercent_err();
 	}
 	private void removeDimensionFromContourPoints(int d) {
 		String funName = "removeDimensionFromContourPoints";
@@ -1815,7 +1918,7 @@ System.exit(1);
 			//Settings: constants in BinaryTree   
 			BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
 			tree.FROM_CLAUSE = FROM_CLAUSE;
-			int spill_values [] = tree.getSpillNode(dim,plan); //[0] gives node id of the tree and [1] gives the spill_node for postgres
+			int spill_values [] = tree.getSpillNode(dim,plan,"tpcds"); //[0] gives node id of the tree and [1] gives the spill_node for postgres
 			int spill_node = spill_values[1];
 			if(print_flag)
 			{
@@ -1917,6 +2020,7 @@ System.exit(1);
 				stmt.execute("set cpu_tuple_cost=0.01");	
 				stmt.execute("set full_robustness = on");
 				stmt.execute("set oneFPCfull_robustness = on");
+				stmt.execute("set spill_optimization = off");
 				stmt.execute("set varyingJoins = "+varyingJoins);
 
 				for(int d=0;d<dimension;d++){
@@ -1956,7 +2060,7 @@ System.exit(1);
 						if(remainingBudget<=0)
 						{
 							temp_actual_index[dim] = temp_actual_index[dim] -1;
-							m.add(temp_actual_index[dim], cost);
+							//m.add(temp_actual_index[dim], cost);
 							break;
 						}
 						//assert(newrows>=rows) : funName+" hashjoin case ";
@@ -2001,7 +2105,7 @@ System.exit(1);
 						{
 							sel_completely_learnt=true;
 						}
-						m.add(temp_actual_index[dim], prevExecCost);
+						//m.add(temp_actual_index[dim], prevExecCost);
 						//	execCost = prevExecCost;	
 						//	}
 						//						else if(budget_needed <= remainingBudget){
@@ -2123,7 +2227,7 @@ System.exit(1);
 				}
 				execCost = prevExecCost;
 			}
-			sel_for_point.put(new Index(p,contour_no,dim), m);
+			//sel_for_point.put(new Index(p,contour_no,dim), m);
 		}
 		catch ( Exception e ) {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
@@ -3033,7 +3137,8 @@ System.exit(1);
 			//query = "explain analyze FPC(\"lineitem\") (\"104949\")  select	supp_nation,	cust_nation,	l_year,	volume from	(select n1.n_name as supp_nation, n2.n_name as cust_nation, 	DATE_PART('YEAR',l_shipdate) as l_year,	l_extendedprice * (1 - l_discount) as volume	from	supplier, lineitem, orders, 	customer, nation n1,	nation n2 where s_suppkey = l_suppkey	and o_orderkey = l_orderkey and c_custkey = o_custkey		and s_nationkey = n1.n_nationkey and c_nationkey = n2.n_nationkey	and  c_acctbal<=10000 and l_extendedprice<=22560 ) as temp";
 			//query = "explain analyze FPC(\"catalog_sales\")  (\"150.5\") select ca_zip, cs_sales_price from catalog_sales,customer,customer_address,date_dim where cs_bill_customer_sk = c_customer_sk and c_current_addr_sk = ca_address_sk and cs_sold_date_sk = d_date_sk and ca_gmt_offset <= -7.0   and d_year <= 1900  and cs_list_price <= 150.5";
 			query = prop.getProperty("query");
-
+			query_opt_spill = prop.getProperty("query_opt_spill");
+			
 			cardinalityPath = prop.getProperty("cardinalityPath");
 
 
@@ -3114,6 +3219,7 @@ System.exit(1);
 	//			//query = "explain analyze FPC(\"lineitem\") (\"104949\")  select	supp_nation,	cust_nation,	l_year,	volume from	(select n1.n_name as supp_nation, n2.n_name as cust_nation, 	DATE_PART('YEAR',l_shipdate) as l_year,	l_extendedprice * (1 - l_discount) as volume	from	supplier, lineitem, orders, 	customer, nation n1,	nation n2 where s_suppkey = l_suppkey	and o_orderkey = l_orderkey and c_custkey = o_custkey		and s_nationkey = n1.n_nationkey and c_nationkey = n2.n_nationkey	and  c_acctbal<=10000 and l_extendedprice<=22560 ) as temp";
 	//			//query = "explain analyze FPC(\"catalog_sales\")  (\"150.5\") select ca_zip, cs_sales_price from catalog_sales,customer,customer_address,date_dim where cs_bill_customer_sk = c_customer_sk and c_current_addr_sk = ca_address_sk and cs_sold_date_sk = d_date_sk and ca_gmt_offset <= -7.0   and d_year <= 1900  and cs_list_price <= 150.5";
 	//			query = prop.getProperty("query");
+	//			query_opt_spill = prop.getProperty("query_opt_spill");
 	//			
 	//			cardinalityPath = prop.getProperty("cardinalityPath");
 	//			
@@ -3460,9 +3566,8 @@ class point_generic
 	int fpcSpillDim = -1;
 	boolean good_guy=false;
 	int fpc_plan=-1;
-	double fpc_cost=-1.0;
+	double fpc_cost=Double.MAX_VALUE;
 	double percent_err=-1.0;
-
 	ArrayList<Integer> order;
 	ArrayList<Integer> storedOrder;
 	int value;
@@ -3473,11 +3578,11 @@ class point_generic
 	int [] dim_values;
 	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 
-		if(load_flag == false)
-		{
+//		if(load_flag == false)
+//		{
 			loadPropertiesFile();
-			load_flag = true;
-		}
+//			load_flag = true;
+//		}
 		//	System.out.println();
 		dim_values = new int[dimension];
 		for(int i=0;i<dimension;i++){
@@ -3519,11 +3624,11 @@ class point_generic
 	}
 	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
 
-		if(load_flag == false)
-		{
+//		if(load_flag == false)
+//		{
 			loadPropertiesFile();
-			load_flag = true;
-		}
+//			load_flag = true;
+//		}
 		//	System.out.println();
 
 		dim_values = new int[dimension];
@@ -3641,6 +3746,14 @@ class point_generic
 
 	public ArrayList<Integer> getPredicateOrder(){
 		return storedOrder;
+	}
+
+	public void printPoint(){
+
+		for(int i=0;i<dimension;i++){
+			System.out.print(dim_values[i]+",");
+		}
+		System.out.println("   having cost = "+cost+" and plan "+p_no);
 	}
 
 	public void loadPropertiesFile() {
@@ -3776,7 +3889,7 @@ class partition
 	int [] dim_list ;
 	ArrayList<point_generic> cur_partition_local = new ArrayList<point_generic>();
 
-	HashMap<Integer,point_generic> points_max_local = new HashMap<Integer,point_generic>();
+	HashMap<Integer,ArrayList<point_generic>> points_max_local = new HashMap<Integer,ArrayList<point_generic>>();
 
 	double [] sel_max = new double[OptSB.dimension];
 
@@ -3808,23 +3921,18 @@ class partition
 		for(int j=0;j<dim_list.length;j++)
 		{
 			i = dim_list[j];
-			//			if(p.get_dimension(2)==9)
-			//			{
-			//				System.out.println("HERE");
-			//			}
-			if(OptSB.selectivity[p.get_dimension(i)] > sel_max[i]){
-				//		if(p.getLearningDimension() == i)
-				//				if(OptSB.plans_list[p.get_plan_no()].getcategory(OptSB.remainingDim) == i)
-				//					p.set_goodguy();
-				if(points_max_local.containsKey(i))
-				{
-					points_max_local.remove(i);
+
+			if(OptSB.selectivity[p.get_dimension(i)] >= sel_max[i]){
+			
+				if(OptSB.selectivity[p.get_dimension(i)] > sel_max[i]){
+					if(points_max_local.containsKey(i))
+					{
+						points_max_local.remove(i);
+						
+					}
+					points_max_local.put(i, new ArrayList<point_generic>());
 				}
-				//				if(OptSB.plans_list[p.get_plan_no()].getcategory(OptSB.remainingDim)==i)
-				//				{
-				//					p.set_goodguy();
-				//				}
-				points_max_local.put(i, p);
+				points_max_local.get(i).add(p);
 				sel_max[i] = OptSB.selectivity[p.get_dimension(i)]; 
 			}
 
@@ -3838,7 +3946,7 @@ class partition
 	}
 	
 	
-	point_generic getMaxPoint(int dim)
+	ArrayList<point_generic> getMaxPoints(int dim)
 	{
 		Boolean flag=false;
 		for(int i=0;i<no_of_dims;i++)
