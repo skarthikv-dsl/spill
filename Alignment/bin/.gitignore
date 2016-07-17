@@ -1,4 +1,5 @@
 /BinaryTree.class
+/Constants.properties
 /ContourLocationsMap.class
 /CostGreedyGCI3D.class
 /GCI3D.class
@@ -9,8 +10,11 @@
 /Pair.class
 /Pipeline.class
 /Vertex.class
+/backup.txt
 /iisc
 /memo.class
+/misc
 /partition.class
 /plan.class
+/pointComparator.class
 /point_generic.class

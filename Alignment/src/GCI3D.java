@@ -53,6 +53,7 @@ import java.io.ObjectInputStream;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -78,6 +79,9 @@ import java.util.Set;
 
 
 
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
@@ -1127,8 +1131,10 @@ public class GCI3D
                 tree.FROM_CLAUSE = FROM_CLAUSE;
                 int spill_values [] = tree.getSpillNode(dim,plan,"tpcds"); //[0] gives node id of the tree and [1] gives the spill_node for postgres
                 int spill_node = spill_values[1];
+                String spill_pred = tree.predicates[dim];
+                String spill_pred_rev = tree.predicatesRev[dim];
                 System.out.println("The spill node value in the tree is "+spill_node);
-                
+                System.out.println("The spill node predicate in the tree is "+ spill_pred);
                 /*
                  *temp_act_sel to iterate from point p to  until either we exhaust the budget 
                  *or learn the actual selectivity. Note the change. 
@@ -1152,6 +1158,11 @@ public class GCI3D
                 File file=null;
                 FileReader fr=null;
                 BufferedReader br=null;
+                String str1;
+                String regx;
+                Pattern pattern;
+                Matcher matcher;
+                Double hash_rows=-1.0;
                 int c_no = getContourNumber(cost);
                 Index point_index = new Index(p,c_no,dim);
                 System.out.println(point_index.hashCode());
@@ -1196,15 +1207,54 @@ public class GCI3D
                                 // as selectivities been injected 
                         }
 
-                        stmt.execute(query);
+                        ResultSet rs = stmt.executeQuery(query);
+                        if(spill_node == 543){
+                        	System.out.println("We are at node 23");
+                        }
+                        while(rs.next()){
+                        	
+                        			str1 = rs.getString(1);
+                        			if(str1.contains(spill_pred) || str1.contains(spill_pred_rev)){
+                        				//System.out.println(str1);
+                        				hashjoinFlag = str1.contains("Hash Join");
+                        				
+                        				if(hashjoinFlag){
+                        					regx = Pattern.quote("rows=") + "(.*?)" + Pattern.quote("width=");
+                            				
+                            				pattern = Pattern.compile(regx);
+                            				 matcher = pattern.matcher(str1);
+                            				while(matcher.find()){
+                            					hash_rows = Double.parseDouble(matcher.group(1));	
+                            				}
+                        					
+                        				}
+                        				
+                        				regx = Pattern.quote("..") + "(.*?)" + Pattern.quote("rows=");
+                        				
+                        				pattern = Pattern.compile(regx);
+                        				matcher = pattern.matcher(str1);
+                        				while(matcher.find()){
+                        					execCost = Double.parseDouble(matcher.group(1));	
+                        				}
+                        				
+                        						
+                        						
+                        				break;
+                        			}
+                        }
                         //read the selectivity returned
-                        file = new File(cardinalityPath+"spill_cost");
-                        fr = new FileReader(file);
-                        br = new BufferedReader(fr);
+ //                       file = new File(cardinalityPath+"spill_cost");
+//                        fr = new FileReader(file);
+//                        br = new BufferedReader(fr);
                         //read the selectivity or the info needed for INL
                         //--------------------------------------------------------------
-                        execCost = Double.parseDouble(br.readLine());
-                        
+//                      double  execCost_old = Double.parseDouble(br.readLine());
+//                      System.out.println("execCost = "+execCost+ ", execCost_old ="+execCost_old);
+                        //if(execCost< execCost_old  || execCost > execCost_old) {System.out.println("old and new execution cost are not matching"); System.exit(1);}
+                        //execCost ++;
+//                       assert(execCost == execCost_old) : "exec costs are not matching";
+                       
+                        // assert(1==0);
                         // Commenting this assert since it is possible that execCost is greater than the budget due to Grid issues
                         //For instance, a 6K cost point can be part of 2K cost contour
                         // assert(execCost<=budget) : funName+" execution cost of spilling is greater than the optimal cost at that position";
@@ -1215,8 +1265,11 @@ public class GCI3D
                          * fetched by the predicate at p.getDimension(dim) selectivity 
                          */
                         if((valstring = br.readLine()) != null){
-                                hashjoinFlag = true;
-                                double rows = Double.parseDouble(valstring);
+                 //       if(hashjoinFlag==true){
+                                assert(hashjoinFlag == true);
+//                                double rows_old = Double.parseDouble(valstring);
+                        	    double rows = hash_rows;
+//                        	    assert(rows_old == rows):  "old and new hash rows are not matching";
                                 double remainingBudget = budget -execCost; 
                                 
                                 if(remainingBudget<=0)
