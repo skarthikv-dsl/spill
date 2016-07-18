@@ -68,20 +68,15 @@ import java.util.Set;
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
@@ -94,67 +89,78 @@ public class GCI3D
 
 	double err = 0.0;
 
-	double AllPlanCosts[][];
-	int nPlans;
-	int plans[];
+	static double AllPlanCosts[][];
+	static int nPlans;
+	static int plans[];
 	boolean isContourPoint[];
-	double OptimalCost[];
-	int totalPlans;
-	int dimension;
-	int resolution;
-	DataValues[] data;
-	int totalPoints;
-	double selectivity[];
-
-
-	//The following parameters has to be set manually for each query
+	static double OptimalCost[];
+	static int totalPlans;
+	static int dimension;
+	static int resolution;
+	static DataValues[] data;
+	static int totalPoints;
+	static double selectivity[];
 	static String apktPath;
 	static String qtName ;
-	static String varyingJoins;
-	static double JS_multiplier [];
-	static String query;
-	static String cardinalityPath;
-
-	double  minIndex [];
-	double  maxIndex [];
+	static Jdbc3PoolingDataSource source;
 	static boolean MSOCalculation = true;
 	static boolean randomPredicateOrder = false;
 
-	//Settings: 
-	static int sel_distribution; 
-	static boolean FROM_CLAUSE;
-	static Connection conn = null;
-	static int database_conn;
-
-	static ArrayList<Integer> remainingDim;
+	//The following parameters has to be set manually for each query
+	static String cardinalityPath;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
-	ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
 	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
-	HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
-	static ArrayList<Pair<Integer>> executions = new ArrayList<Pair<Integer>>();  
-	static HashMap<Index,ArrayList<Double>> sel_for_point = new HashMap<Index,ArrayList<Double>>();
-	static double learning_cost = 0;
-	static double oneDimCost = 0;
-	static int no_executions = 0;
-	static int no_repeat_executions = 0;
-	static int max_no_executions = 0;
-	static int max_no_repeat_executions = 0;
-
-	static boolean [] already_visited;  
-
-	double[] actual_sel;
-
+	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	//for ASO calculation 
 	static double planCount[], planRelativeArea[];
 	static double picsel[], locationWeight[];
-
 	static double areaSpace =0,totalEstimatedArea = 0;
+	//	static Connection conn = null;
+	static int database_conn;
+	static int sel_distribution; 
+	static boolean FROM_CLAUSE;
+	static String varyingJoins; 
+	static double JS_multiplier []; 
+	static String query; 	
+	static double h_cost;
 
+	double  minIndex [];
+	double  maxIndex [];
 
+	ArrayList<Integer> remainingDim;
+	HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
+	ArrayList<Pair<Integer>> executions = new ArrayList<Pair<Integer>>();  
+	HashMap<Index,ArrayList<Double>> sel_for_point = new HashMap<Index,ArrayList<Double>>();
+	double learning_cost = 0;
+	double oneDimCost = 0;
+	int no_executions = 0;
+	int no_repeat_executions = 0;
+	int max_no_executions = 0;
+	int max_no_repeat_executions = 0;
+	boolean [] already_visited;  
+	double[] actual_sel;
 
-
-	public static void main(String args[]) throws IOException, SQLException
+	public GCI3D(){}
+	
+	public GCI3D(GCI3D obj){
+		this.minIndex = obj.minIndex;
+		this.maxIndex = obj.maxIndex;
+		this.remainingDim = obj.remainingDim;
+		this.ContourPointsMap = obj.ContourPointsMap;
+		this.executions = obj.executions;
+		this.sel_for_point = obj.sel_for_point; 
+		this.learning_cost = obj.learning_cost;
+		this.oneDimCost = obj.oneDimCost;
+		this.no_executions = obj.no_executions;
+		this.no_repeat_executions = obj.no_repeat_executions;
+		this.max_no_executions = obj.max_no_executions;
+		this.max_no_repeat_executions = obj.max_no_repeat_executions;
+		this.already_visited = obj.already_visited;  
+		this.actual_sel = obj.actual_sel;
+	}
+	
+	public static void main(String args[]) throws IOException, SQLException, InterruptedException, ExecutionException
 	{
 		
 		final long startTime = System.currentTimeMillis();
@@ -181,7 +187,7 @@ public class GCI3D
 		obj.checkGradientAssumption();
 		
 		int i;
-		double h_cost = obj.getOptimalCost(obj.totalPoints-1);
+		h_cost = obj.getOptimalCost(obj.totalPoints-1);
 		double min_cost = obj.getOptimalCost(0);
 		double ratio = h_cost/min_cost;
 		assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
@@ -190,15 +196,15 @@ public class GCI3D
 		i = 1;
 
 		//to generate contours
-		remainingDim.clear(); 
+		obj.remainingDim.clear(); 
 		for(int d=0;d<obj.dimension;d++){
-			remainingDim.add(d);
+			obj.remainingDim.add(d);
 		}
 
 		learntDim.clear();
 		learntDimIndices.clear();
 		double cost = obj.getOptimalCost(0);
-		getAllPermuations(remainingDim,0);
+		getAllPermuations(obj.remainingDim,0);
 		assert (allPermutations.size() == obj.factorial(obj.dimension)) : "all the permutations are not generated";
 
 		obj.isContourPoint = new boolean[obj.totalPoints];
@@ -238,21 +244,31 @@ public class GCI3D
 		try{
 			System.out.println("entered DB conn1");
 			Class.forName("org.postgresql.Driver");
-
+			source = new Jdbc3PoolingDataSource();
+			source.setDataSourceName("A Data Source");
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
-				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
-								"sa", "database");
+				
+				source.setServerName("localhost:5431");
+				source.setDatabaseName("tpch-ai");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+//								"sa", "database");
 			}
 			else{
+				
 				System.out.println("entered DB tpcds");
-				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
-								"sa", "database");
+				source.setServerName("localhost:5432");
+				source.setDatabaseName("tpcds");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
+//								"sa", "database");
 
 			}
+			source.setUser("sa");
+			source.setPassword("database");
+			source.setMaxConnections(10);
 			System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
@@ -266,12 +282,30 @@ public class GCI3D
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
 		int ASO_points=0;
 		obj.getPlanCountArray();
-		//int max_point = 0; /*not to execute the spillBound algorithm*/
+		int min_point = 0; /*not to execute the spillBound algorithm*/
 		int max_point = 1; /*to execute a specific q_a */
 		//Settings
 		if(MSOCalculation)
 			max_point = obj.totalPoints;
+		
+		boolean singleThread = false;
+
+		if (args.length > 0) {
+    		/*updating the min and the max index if available*/
+    	    try {
+    	        min_point = Integer.parseInt(args[0]);
+    	        max_point = Integer.parseInt(args[1]);
+    	    } catch (NumberFormatException e) {
+    	        System.err.println("Argument" + args[0] + " must be an integer.");
+    	        System.exit(1);
+    	    }
+    	}
+		
+
 		double[] subOpt = new double[max_point];
+		
+		if(singleThread)
+		{
 		for (int  j = 0; j < max_point ; j++)
 		{
 			System.out.println("Entering loop "+j);
@@ -296,7 +330,7 @@ public class GCI3D
 				continue;
 			//----------------------------------------------------------
 			i =1;
-			executions.clear();
+			obj.executions.clear();
 			while(i<=obj.ContourPointsMap.size() && !obj.remainingDim.isEmpty())
 			{	
 
@@ -315,7 +349,7 @@ public class GCI3D
 				if(prev==1){ 
 					
 					obj.oneDimensionSearch(i,cost);
-					learning_cost = oneDimCost;
+					obj.learning_cost = obj.oneDimCost;
 				}
 				else
 					obj.spillBoundAlgo(i);
@@ -324,7 +358,7 @@ public class GCI3D
 				if(present < prev - 1 || present > prev)
 					System.out.println("ERROR");
 
-				algo_cost = algo_cost+ (learning_cost);
+				algo_cost = algo_cost+ (obj.learning_cost);
 				if(present == prev ){    // just to see whether any dimension was learnt
 					// if no dimension is learnt then move on to the next contour
 
@@ -332,24 +366,24 @@ public class GCI3D
 					 * capturing the properties of the query execution
 					 */
 					System.out.println("In Contour "+i+" has the following details");
-					System.out.println("No of executions is "+no_executions);
-					System.out.println("No of repeat moves is "+no_repeat_executions);
-					if(no_executions>max_no_executions)
-						max_no_executions = no_executions;
-					if(no_repeat_executions > max_no_repeat_executions)
-						max_no_repeat_executions = no_repeat_executions;
+					System.out.println("No of executions is "+obj.no_executions);
+					System.out.println("No of repeat moves is "+obj.no_repeat_executions);
+					if(obj.no_executions>obj.max_no_executions)
+						obj.max_no_executions = obj.no_executions;
+					if(obj.no_repeat_executions > obj.max_no_repeat_executions)
+						obj.max_no_repeat_executions = obj.no_repeat_executions;
 
 
 					cost = cost*2;  
 					i = i+1;
-					executions.clear();
+					obj.executions.clear();
 					/*
 					 * initialize the repeat moves and executions for the next contour
 					 */
 					for(int d=0;d<obj.dimension;d++){
-						already_visited[d] = false;
-						no_executions = 0;
-						no_repeat_executions =0;
+						obj.already_visited[d] = false;
+						obj.no_executions = 0;
+						obj.no_repeat_executions =0;
 					}
 
 				}
@@ -386,9 +420,169 @@ public class GCI3D
 			System.out.println("\nSpillBound The SubOptimaility  is "+SO);
 			System.out.println("\nSpillBound Harm  is "+Harm);
 		} //end of for
+	}
+		else{
+			max_point = 1; 
+			if(MSOCalculation)
+				//if(false)
+					max_point = obj.totalPoints;
+
+			List<SpillBoundinputParamStruct> inputs = new ArrayList<SpillBoundinputParamStruct>();
+			for (int j = 0; j < max_point; ++j) {
+				SpillBoundinputParamStruct input = new SpillBoundinputParamStruct(new GCI3D(obj), j);
+				inputs.add(input);
+			}
+			
+			int threads = Runtime.getRuntime().availableProcessors();
+			System.out.println("Available Cores " + threads);
+		    ExecutorService service = Executors.newFixedThreadPool(threads);
+		    List<Future<SpillBoundOutputParamStruct>> futures = new ArrayList<Future<SpillBoundOutputParamStruct>>();
+		    
+		    for (final SpillBoundinputParamStruct input : inputs) {
+		        Callable<SpillBoundOutputParamStruct> callable = new Callable<SpillBoundOutputParamStruct>() {
+		            public SpillBoundOutputParamStruct call() throws Exception {
+		            	SpillBoundOutputParamStruct output = new SpillBoundOutputParamStruct();
+		            	System.out.println("Begin execution loop "+ input.index);
+		            	int j = input.index;
+		            	GCI3D obj = input.obj;
+	            
+		    			double algo_cost =0;
+		    			double SO =0;
+		    			double cost = obj.getOptimalCost(0);
+		    			obj.initialize(j);
+		    			int[] index = obj.getCoordinates(obj.dimension, obj.resolution, j);
+		    			//		if(index[0]%5 !=0 || index[1]%5!=0)
+		    			//			continue;
+		    			//Settings:
+		    			//		obj.actual_sel[0] = 0.02;obj.actual_sel[1] = 0.99;obj.actual_sel[2] = 0.1;obj.actual_sel[3] = 0.99; /*uncomment for single execution*/
+
+		    			for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
+		    			if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000){
+		    				output.flag = false;
+		        			return output;
+		    			}
+		    			
+		    			//----------------------------------------------------------
+		    			int i =1;
+		    			obj.executions.clear();
+		    			while(i<=obj.ContourPointsMap.size() && !obj.remainingDim.isEmpty())
+		    			{	
+
+		    				if(cost<(double)10000){
+		    					cost *= 2;
+		    					i++;
+		    					continue;
+		    				}
+		    				assert (cost<=2*h_cost) : "cost limit exceeding";
+		    				if(cost>h_cost)
+		    					cost=h_cost;
+		    				System.out.println("---------------------------------------------------------------------------------------------\n");
+		    				System.out.println("Contour "+i+" cost : "+cost+"\n");
+		    				int prev = obj.remainingDim.size();
+
+		    				if(prev==1){ 
+		    					
+		    					obj.oneDimensionSearch(i,cost);
+		    					obj.learning_cost = obj.oneDimCost;
+		    				}
+		    				else
+		    					obj.spillBoundAlgo(i);
+
+		    				int present = obj.remainingDim.size();
+		    				if(present < prev - 1 || present > prev)
+		    					System.out.println("ERROR");
+
+		    				algo_cost = algo_cost+ (obj.learning_cost);
+		    				if(present == prev ){    // just to see whether any dimension was learnt
+		    					// if no dimension is learnt then move on to the next contour
+
+		    					/*
+		    					 * capturing the properties of the query execution
+		    					 */
+		    					System.out.println("In Contour "+i+" has the following details");
+		    					System.out.println("No of executions is "+obj.no_executions);
+		    					System.out.println("No of repeat moves is "+obj.no_repeat_executions);
+		    					if(obj.no_executions>obj.max_no_executions)
+		    						obj.max_no_executions = obj.no_executions;
+		    					if(obj.no_repeat_executions > obj.max_no_repeat_executions)
+		    						obj.max_no_repeat_executions = obj.no_repeat_executions;
+
+
+		    					cost = cost*2;  
+		    					i = i+1;
+		    					obj.executions.clear();
+		    					/*
+		    					 * initialize the repeat moves and executions for the next contour
+		    					 */
+		    					for(int d=0;d<obj.dimension;d++){
+		    						obj.already_visited[d] = false;
+		    						obj.no_executions = 0;
+		    						obj.no_repeat_executions =0;
+		    					}
+
+		    				}
+
+		    				System.out.println("---------------------------------------------------------------------------------------------\n");
+
+		    			}  //end of while
+
+		    			/*
+		    			 * printing the actual selectivity
+		    			 */
+		    			System.out.print("\nThe actual selectivity is original \t");
+		    			for(int d=0;d<obj.dimension;d++) 
+		    				System.out.print(obj.actual_sel[d]+",");
+
+		    			/*
+		    			 * storing the index of the actual selectivities. Using this printing the
+		    			 * index (an approximation) of actual selectivities and its cost
+		    			 */
+		    			int [] index_actual_sel = new int[obj.dimension]; 
+		    			for(int d=0;d<obj.dimension;d++) index_actual_sel[d] = obj.findNearestPoint(obj.actual_sel[d]);
+
+		    			System.out.print("\nCost of actual_sel ="+obj.cost_generic(index_actual_sel)+" at ");
+		    			for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
+
+		    			SO = (algo_cost/obj.cost_generic(index_actual_sel));
+		    			output.SO = SO;
+		    			
+		    			output.anshASO += SO*locationWeight[j];
+		    			
+		    			System.out.println("\nSpillBound The SubOptimaility  is "+SO);
+		    			return output;
+		    			//System.out.println("\nSpillBound Harm  is "+Harm);
+		            }
+		        };
+		        futures.add(service.submit(callable));
+		    }
+		
+		    service.shutdown();
+		    MSO =0;
+			ASO = 0;
+			anshASO = 0;
+			MaxHarm=-1*Double.MAX_VALUE;
+			ASO_points=0;
+
+			int j=0;
+		    for (Future<SpillBoundOutputParamStruct> future : futures) {
+		    	SpillBoundOutputParamStruct output = future.get();
+		    	if(output.flag)
+		    	{
+		    		subOpt[j] = output.SO;
+		    		if(output.SO>MSO)
+		    			MSO = output.SO;
+		    		if(output.Harm > MaxHarm)
+		    			MaxHarm = output.Harm;
+		    		ASO += output.SO;
+		    		ASO_points++;
+		    		anshASO += output.anshASO;
+		    		j++;
+		    	}
+		    }
+
+		}
 		//Settings
 		//obj.writeSuboptToFile(subOpt, apktPath);
-		conn.close();
 		System.out.println("SpillBound The MaxSubOptimaility  is "+MSO);
 		System.out.println("SpillBound Anshuman average Suboptimality is "+(double)anshASO);
 		System.out.println("SpillBound The AverageSubOptimaility  is "+(double)ASO/ASO_points);
@@ -1108,6 +1302,8 @@ public class GCI3D
 	
 	public double getLearntSelectivity(int dim,  double cost,point_generic p) {
 
+		Connection conn=null;
+		
         boolean hashjoinFlag =false;
         String funName = "getLearntSelectivity";
         if(remainingDim.size()==1)
@@ -1123,7 +1319,8 @@ public class GCI3D
     Statement stmt = null;
 
     try {
-     
+    	
+    	conn = source.getConnection();
         stmt = conn.createStatement();
         //System.out.println(funName+ " : database connection statement create successfully");
         //Settings: constants in BinaryTree   
@@ -1264,8 +1461,8 @@ public class GCI3D
                          * If there are two rows in the file then it is the hash join case. Where the second row is the number of rows
                          * fetched by the predicate at p.getDimension(dim) selectivity 
                          */
-                        if((valstring = br.readLine()) != null){
-                 //       if(hashjoinFlag==true){
+//                        if((valstring = br.readLine()) != null){
+                    if(hashjoinFlag==true){
                                 assert(hashjoinFlag == true);
 //                                double rows_old = Double.parseDouble(valstring);
                         	    double rows = hash_rows;
@@ -1337,10 +1534,10 @@ public class GCI3D
                         temp_act_sel[dim] = selectivity[idx];
                 }
 
-                if(br!=null)
-                        br.close();
-                if(fr!=null)
-                        fr.close();
+//                if(br!=null)
+//                        br.close();
+//                if(fr!=null)
+//                        fr.close();
         
                 
         if(sel_completely_learnt){                      
@@ -1374,7 +1571,12 @@ public class GCI3D
         System.err.println( e.getClass().getName()+": "+ e.getMessage() );
          e.printStackTrace();
 
-    }           
+    } finally{
+    	if (conn != null) {
+	        try { conn.close(); } catch (SQLException e) {}
+	    }
+    }
+    
         assert(dim<=dimension) : funName+" dim data structure more dimensions possible";
         assert(selLearnt<=(double)1):funName+"selectivity learnt is greater than 1!";
         System.out.println("Postgres: selectivity learnt  "+selLearnt+" with plan number "+plan);
@@ -2367,7 +2569,20 @@ if (resolution ==40){
 
 }
 
-
+class SpillBoundOutputParamStruct {
+	double SO = 0;
+	double Harm = 0;
+	double anshASO = 0;
+	boolean flag = true;
+}
+class SpillBoundinputParamStruct {
+	GCI3D obj;
+	int index;
+	public SpillBoundinputParamStruct(GCI3D obj, int index) {
+		this.obj = obj;
+		this.index = index;
+	}
+}
 
 //class point_generic
 //{
