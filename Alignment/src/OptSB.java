@@ -3576,6 +3576,29 @@ class point_generic
 	static String plansPath;
 
 	int [] dim_values;
+	
+	public point_generic(point_generic pg) {
+	
+		dimension = pg.dimension;
+		load_flag = pg.load_flag;
+		opt_plan = pg.opt_plan;
+		opt_cost = pg.opt_cost;
+		fpcSpillDim = pg.fpcSpillDim;
+		good_guy = pg.good_guy;
+		fpc_plan = pg.fpc_plan;
+		fpc_cost = pg.fpc_cost;
+		percent_err = pg.percent_err;
+		order = new ArrayList<Integer>(pg.order);
+		storedOrder = new ArrayList<Integer>(pg.storedOrder);
+		value = pg.value;
+		p_no = pg.p_no;
+		cost = pg.cost;
+		plansPath = pg.plansPath;
+
+		int  dim_values[] = new int[dimension];
+		System.arraycopy(pg.dim_values, 0, dim_values, 0, dimension);
+
+	}
 	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 
 //		if(load_flag == false)

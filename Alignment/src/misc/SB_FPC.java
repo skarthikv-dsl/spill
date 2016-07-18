@@ -1172,7 +1172,7 @@ class plan{
 		point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 			
 			//loadPropertiesFile();
-			dimension=4;
+			dimension=3;
 		//	System.out.println();
 			dim_values = new int[dimension];
 		//	System.out.println("\n In points_generic - Dimension="+dimension+"\n");

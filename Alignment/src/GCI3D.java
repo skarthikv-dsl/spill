@@ -59,6 +59,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -144,20 +145,33 @@ public class GCI3D
 	public GCI3D(){}
 	
 	public GCI3D(GCI3D obj){
-		this.minIndex = obj.minIndex;
-		this.maxIndex = obj.maxIndex;
-		this.remainingDim = obj.remainingDim;
-		this.ContourPointsMap = obj.ContourPointsMap;
-		this.executions = obj.executions;
+		minIndex = new double[obj.dimension];
+		maxIndex = new double[obj.dimension];		
+		this.remainingDim = new ArrayList<Integer>(obj.remainingDim);
+		this.ContourPointsMap = new HashMap<Integer, ArrayList<point_generic>>();
+		Iterator itr = obj.ContourPointsMap.keySet().iterator();
+		Integer key;
+		while(itr.hasNext())
+		{
+			key = (Integer)itr.next();
+			ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
+			for(int c=0;c<obj.ContourPointsMap.get(key).size();c++){
+				contourPoints.add(new point_generic(obj.ContourPointsMap.get(key).get(c)));
+			}
+			this.ContourPointsMap.put(key, contourPoints);
+		}
+		
+		//this.ContourPointsMap = obj.ContourPointsMap;
+		this.executions = new ArrayList<Pair<Integer>>();
 		this.sel_for_point = obj.sel_for_point; 
-		this.learning_cost = obj.learning_cost;
-		this.oneDimCost = obj.oneDimCost;
-		this.no_executions = obj.no_executions;
-		this.no_repeat_executions = obj.no_repeat_executions;
-		this.max_no_executions = obj.max_no_executions;
-		this.max_no_repeat_executions = obj.max_no_repeat_executions;
-		this.already_visited = obj.already_visited;  
-		this.actual_sel = obj.actual_sel;
+		this.learning_cost = 0;
+		this.oneDimCost = 0;
+		this.no_executions = 0;
+		this.no_repeat_executions = 0;
+		this.max_no_executions = 0;
+		this.max_no_repeat_executions = 0;
+		this.already_visited = new boolean[obj.dimension];  
+		this.actual_sel = new double[obj.dimension];
 	}
 	
 	public static void main(String args[]) throws IOException, SQLException, InterruptedException, ExecutionException
@@ -235,8 +249,13 @@ public class GCI3D
 			i = i+1;
 		}
 
+		obj.initialize(0);
+		GCI3D objTest = new GCI3D(obj);
+		obj.removeDimensionFromContourPoints(2);
+		objTest.removeDimensionFromContourPoints(2);
+//		obj.removeDimensionFromContourPoints(2);
 		//checking alignment threshold
-		//obj.checkAlignmentPenalty();
+		obj.checkAlignmentPenalty();
 		
 		/*
 		 * Setting up the DB connection to Postgres/TPCH/TPCDS Benchmark. 

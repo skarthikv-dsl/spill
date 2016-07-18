@@ -1,5 +1,7 @@
 package misc;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -13,11 +15,21 @@ public class test {
 	static String newLine = System.getProperty("line.separator");
 	static double matrix_one [][];
 	double matrix_two [][];
+	int var;
 	static double array1 [];
-    public static void main(String[] args) {
+	test(){}
+	test(test obj){
+		var = obj.var;
+	}
+    public static void main(String[] args) throws IOException {
         test obj = new test();
-        obj.arrayLengthTest();
+        obj.var = 20;
+        test obj1 = new test(obj);
+        obj.var++;
+        System.out.println(obj.var+"\t"+obj1.var);
+        //obj.arrayLengthTest();
         obj.ArraylistTest();
+        obj.HashMapTest();
         double x = obj.calculate_x(1.3,30);
         System.out.println("\n x is "+x+"\n");
         // ****************************************************************
@@ -135,8 +147,8 @@ public class test {
 		array1[1] = 200;
 		array1[2]= 303;
 	//	matrix_one = new double[4][4];
-		test obj1 = new test();
-		obj1.testfun();
+		test obj2 = new test();
+		obj2.testfun();
 		if(2!=2)
 			System.out.println("\n not equals works !!\n");
 
@@ -153,6 +165,22 @@ public class test {
 		
 		
 	}
+
+    private void HashMapTest() throws IOException {
+		
+    	HashMap<Integer,point_generic> map = new HashMap<Integer,point_generic>();
+    	int arr[] = new int[3];
+    	ArrayList<Integer> remainingDim = new ArrayList<Integer>();
+    	remainingDim.add(0);remainingDim.add(1);remainingDim.add(2);
+    	map.put(1, new point_generic(arr, 0, 230, remainingDim));
+    	map.put(2, new point_generic(arr, 1, 530, remainingDim));
+    	HashMap<Integer,point_generic> mapTest = new HashMap<Integer,point_generic>(map);
+    	mapTest.get(2).reloadOrderList(remainingDim);
+    	mapTest.get(2).order.get(0);
+    	mapTest.get(2).order.clear();
+    	map.get(2).order.get(0);
+	}
+	
     private void arrayLengthTest() {
 		// TODO Auto-generated method stub
     	String funName = "arrayLengthTest"; 
@@ -177,9 +205,12 @@ public class test {
     	ArrayList<Integer> a = new ArrayList<Integer>();
     	int t=1;
     	a.add(t);
- //   	a.add(0);
-    	
-    	System.out.println("a[10] = "+a);
+    	a.add(0);
+    	ArrayList<Integer> b = new ArrayList<Integer>(a);
+    	a.add(3);
+    	a.set(0, 5);
+    	b.remove(new Integer(0));
+ //   	System.out.println("a[10] = "+a);
     }
         // ****************************************************************
         
