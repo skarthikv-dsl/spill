@@ -3579,24 +3579,26 @@ class point_generic
 	
 	public point_generic(point_generic pg) {
 	
-		dimension = pg.dimension;
-		load_flag = pg.load_flag;
-		opt_plan = pg.opt_plan;
-		opt_cost = pg.opt_cost;
-		fpcSpillDim = pg.fpcSpillDim;
-		good_guy = pg.good_guy;
-		fpc_plan = pg.fpc_plan;
-		fpc_cost = pg.fpc_cost;
-		percent_err = pg.percent_err;
-		order = new ArrayList<Integer>(pg.order);
-		storedOrder = new ArrayList<Integer>(pg.storedOrder);
-		value = pg.value;
-		p_no = pg.p_no;
-		cost = pg.cost;
-		plansPath = pg.plansPath;
+		this.dimension = pg.dimension;
+		this.load_flag = pg.load_flag;
+		this.opt_plan = pg.opt_plan;
+		this.opt_cost = pg.opt_cost;
+		this.fpcSpillDim = pg.fpcSpillDim;
+		this.good_guy = pg.good_guy;
+		this.fpc_plan = pg.fpc_plan;
+		this.fpc_cost = pg.fpc_cost;
+		this.percent_err = pg.percent_err;
+		this.order = new ArrayList<Integer>(pg.order);
+		this.storedOrder = new ArrayList<Integer>(pg.storedOrder);
+		this.value = pg.value;
+		this.p_no = pg.p_no;
+		this.cost = pg.cost;
+		this.plansPath = pg.plansPath;
 
-		int  dim_values[] = new int[dimension];
-		System.arraycopy(pg.dim_values, 0, dim_values, 0, dimension);
+		this.dim_values = new int[dimension];
+		//System.arraycopy(pg.dim_values, 0, dim_values, 0, dimension);
+		for(int it=0;it<dimension;it++)
+			this.dim_values[it] = pg.dim_values[it];
 
 	}
 	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
@@ -3680,6 +3682,8 @@ class point_generic
 	 * get the selectivity/index of the dimension
 	 */
 	public int get_dimension(int d){
+		if(dim_values==null)
+			System.out.println("NULL of dim_values "+d);
 		return dim_values[d];
 	}
 

@@ -163,7 +163,7 @@ public class GCI3D
 	*/	
 		//this.ContourPointsMap = obj.ContourPointsMap;
 		this.executions = new ArrayList<Pair<Integer>>();
-		this.sel_for_point = obj.sel_for_point; 
+		this.sel_for_point = new HashMap<Index, ArrayList<Double>>(); 
 		this.learning_cost = 0;
 		this.oneDimCost = 0;
 		this.no_executions = 0;
@@ -280,8 +280,8 @@ public class GCI3D
 			else{
 				
 				System.out.println("entered DB tpcds");
-				source.setServerName("localhost:5431");
-				source.setDatabaseName("tpcdscodd");
+				source.setServerName("localhost:5432");
+				source.setDatabaseName("tpcds");
 //				conn = DriverManager
 //						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
 //								"sa", "database");
@@ -473,18 +473,21 @@ public class GCI3D
 		            	GCI3D obj = input.obj;
 	            
 		            	Iterator itr = global_obj.ContourPointsMap.keySet().iterator();
+		            	
 		        		Integer key;
 		        		while(itr.hasNext())
 		        		{
 		        			key = (Integer)itr.next();
 		        			ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
 		        			for(int c=0;c<global_obj.ContourPointsMap.get(key).size();c++){
-		        				contourPoints.add(new point_generic(global_obj.ContourPointsMap.get(key).get(c)));
+		        				point_generic pg = new point_generic(global_obj.ContourPointsMap.get(key).get(c));
+		        				contourPoints.add(pg);
+		        				//pg.printPoint();
 		        			}
 		        			obj.ContourPointsMap.put(key, contourPoints);
 		        		}
 		            	
-		            	
+		        		System.out.println("Iteration: "+input.index+" the keyset obj contour Points Map is "+obj.ContourPointsMap.keySet());
 		            	
 		    			double algo_cost =0;
 		    			double SO =0;
@@ -587,7 +590,7 @@ public class GCI3D
 		    			output.SO = SO;
 		    			
 		    			output.anshASO += SO*locationWeight[j];
-		    			
+		    			obj.ContourPointsMap.clear();
 		    			System.out.println("\nSpillBound The SubOptimaility  is "+SO);
 		    			return output;
 		    			//System.out.println("\nSpillBound Harm  is "+Harm);
@@ -949,7 +952,7 @@ public class GCI3D
 				sumWeight += locationWeight[i];
 
 
-				System.out.println("The location weight is "+locationWeight[i]+" and total weight is "+totalWeight);
+				//System.out.println("The location weight is "+locationWeight[i]+" and total weight is "+totalWeight);
 				assert (locationWeight[i]<= (double)1) : "In getPlanCountArray: locationWeight is not less than 1";
 			}
 			//		if(locationWeight[i]>(double)1){
@@ -1131,13 +1134,14 @@ public class GCI3D
 		int currentContourPoints = 0;
 
 		for(int c=0; c <ContourPointsMap.get(contour_no).size();c++){
-
+			
 			point_generic p = ContourPointsMap.get(contour_no).get(c);
 
 			/*
 			 * update the max and the min cost seen for this contour
 			 * also update the unique_plans for the contour
 			 */
+			//System.out.println("the value of c= "+c);
 			unique_plans.add(p.get_plan_no());
 			if(p.get_cost()>max_cost)
 				max_cost = p.get_cost();
