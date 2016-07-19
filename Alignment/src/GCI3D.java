@@ -149,7 +149,7 @@ public class GCI3D
 		maxIndex = new double[obj.dimension];		
 		this.remainingDim = new ArrayList<Integer>(obj.remainingDim);
 		this.ContourPointsMap = new HashMap<Integer, ArrayList<point_generic>>();
-		Iterator itr = obj.ContourPointsMap.keySet().iterator();
+	/*	Iterator itr = obj.ContourPointsMap.keySet().iterator();
 		Integer key;
 		while(itr.hasNext())
 		{
@@ -160,7 +160,7 @@ public class GCI3D
 			}
 			this.ContourPointsMap.put(key, contourPoints);
 		}
-		
+	*/	
 		//this.ContourPointsMap = obj.ContourPointsMap;
 		this.executions = new ArrayList<Pair<Integer>>();
 		this.sel_for_point = obj.sel_for_point; 
@@ -180,7 +180,8 @@ public class GCI3D
 		final long startTime = System.currentTimeMillis();
 
 		GCI3D obj = new GCI3D();
-
+		final GCI3D global_obj = new GCI3D();
+		
 		obj.loadPropertiesFile();
 		String pktPath = apktPath + qtName + ".apkt" ;
 		System.out.println("Query Template: "+qtName);
@@ -240,6 +241,7 @@ public class GCI3D
 
 			int size_of_contour = obj.all_contour_points.size();
 			obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
+			global_obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
 			System.out.println("Its point are");
 			for(point_generic pg : obj.all_contour_points){
@@ -249,13 +251,13 @@ public class GCI3D
 			i = i+1;
 		}
 
-		obj.initialize(0);
-		GCI3D objTest = new GCI3D(obj);
-		obj.removeDimensionFromContourPoints(2);
-		objTest.removeDimensionFromContourPoints(2);
+//		obj.initialize(0);
+//		GCI3D objTest = new GCI3D(obj);
 //		obj.removeDimensionFromContourPoints(2);
-		//checking alignment threshold
-		obj.checkAlignmentPenalty();
+//		objTest.removeDimensionFromContourPoints(2);
+////		obj.removeDimensionFromContourPoints(2);
+//		//checking alignment threshold
+//		obj.checkAlignmentPenalty();
 		
 		/*
 		 * Setting up the DB connection to Postgres/TPCH/TPCDS Benchmark. 
@@ -278,8 +280,8 @@ public class GCI3D
 			else{
 				
 				System.out.println("entered DB tpcds");
-				source.setServerName("localhost:5432");
-				source.setDatabaseName("tpcds");
+				source.setServerName("localhost:5431");
+				source.setDatabaseName("tpcdscodd");
 //				conn = DriverManager
 //						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
 //								"sa", "database");
@@ -293,8 +295,13 @@ public class GCI3D
 		catch ( Exception e ) {
 			System.out.println("entered DB err");
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
+			System.exit(1);
 
 		}
+	//	Connection conn = source.getConnection();
+     //   Statement stmt = conn.createStatement();
+      //  stmt.execute("EXPLAIN SELECT * FROM customer");
+	//	System.exit(1);
 		/*
 		 * running the spillBound and plan bouquet algorithm 
 		 */
@@ -309,8 +316,8 @@ public class GCI3D
 		
 		boolean singleThread = false;
 
-		if (args.length > 0) {
-    		/*updating the min and the max index if available*/
+/*		if (args.length > 0) {
+    		//updating the min and the max index if available
     	    try {
     	        min_point = Integer.parseInt(args[0]);
     	        max_point = Integer.parseInt(args[1]);
@@ -320,7 +327,7 @@ public class GCI3D
     	    }
     	}
 		
-
+*/
 		double[] subOpt = new double[max_point];
 		
 		if(singleThread)
@@ -465,6 +472,20 @@ public class GCI3D
 		            	int j = input.index;
 		            	GCI3D obj = input.obj;
 	            
+		            	Iterator itr = global_obj.ContourPointsMap.keySet().iterator();
+		        		Integer key;
+		        		while(itr.hasNext())
+		        		{
+		        			key = (Integer)itr.next();
+		        			ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
+		        			for(int c=0;c<global_obj.ContourPointsMap.get(key).size();c++){
+		        				contourPoints.add(new point_generic(global_obj.ContourPointsMap.get(key).get(c)));
+		        			}
+		        			obj.ContourPointsMap.put(key, contourPoints);
+		        		}
+		            	
+		            	
+		            	
 		    			double algo_cost =0;
 		    			double SO =0;
 		    			double cost = obj.getOptimalCost(0);
