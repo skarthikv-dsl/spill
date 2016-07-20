@@ -1420,8 +1420,8 @@ public class GCI3D
                 
                 while((temp_act_sel[dim] <= actual_sel[dim]) || (execCost<=budget))
                 {       
-                        stmt.execute("set spill_node = "+ spill_node);
-                        
+                        //stmt.execute("set spill_node = "+ spill_node);
+                        stmt.execute("set spill_node = 999");
                         stmt.execute("set work_mem = '100MB'");
                         //NOTE,Settings: 4GB for DS and 1GB for H
                         if(database_conn==0){
@@ -1451,9 +1451,9 @@ public class GCI3D
                         }
 
                         ResultSet rs = stmt.executeQuery(query);
-                        if(spill_node == 543){
-                        	System.out.println("We are at node 23");
-                        }
+                     //   if(spill_node == 543){
+                       // 	System.out.println("We are at node 23");
+                       // }
                         while(rs.next()){
                         	
                         			str1 = rs.getString(1);
@@ -1616,6 +1616,7 @@ public class GCI3D
     catch ( Exception e ) {
         System.err.println( e.getClass().getName()+": "+ e.getMessage() );
          e.printStackTrace();
+         System.exit(1);
 
     } finally{
     	if (conn != null) {
