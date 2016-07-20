@@ -199,7 +199,7 @@ public class GCI3D
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 		//obj.loadPropertiesFile();
-		obj.checkGradientAssumption();
+		//obj.checkGradientAssumption();
 		
 		int i;
 		h_cost = obj.getOptimalCost(obj.totalPoints-1);
@@ -1368,13 +1368,15 @@ public class GCI3D
         stmt = conn.createStatement();
         //System.out.println(funName+ " : database connection statement create successfully");
         //Settings: constants in BinaryTree   
-                BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
+                //BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
+        		BinaryTree tree = new BinaryTree();
+        		tree.initialize(qtName);
                 tree.FROM_CLAUSE = FROM_CLAUSE;
-                int spill_values [] = tree.getSpillNode(dim,plan,"tpcds"); //[0] gives node id of the tree and [1] gives the spill_node for postgres
-                int spill_node = spill_values[1];
+                //int spill_values [] = tree.getSpillNode(dim,plan,"tpcds"); //[0] gives node id of the tree and [1] gives the spill_node for postgres
+                int spill_node = 1;
                 String spill_pred = tree.predicates[dim];
                 String spill_pred_rev = tree.predicatesRev[dim];
-                System.out.println("The spill node value in the tree is "+spill_node);
+                //System.out.println("The spill node value in the tree is "+spill_node);
                 System.out.println("The spill node predicate in the tree is "+ spill_pred);
                 /*
                  *temp_act_sel to iterate from point p to  until either we exhaust the budget 
