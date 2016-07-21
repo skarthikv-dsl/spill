@@ -1026,7 +1026,9 @@ static int n_partition_best = 0;
 				double min_error = Double.MAX_VALUE;
 				for(int t=0;t<max_pts.size();t++){
 					extreme_pt = max_pts.get(t); 
-					if(plans_list[extreme_pt.getopt_plan()].getcategory(remainingDim)==j)
+					
+					//if(plans_list[extreme_pt.getopt_plan()].getcategory(remainingDim)==j)
+						if(plans_list[getPlanNumber_generic(extreme_pt.get_point_Index())].getcategory(remainingDim)==j)
 					{
 						extreme_pt.set_goodguy();
 						local_points_max.put(j, extreme_pt);
@@ -1489,9 +1491,10 @@ static int n_partition_best = 0;
 		}
 
 		//assert(p.getfpc_cost()>0) : funName+" fpc_cost is not set by lohit's getBestFPC function";
-		double error=((execCost-p.getopt_cost())/p.getopt_cost())*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
+		int opt_cost = (int)getOptimalCost(getIndex(p.get_point_Index(),resolution));
+		int error=(int)((execCost-opt_cost)/opt_cost)*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
 		if(error <= p.getpercent_err()){
-			p.putfpc_cost(execCost);
+			p.putfpc_cost((int)execCost);
 			p.putpercent_err(error);
 			p.putfpc_plan(-2);
 		}
@@ -1650,14 +1653,15 @@ static int n_partition_best = 0;
 
 
 					CurFpcCost=cur.getfpc_cost();
-					CurOptCost=cur.getopt_cost();
+					//CurOptCost=cur.getopt_cost();
+					CurOptCost=getOptimalCost(getIndex(cur.get_point_Index(),resolution));
 
 					if(CurFpcCost == -1 || CurFpcCost > NewFpcCost)
 					{
-						cur.putfpc_cost(NewFpcCost);
+						cur.putfpc_cost((int)NewFpcCost);
 						cur.putfpc_plan(j);
 						error=((NewFpcCost-CurOptCost)/CurOptCost)*100;
-						cur.putpercent_err(error);
+						cur.putpercent_err((int)error);
 
 					}
 				}
@@ -3561,13 +3565,13 @@ class point_generic
 {
 	int dimension=OptSB.dimension;
 	static boolean load_flag = false;
-	int opt_plan=-1;
-	double opt_cost=-1.0;
+	//int opt_plan=-1;
+	//double opt_cost=-1.0;
 	int fpcSpillDim = -1;
 	boolean good_guy=false;
 	int fpc_plan=-1;
-	double fpc_cost=Double.MAX_VALUE;
-	double percent_err=-1.0;
+	int fpc_cost=Integer.MAX_VALUE;
+	int percent_err=-1;
 	ArrayList<Integer> order;
 	ArrayList<Integer> storedOrder;
 	int value;
@@ -3581,8 +3585,8 @@ class point_generic
 	
 		this.dimension = pg.dimension;
 		this.load_flag = pg.load_flag;
-		this.opt_plan = pg.opt_plan;
-		this.opt_cost = pg.opt_cost;
+	//	this.opt_plan = pg.opt_plan;
+	//	this.opt_cost = pg.opt_cost;
 		this.fpcSpillDim = pg.fpcSpillDim;
 		this.good_guy = pg.good_guy;
 		this.fpc_plan = pg.fpc_plan;
@@ -3601,7 +3605,7 @@ class point_generic
 			this.dim_values[it] = pg.dim_values[it];
 
 	}
-	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
+	point_generic(int [] arr, int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 
 //		if(load_flag == false)
 //		{
@@ -3609,7 +3613,9 @@ class point_generic
 //			load_flag = true;
 //		}
 		//	System.out.println();
+		
 		dim_values = new int[dimension];
+//		dim_values = get
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = arr[i];
 			//		System.out.print(arr[i]+",");
@@ -3618,8 +3624,8 @@ class point_generic
 		this.p_no = num;
 		this.cost = cost;
 
-		this.opt_cost=cost;
-		this.opt_plan=num;
+	//	this.opt_cost=cost;
+	//	this.opt_plan=num;
 
 		order =  new ArrayList<Integer>();
 		storedOrder = new ArrayList<Integer>();
@@ -3656,17 +3662,17 @@ class point_generic
 //		}
 		//	System.out.println();
 
-		dim_values = new int[dimension];
+		//dim_values = new int[dimension];
 		for(int i=0;i<dimension;i++){
-			dim_values[i] = arr[i];
+			this.dim_values[i] = arr[i];
 			//			System.out.print(arr[i]+",");
 		}
 		//	System.out.println("   having cost = "+cost+" and plan "+num);
 		this.p_no = num;
 		this.cost = cost;
 
-		this.opt_cost=cost;
-		this.opt_plan=num;
+	//	this.opt_cost=cost;
+	//	this.opt_plan=num;
 
 		//check: if the order and stored order are being updated/populated
 		order =  new ArrayList<Integer>(predicateOrder);
@@ -3681,10 +3687,11 @@ class point_generic
 	/*
 	 * get the selectivity/index of the dimension
 	 */
+	
 	public int get_dimension(int d){
-		if(dim_values==null)
+		if(this.dim_values==null)
 			System.out.println("NULL of dim_values "+d);
-		return dim_values[d];
+		return this.dim_values[d];
 	}
 
 	/*
@@ -3708,11 +3715,11 @@ class point_generic
 	double getfpc_cost(){
 		return this.fpc_cost;
 	}
-	void putfpc_cost(double cost){
+	void putfpc_cost(int cost){
 		this.fpc_cost=cost;
 	}
 
-	int getopt_plan(){
+/*	int getopt_plan(){
 		return this.opt_plan;
 	}
 	double getopt_cost(){
@@ -3721,11 +3728,11 @@ class point_generic
 	void putopt_cost(double cost){
 		this.opt_cost=cost;
 	}
-
+*/
 	double getpercent_err(){
 		return this.percent_err;
 	}
-	void putpercent_err(double p_err){
+	void putpercent_err(int p_err){
 		this.percent_err=p_err;
 	}
 	void set_goodguy(){

@@ -185,7 +185,7 @@ public class GCI3D
 		obj.loadPropertiesFile();
 		String pktPath = apktPath + qtName + ".apkt" ;
 		System.out.println("Query Template: "+qtName);
-
+		int threads = Runtime.getRuntime().availableProcessors();
 
 		ADiagramPacket gdp = obj.getGDP(new File(pktPath));
 
@@ -289,7 +289,7 @@ public class GCI3D
 			}
 			source.setUser("sa");
 			source.setPassword("database");
-			source.setMaxConnections(10);
+			source.setMaxConnections(threads/2);
 			System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
@@ -336,7 +336,7 @@ public class GCI3D
 		{
 			System.out.println("Entering loop "+j);
 
-//					if(j==4)
+//					if(j==7217)
 //						System.out.println("Interesting");
 //					else
 //						continue;
@@ -459,7 +459,7 @@ public class GCI3D
 				inputs.add(input);
 			}
 			
-			int threads = Runtime.getRuntime().availableProcessors();
+
 			System.out.println("Available Cores " + threads);
 		    ExecutorService service = Executors.newFixedThreadPool(threads);
 		    List<Future<SpillBoundOutputParamStruct>> futures = new ArrayList<Future<SpillBoundOutputParamStruct>>();
@@ -468,10 +468,15 @@ public class GCI3D
 		        Callable<SpillBoundOutputParamStruct> callable = new Callable<SpillBoundOutputParamStruct>() {
 		            public SpillBoundOutputParamStruct call() throws Exception {
 		            	SpillBoundOutputParamStruct output = new SpillBoundOutputParamStruct();
-		            	System.out.println("Begin execution loop "+ input.index);
+		            	//System.out.println("Begin execution loop "+ input.index);
 		            	int j = input.index;
 		            	GCI3D obj = input.obj;
 	            
+		            	if( j!=7217){
+		    				output.flag = false;
+		        			return output;
+		    			}
+		            	
 		            	Iterator itr = global_obj.ContourPointsMap.keySet().iterator();
 		            	
 		        		Integer key;
@@ -500,7 +505,7 @@ public class GCI3D
 		    			//		obj.actual_sel[0] = 0.02;obj.actual_sel[1] = 0.99;obj.actual_sel[2] = 0.1;obj.actual_sel[3] = 0.99; /*uncomment for single execution*/
 
 		    			for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
-		    			if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000){
+		    			if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000 ){
 		    				output.flag = false;
 		        			return output;
 		    			}
@@ -587,11 +592,22 @@ public class GCI3D
 		    			for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
 
 		    			SO = (algo_cost/obj.cost_generic(index_actual_sel));
+		    			
 		    			output.SO = SO;
 		    			
 		    			output.anshASO += SO*locationWeight[j];
 		    			obj.ContourPointsMap.clear();
 		    			System.out.println("\nSpillBound The SubOptimaility  is "+SO);
+		    			File file = new File(apktPath+"subOpt.txt");
+					    if (!file.exists()) {
+							file.createNewFile();
+						}
+
+					    FileWriter writer = new FileWriter(file, true);
+
+					    PrintWriter pw = new PrintWriter(writer);
+					    pw.format("%d = %f\n", j,SO);
+					    pw.close();writer.close();
 		    			return output;
 		    			//System.out.println("\nSpillBound Harm  is "+Harm);
 		            }
