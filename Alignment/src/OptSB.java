@@ -43,6 +43,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
+
 import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
 
@@ -56,89 +58,43 @@ public class OptSB
 
 	static double AllPlanCosts[][];
 	static int nPlans;
-	int plans[];
-	double OptimalCost[];
-	int totalPlans;
+	static int plans[];
+	static double OptimalCost[];
+	static int totalPlans;
 	static int dimension;
 	static int resolution;
-	DataValues[] data;
+	static DataValues[] data;
 	static int totalPoints;
 	static double selectivity[];
-	static double tmax = 0;
-	static double pmax = 0;
-
-	//The following parameters has to be set manually for each query
-
+	static String apktPath;
 	static String qtName ;
+	static Jdbc3PoolingDataSource source;
 	static String varyingJoins;
 	static double JS_multiplier [];
 	static String query;
 	static String query_opt_spill;
 	static String cardinalityPath;
-
-	double  minIndex [];
-	double  maxIndex [];
+	static String QTName = "HQT75DR10_E";
+	static String plansPath = "/media/dsladmin/dslssd512gb/Lohit/QT_April_idea/HQT75DR10_E/";
+	static String sourcePath = "./src/";
 	static boolean MSOCalculation = true;
 	static boolean randomPredicateOrder = false;
-
+	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
+	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
+	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
+	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
+	//	point[][] points_list;
+	static plan[] plans_list;
 	//Settings: 
 	static int sel_distribution; 
 	static boolean FROM_CLAUSE;
 	static Connection conn = null;
 	static int database_conn=1;
-
-	static int currentContourPoints=0;
-	static double min_cost=Double.MAX_VALUE;
-	static double max_cost=Double.MIN_VALUE;
-
-
-	static ArrayList<Integer> remainingDim;
-	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
-	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
-	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
-	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
-	static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
-	static ArrayList<Pair<Integer>> executions = new ArrayList<Pair<Integer>>();  
-//	static HashMap<Index,ArrayList<Double>> sel_for_point = new HashMap<Index,ArrayList<Double>>();
-	static HashMap<Index,memo> sel_for_point = new HashMap<Index,memo>();
-	static double learning_cost = 0;
-	static double oneDimCost = 0;
-	static int no_executions = 0;
-	static int no_repeat_executions = 0;
-	static int max_no_executions = 0;
-	static int max_no_repeat_executions = 0;
-
-	static boolean [] already_visited;  
-
-	static point_generic []maxPoints;
-
-	double[] actual_sel;
-
-	//for ASO calculation 
+	static double h_cost;
 	static double planCount[], planRelativeArea[];
 	static double picsel[], locationWeight[];
 
 	static double areaSpace =0,totalEstimatedArea = 0;
-
-	//static String apktPath;
-
-	static String QTName = "HQT75DR10_E";
-	static String apktPath;
-	static String plansPath = "/media/dsladmin/dslssd512gb/Lohit/QT_April_idea/HQT75DR10_E/";
-	static String sourcePath = "./src/";
-
-static int n_partition_best = 0;
-	//---------------------------------------PARTITION-------------
-	//static int n_partition = 4;
-	//static int[][] p = {{0},{1},{2},{3}};
-
-	static int n_partition = 5;
-	static int[][] p = {{0},{1},{2},{3},{4}};
-	static String part_str = "{{0},{1},{2},{3},{4}}";
-
-	//	static int n_partition = 1;
-	//static int[][] p = {{0,1,2}};
-	//static String part_str = "{{0,1,2}}";
 
 	//-----------------------------------FLAGS
 	// Use the plansPath as ./src/ --> This is for making jar and running it
@@ -159,22 +115,93 @@ static int n_partition_best = 0;
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
 	//---------------------------------------------------------
+	
+	
+	
+	//The following parameters has to be set manually for each query
+	double tmax = 0;
+	double pmax = 0;
 
-	static HashMap<Integer,ArrayList<Integer>> cur_partition = new HashMap<Integer,ArrayList<Integer>>();
+
+	double  minIndex [];
+	double  maxIndex [];
+
+	int currentContourPoints=0;
+	double min_cost=Double.MAX_VALUE;
+	double max_cost=Double.MIN_VALUE;
+
+
+	ArrayList<Integer> remainingDim;
+	HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
+	ArrayList<Pair<Integer>> executions = new ArrayList<Pair<Integer>>();  
+	HashMap<Index,ArrayList<Double>> sel_for_point = new HashMap<Index,ArrayList<Double>>();
+	 HashMap<Integer,ArrayList<Integer>> cur_partition = new HashMap<Integer,ArrayList<Integer>>();
+//	static HashMap<Index,memo> sel_for_point = new HashMap<Index,memo>();
+	double learning_cost = 0;
+	double oneDimCost = 0;
+	int no_executions = 0;
+	int no_repeat_executions = 0;
+	int max_no_executions = 0;
+	int max_no_repeat_executions = 0;
+
+	boolean [] already_visited;  
+
+	point_generic []maxPoints;
+
+	double[] actual_sel;
+
+	int n_partition_best = 0;
+
+	int n_partition ;
+	int[][] p ;
+	String part_str ;
+	
 //	static HashMap<Integer,ArrayList<Integer>> local_part = new HashMap<Integer,ArrayList<Integer>>();
 	
-	static int [] p_encoding = new int[128];
-	static int [] prev_encoding = new int[128];
-	static int [] best_partitioning = new int[128];
-	static int [] until_max = new int [128];
+	int [] p_encoding = new int[10];
+	int [] prev_encoding = new int[10];
+	int [] best_partitioning = new int[10];
+	int [] until_max = new int [10];	
+	ArrayList<Integer> temp_list = new ArrayList<Integer>();
+	 partition partition_info[];
+
+
+
+
 	
-	static ArrayList<Integer> temp_list = new ArrayList<Integer>();
-	static partition partition_info[];
-
-
-	//	point[][] points_list;
-	static plan[] plans_list;
-
+public OptSB(){}
+	
+	public OptSB(OptSB obj){
+		minIndex = new double[obj.dimension];
+		maxIndex = new double[obj.dimension];		
+		this.remainingDim = new ArrayList<Integer>(obj.remainingDim);
+		this.ContourPointsMap = new HashMap<Integer, ArrayList<point_generic>>();
+		HashMap<Integer,ArrayList<Integer>> cur_partition = new HashMap<Integer,ArrayList<Integer>>();
+	/*	Iterator itr = obj.ContourPointsMap.keySet().iterator();
+		Integer key;
+		while(itr.hasNext())
+		{
+			key = (Integer)itr.next();
+			ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
+			for(int c=0;c<obj.ContourPointsMap.get(key).size();c++){
+				contourPoints.add(new point_generic(obj.ContourPointsMap.get(key).get(c)));
+			}
+			this.ContourPointsMap.put(key, contourPoints);
+		}
+	*/	
+		//this.ContourPointsMap = obj.ContourPointsMap;
+		this.executions = new ArrayList<Pair<Integer>>();
+		this.sel_for_point = new HashMap<Index, ArrayList<Double>>(); 
+		this.learning_cost = 0;
+		this.oneDimCost = 0;
+		this.no_executions = 0;
+		this.no_repeat_executions = 0;
+		this.max_no_executions = 0;
+		this.max_no_repeat_executions = 0;
+		this.already_visited = new boolean[obj.dimension];  
+		this.actual_sel = new double[obj.dimension];
+		//point_generic []maxPoints; 
+	}
 	public static void main(String args[]) throws IOException, SQLException
 	{
 		long startTime = System.nanoTime();
@@ -183,28 +210,29 @@ static int n_partition_best = 0;
 		System.out.println("print_flag ="+print_flag);
 		System.out.println("print_loop_flag ="+print_loop_flag);
 		System.out.println("hash_join_optimization_flag ="+hash_join_optimization_flag);
-
-		System.out.println("Partitions = "+part_str);
+		int threads = Runtime.getRuntime().availableProcessors();
+		//System.out.println("Partitions = "+part_str);
 
 		if(src_flag)
 		{
 			paths_init();
 		}
 
-		for(int i=0;i<n_partition;i++)
-		{
-			temp_list = new ArrayList<Integer>();
-			for(int j=0;j<p[i].length;j++)
-			{
-				int k = p[i][j];
-				temp_list.add(k);
-			}
-			cur_partition.put(i, temp_list);
-			//			temp_list.clear();
-		}
+//		for(int i=0;i<n_partition;i++)
+//		{
+//			temp_list = new ArrayList<Integer>();
+//			for(int j=0;j<p[i].length;j++)
+//			{
+//				int k = p[i][j];
+//				temp_list.add(k);
+//			}
+//			cur_partition.put(i, temp_list);
+//			//			temp_list.clear();
+//		}
 
 		OptSB obj = new OptSB();
-		maxPoints= new point_generic[dimension];
+		final OptSB global_obj = new OptSB();
+		obj.maxPoints= new point_generic[dimension];
 
 		String pktPath = plansPath + QTName + ".apkt" ;
 		System.out.println("Query Template: "+QTName);
@@ -223,7 +251,7 @@ static int n_partition_best = 0;
 		obj.loadSelectivity();
 		//	obj.loadPropertiesFile();
 		int i;
-		double h_cost = obj.getOptimalCost(totalPoints-1);
+		h_cost = obj.getOptimalCost(totalPoints-1);
 		double min_cost = obj.getOptimalCost(0);
 		System.out.println("Min Cost = "+min_cost);
 		double ratio = h_cost/min_cost;
@@ -232,15 +260,15 @@ static int n_partition_best = 0;
 		i = 1;
 
 		//to generate contours
-		remainingDim.clear(); 
+		obj.remainingDim.clear(); 
 		for(int d=0;d<obj.dimension;d++){
-			remainingDim.add(d);
+			obj.remainingDim.add(d);
 		}
 
 		learntDim.clear();
 		learntDimIndices.clear();
 		double cost = obj.getOptimalCost(0);
-		getAllPermuations(remainingDim,0);
+		getAllPermuations(obj.remainingDim,0);
 		assert (allPermutations.size() == obj.factorial(obj.dimension)) : "all the permutations are not generated";
 
 		while(cost < 2*h_cost)
@@ -263,7 +291,8 @@ static int n_partition_best = 0;
 			//writeContourPointstoFile(i);
 			//writeContourPlanstoFile(i);
 			int size_of_contour = all_contour_points.size();
-			ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
+			obj.ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
+			global_obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
 			cost = cost*2;
 			i = i+1;
@@ -275,21 +304,31 @@ static int n_partition_best = 0;
 		try{
 			System.out.println("entered DB conn1");
 			Class.forName("org.postgresql.Driver");
-
+			source = new Jdbc3PoolingDataSource();
+			source.setDataSourceName("A Data Source");
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
-				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5431/tpchcodd",
-								"sa", "database");
+				
+				source.setServerName("localhost:5431");
+				source.setDatabaseName("tpch-ai");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+//								"sa", "database");
 			}
 			else{
+				
 				System.out.println("entered DB tpcds");
-				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
-								"sa", "database");
+				source.setServerName("localhost:5432");
+				source.setDatabaseName("tpcds");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
+//								"sa", "database");
 
 			}
+			source.setUser("sa");
+			source.setPassword("database");
+			source.setMaxConnections(threads/2);
 			System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
