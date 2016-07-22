@@ -40,6 +40,9 @@ import java.util.Set;
 
 
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
 
@@ -1026,9 +1029,7 @@ static int n_partition_best = 0;
 				double min_error = Double.MAX_VALUE;
 				for(int t=0;t<max_pts.size();t++){
 					extreme_pt = max_pts.get(t); 
-					
-					//if(plans_list[extreme_pt.getopt_plan()].getcategory(remainingDim)==j)
-						if(plans_list[getPlanNumber_generic(extreme_pt.get_point_Index())].getcategory(remainingDim)==j)
+					if(plans_list[extreme_pt.getopt_plan()].getcategory(remainingDim)==j)
 					{
 						extreme_pt.set_goodguy();
 						local_points_max.put(j, extreme_pt);
@@ -1051,9 +1052,9 @@ static int n_partition_best = 0;
 				if(max_pt.get_goodguy())
 					break;
 				
-				point_generic temp_pt = max_pt;
-				double best_fpc_pt_cost = getBestSpillingPlan(max_pt, j);
-				if(best_fpc_pt_cost > max_pt.getfpc_cost())
+				point_generic temp_pt = new point_generic(max_pt);
+				double best_fpc_pt_err = getBestSpillingPlan(temp_pt, j);
+				if(best_fpc_pt_err > max_pt.getpercent_err())
 					max_pt = temp_pt; 
 				
 				maxPoints[j] = max_pt;
@@ -1070,7 +1071,7 @@ static int n_partition_best = 0;
 				}
 
 				
-				if(maxPoints[j].getfpc_cost() < min_fpc_point[m].getfpc_cost())
+				if(maxPoints[j].getpercent_err() < min_fpc_point[m].getpercent_err())
 				{
 					min_fpc_point[m] = maxPoints[j];
 				}
@@ -1297,7 +1298,7 @@ static int n_partition_best = 0;
 				}
 			}
 			
-			assert(tolerance<=tmax): funName+" the tolerance is beyond the max. tolerance during execution";
+			assert(tolerance<=(tmax+1)): funName+" the tolerance is beyond the max. tolerance during execution";
 			assert(points_max.containsKey(learning_dim )): funName+" not learning a leader dimension";
 			
 			
@@ -1314,8 +1315,15 @@ static int n_partition_best = 0;
 				 * checking if we had already executed the same plan on the same dimension before.
 				 * 
 				 */
-				if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getfpc_plan()))))
-					continue;
+				if(p.get_goodguy()){
+					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getopt_plan()))))
+						continue;
+				}
+				else
+				{
+					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getfpc_plan()))) && p.getfpc_plan()!=-2 )
+						continue;
+				}
 
 
 				sel = getLearntSelectivity(learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no);
@@ -1340,7 +1348,10 @@ static int n_partition_best = 0;
 				 * add the tuple (dimension,plan) to the executions data structure
 				 */
 				//WRONG: TODO: change this to p.getfpc_plan
-				executions.add(new Pair(new Integer(d),new Integer(p.get_plan_no())));
+				if(p.get_goodguy())
+					executions.add(new Pair(new Integer(d),new Integer(p.get_plan_no())));
+				else
+					executions.add(new Pair(new Integer(d),new Integer(p.getfpc_plan())));
 
 
 				/*
@@ -1471,7 +1482,7 @@ static int n_partition_best = 0;
 				stmt.execute("set robust_eqjoin_selec"+(d+1)+ "= "+ selectivity[p.get_dimension(d)]); 
 			}			
 			ResultSet rs = stmt.executeQuery(query_opt_spill);
-			System.out.println(rs);
+			//System.out.println(rs);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -1491,10 +1502,9 @@ static int n_partition_best = 0;
 		}
 
 		//assert(p.getfpc_cost()>0) : funName+" fpc_cost is not set by lohit's getBestFPC function";
-		int opt_cost = (int)getOptimalCost(getIndex(p.get_point_Index(),resolution));
-		int error=(int)((execCost-opt_cost)/opt_cost)*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
+		double error=((execCost-p.getopt_cost())/p.getopt_cost())*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
 		if(error <= p.getpercent_err()){
-			p.putfpc_cost((int)execCost);
+			p.putfpc_cost(execCost);
 			p.putpercent_err(error);
 			p.putfpc_plan(-2);
 		}
@@ -1653,15 +1663,14 @@ static int n_partition_best = 0;
 
 
 					CurFpcCost=cur.getfpc_cost();
-					//CurOptCost=cur.getopt_cost();
-					CurOptCost=getOptimalCost(getIndex(cur.get_point_Index(),resolution));
+					CurOptCost=cur.getopt_cost();
 
 					if(CurFpcCost == -1 || CurFpcCost > NewFpcCost)
 					{
-						cur.putfpc_cost((int)NewFpcCost);
+						cur.putfpc_cost(NewFpcCost);
 						cur.putfpc_plan(j);
 						error=((NewFpcCost-CurOptCost)/CurOptCost)*100;
-						cur.putpercent_err((int)error);
+						cur.putpercent_err(error);
 
 					}
 				}
@@ -1814,15 +1823,17 @@ static int n_partition_best = 0;
         }
         
       //following code is for checking whether the elements in the partition are disjoint and union is the remaining dimensions
+        int tot_part_size =0;
         int part_size = 0;
      for(int it=0;it<cur_partition.size();it++){
-    	 part_size += cur_partition.get(it).size();
+    	 part_size = cur_partition.get(it).size();
+    	 tot_part_size += part_size;
     	 for(int it1=0;it1<part_size; it1++){
     		 for(int it2=it+1;it2<cur_partition.size();it2++)
             	 assert(!cur_partition.get(it2).contains(cur_partition.get(it).get(it1))): "the dimensions are not disjoint in partitions"; 
     	 }
      }
-     assert(part_size == n): "union of the elements in the partition is the total elements in the remaining dimension";
+     assert(tot_part_size == n): "union of the elements in the partition is the total elements in the remaining dimension";
         
         //---------------
 //        for(i=0;i<n_partition;i++)
@@ -1920,14 +1931,13 @@ static int n_partition_best = 0;
 			stmt = conn.createStatement();
 			//System.out.println(funName+ " : database connection statement create successfully");
 			//Settings: constants in BinaryTree   
-			BinaryTree tree = new BinaryTree(new Vertex(0,-1,null,null),null,null);
+			BinaryTree tree = new BinaryTree();
+    		tree.initialize(qtName);
 			tree.FROM_CLAUSE = FROM_CLAUSE;
-			int spill_values [] = tree.getSpillNode(dim,plan,"tpcds"); //[0] gives node id of the tree and [1] gives the spill_node for postgres
-			int spill_node = spill_values[1];
-			if(print_flag)
-			{
-				System.out.println("The spill node value in the tree is "+spill_node);
-			}
+//			int spill_values [] = tree.getSpillNode(dim,plan,"tpcds"); //[0] gives node id of the tree and [1] gives the spill_node for postgres
+//			int spill_node = spill_values[1];
+			String spill_pred = tree.predicates[dim];
+            String spill_pred_rev = tree.predicatesRev[dim];
 			/*
 			 *temp_act_sel to iterate from point p to  until either we exhaust the budget 
 			 *or learn the actual selectivity. Note the change. 
@@ -1967,6 +1977,11 @@ static int n_partition_best = 0;
 			File file=null;
 			FileReader fr=null;
 			BufferedReader br=null;
+            String str1;
+            String regx;
+            Pattern pattern;
+            Matcher matcher;
+            Double hash_rows=-1.0;
 			Index point_index = new Index(p,contour_no,dim);
 
 			//      System.out.println(point_index.hashCode());
@@ -2005,7 +2020,7 @@ static int n_partition_best = 0;
 			while((temp_actual_index[dim] <= actual_sel_index[dim]) || (execCost<=budget))
 			{	
 				minus_flag = false;
-				stmt.execute("set spill_node = "+ spill_node);
+				stmt.execute("set spill_node = 999");
 
 				stmt.execute("set work_mem = '100MB'");
 				//NOTE,Settings: 4GB for DS and 1GB for H
@@ -2036,15 +2051,41 @@ static int n_partition_best = 0;
 					// as selectivities been injected 
 				}
 
-				stmt.execute(query);
-				//read the selectivity returned
-				file = new File(cardinalityPath+"spill_cost");
-				fr = new FileReader(file);
-				br = new BufferedReader(fr);
-				//read the selectivity or the info needed for INL
-				//--------------------------------------------------------------
-				execCost = Double.parseDouble(br.readLine());
+				ResultSet rs = stmt.executeQuery(query);
+				//   if(spill_node == 543){
+				// 	System.out.println("We are at node 23");
+				// }
+				while(rs.next()){
 
+					str1 = rs.getString(1);
+					if(str1.contains(spill_pred) || str1.contains(spill_pred_rev)){
+						//System.out.println(str1);
+						hashjoinFlag = str1.contains("Hash Join");
+
+						if(hashjoinFlag){
+							regx = Pattern.quote("rows=") + "(.*?)" + Pattern.quote("width=");
+
+							pattern = Pattern.compile(regx);
+							matcher = pattern.matcher(str1);
+							while(matcher.find()){
+								hash_rows = Double.parseDouble(matcher.group(1));	
+							}
+
+						}
+
+						regx = Pattern.quote("..") + "(.*?)" + Pattern.quote("rows=");
+
+						pattern = Pattern.compile(regx);
+						matcher = pattern.matcher(str1);
+						while(matcher.find()){
+							execCost = Double.parseDouble(matcher.group(1));	
+						}
+
+
+
+						break;
+					}
+				}		
 				// Commenting this assert since it is possible that execCost is greater than the budget due to Grid issues
 				//For instance, a 6K cost point can be part of 2K cost contour
 				// assert(execCost<=budget) : funName+" execution cost of spilling is greater than the optimal cost at that position";
@@ -2054,11 +2095,9 @@ static int n_partition_best = 0;
 				 * If there are two rows in the file then it is the hash join case. Where the second row is the number of rows
 				 * fetched by the predicate at p.getDimension(dim) selectivity 
 				 */
-				if(hash_join_optimization_flag)
-				{
-					if((valstring = br.readLine()) != null){
-						hashjoinFlag = true;
-						double rows = Double.parseDouble(valstring);
+//				if(hash_join_optimization_flag)				{
+					if(hashjoinFlag){
+						double rows = hash_rows;
 						double remainingBudget = budget -execCost; 
 						double  budget_needed=Double.MIN_VALUE;
 						if(remainingBudget<=0)
@@ -2119,7 +2158,7 @@ static int n_partition_best = 0;
 						//							prevExecCost=execCost;
 						//						}
 						break;
-					}
+					
 				}
 
 				//-----------------------------------------------------------------
@@ -2158,7 +2197,7 @@ static int n_partition_best = 0;
 
 				assert(temp_actual_index[dim]<resolution) : funName+" index exceeding resolution";
 
-			}
+			
 			if(prevExecCost!=Double.MIN_VALUE && temp_actual_index[dim] > actual_sel_index[dim]){
 
 				sel_completely_learnt = true;
@@ -2166,12 +2205,9 @@ static int n_partition_best = 0;
 				//	break;
 			}
 
-			if(br!=null)
-				br.close();
-			if(fr!=null)
-				fr.close();
-
-
+			}
+			
+			
 			if(sel_completely_learnt){			
 				learning_cost += prevExecCost;
 				if(minus_flag == true)
@@ -2347,6 +2383,7 @@ static int n_partition_best = 0;
 		//    	System.out.println("HERE");
 
 		learning_cost = 0;
+		tmax = 0;
 		oneDimCost = 0;
 		no_executions = 0;
 		no_repeat_executions = 0;
@@ -3565,13 +3602,13 @@ class point_generic
 {
 	int dimension=OptSB.dimension;
 	static boolean load_flag = false;
-	//int opt_plan=-1;
-	//double opt_cost=-1.0;
+	int opt_plan=-1;
+	double opt_cost=-1.0;
 	int fpcSpillDim = -1;
 	boolean good_guy=false;
 	int fpc_plan=-1;
-	int fpc_cost=Integer.MAX_VALUE;
-	int percent_err=-1;
+	double fpc_cost=Double.MAX_VALUE;
+	double percent_err=-1.0;
 	ArrayList<Integer> order;
 	ArrayList<Integer> storedOrder;
 	int value;
@@ -3581,6 +3618,7 @@ class point_generic
 
 	int [] dim_values;
 	
+
 	public point_generic(point_generic pg) {
 	
 		this.dimension = pg.dimension;
@@ -3605,7 +3643,7 @@ class point_generic
 			this.dim_values[it] = pg.dim_values[it];
 
 	}
-	point_generic(int [] arr, int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
+	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
 
 //		if(load_flag == false)
 //		{
@@ -3613,9 +3651,7 @@ class point_generic
 //			load_flag = true;
 //		}
 		//	System.out.println();
-		
 		dim_values = new int[dimension];
-//		dim_values = get
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = arr[i];
 			//		System.out.print(arr[i]+",");
@@ -3624,8 +3660,8 @@ class point_generic
 		this.p_no = num;
 		this.cost = cost;
 
-	//	this.opt_cost=cost;
-	//	this.opt_plan=num;
+		this.opt_cost=cost;
+		this.opt_plan=num;
 
 		order =  new ArrayList<Integer>();
 		storedOrder = new ArrayList<Integer>();
@@ -3662,17 +3698,17 @@ class point_generic
 //		}
 		//	System.out.println();
 
-		//dim_values = new int[dimension];
+		dim_values = new int[dimension];
 		for(int i=0;i<dimension;i++){
-			this.dim_values[i] = arr[i];
+			dim_values[i] = arr[i];
 			//			System.out.print(arr[i]+",");
 		}
 		//	System.out.println("   having cost = "+cost+" and plan "+num);
 		this.p_no = num;
 		this.cost = cost;
 
-	//	this.opt_cost=cost;
-	//	this.opt_plan=num;
+		this.opt_cost=cost;
+		this.opt_plan=num;
 
 		//check: if the order and stored order are being updated/populated
 		order =  new ArrayList<Integer>(predicateOrder);
@@ -3687,11 +3723,8 @@ class point_generic
 	/*
 	 * get the selectivity/index of the dimension
 	 */
-	
 	public int get_dimension(int d){
-		if(this.dim_values==null)
-			System.out.println("NULL of dim_values "+d);
-		return this.dim_values[d];
+		return dim_values[d];
 	}
 
 	/*
@@ -3715,11 +3748,11 @@ class point_generic
 	double getfpc_cost(){
 		return this.fpc_cost;
 	}
-	void putfpc_cost(int cost){
+	void putfpc_cost(double cost){
 		this.fpc_cost=cost;
 	}
 
-/*	int getopt_plan(){
+	int getopt_plan(){
 		return this.opt_plan;
 	}
 	double getopt_cost(){
@@ -3728,11 +3761,11 @@ class point_generic
 	void putopt_cost(double cost){
 		this.opt_cost=cost;
 	}
-*/
+
 	double getpercent_err(){
 		return this.percent_err;
 	}
-	void putpercent_err(int p_err){
+	void putpercent_err(double p_err){
 		this.percent_err=p_err;
 	}
 	void set_goodguy(){
