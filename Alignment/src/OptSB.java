@@ -14,6 +14,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -37,9 +38,11 @@ import java.util.Set;
 //import com.ibm.db2.jcc.b.ac;
 
 
-
-
-
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -200,9 +203,10 @@ public OptSB(){}
 		this.max_no_repeat_executions = 0;
 		this.already_visited = new boolean[obj.dimension];  
 		this.actual_sel = new double[obj.dimension];
+		this.maxPoints= new point_generic[dimension];
 		//point_generic []maxPoints; 
 	}
-	public static void main(String args[]) throws IOException, SQLException
+	public static void main(String args[]) throws IOException, SQLException, InterruptedException, ExecutionException
 	{
 		long startTime = System.nanoTime();
 
@@ -341,6 +345,7 @@ public OptSB(){}
 		 * running the spillBound and plan bouquet algorithm 
 		 */
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
+		double pmax_final=0, tmax_final=0;
 		int ASO_points=0;
 		obj.getPlanCountArray();
 		//int max_point = 0; /*not to execute the spillBound algorithm*/
@@ -350,13 +355,22 @@ public OptSB(){}
 			//if(false)
 			max_point = totalPoints;
 		double[] subOpt = new double[max_point];
-		//mainpoint
+		boolean singleThread = false;
+		//create logs directory if it does not exist
+		File filelog =  new File(apktPath+"logs/");
+		if(!filelog.exists())
+			assert(filelog.mkdir()) : "was not able to create log directory";
+			
+	if(singleThread)
+		
+	{	
+		PrintWriter writer = new PrintWriter(apktPath+"logs/SB_serial_log.txt", "UTF-8");
 		for (int  j = 0 ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
 		{
 			if(print_flag || print_loop_flag)
 			{
-				System.out.println("Entering loop "+j);
+				 writer.println("Entering loop "+j);
 			}
 			//		if(j==320)
 			//			System.out.println("Interesting");
@@ -367,8 +381,8 @@ public OptSB(){}
 
 			double algo_cost =0;
 			SO =0;
-			cost = obj.getOptimalCost(0);
-			obj.initialize(j);
+			//cost = obj.getOptimalCost(0);
+			obj.initialize(writer,j);
 			int[] index = obj.getCoordinates(obj.dimension, obj.resolution, j);
 			//		if(index[0]%5 !=0 || index[1]%5!=0)
 			//			continue;
@@ -382,31 +396,17 @@ public OptSB(){}
 				continue;
 			//----------------------------------------------------------
 			i =1;
-			executions.clear();
+			obj.executions.clear();
 
 
 			int k;
 			
-			if(local_partition_flag==false){	
-				partition_info = new partition[n_partition];
-
-				Iterator itr = cur_partition.keySet().iterator();
-				Integer i_key;
-				for(i=0;i<n_partition;i++)
-				{
-					assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
-					//				partition_info[i] = new partition(i, p[i]);
-					i_key = (Integer)itr.next();
-					partition_info[i_key] = new partition(i_key, convertIntegers(cur_partition.get(i_key)));
-				}
-			}
 			//For each contours -
 			h_cost = obj.getOptimalCost(totalPoints-1);
 			cost = obj.getOptimalCost(0);
 			i=1;
-			while(i<=ContourPointsMap.size() && !obj.remainingDim.isEmpty())
-			{	
-
+			while(i<=obj.ContourPointsMap.size() && !obj.remainingDim.isEmpty())
+			{
 				if(cost<(double)10000){
 					cost *= 2;
 					i++;
@@ -419,23 +419,23 @@ public OptSB(){}
 
 				if(print_flag)
 				{
-					System.out.println("---------------------------------------------------------------------------------------------\n");
-					System.out.println("Contour "+i+" cost : "+cost+"\n");
+					 writer.println("---------------------------------------------------------------------------------------------\n");
+					 writer.println("Contour "+i+" cost : "+cost+"\n");
 				}
 				int prev = obj.remainingDim.size();
 
 				if(prev==1){
-					obj.oneDimensionSearch(i,cost);
-					learning_cost = oneDimCost;
+					obj.oneDimensionSearch(writer,i,cost);
+					obj.learning_cost = obj.oneDimCost;
 				}
 				else
-					obj.spillBoundAlgo(i);
+					obj.spillBoundAlgo(writer,i);
 
 				int present = obj.remainingDim.size();
 				if(present < prev - 1 || present > prev)
-					System.out.println("ERROR");
+					 writer.println("ERROR");
 
-				algo_cost = algo_cost+ (learning_cost);
+				algo_cost = algo_cost+ (obj.learning_cost);
 				if(present == prev ){    // just to see whether any dimension was learnt
 					// if no dimension is learnt then move on to the next contour
 
@@ -444,26 +444,26 @@ public OptSB(){}
 					 */
 					if(print_flag)
 					{
-						System.out.println("In Contour "+i+" has the following details");
-						System.out.println("No of executions is "+no_executions);
-						System.out.println("No of repeat moves is "+no_repeat_executions);
+						 writer.println("In Contour "+i+" has the following details");
+						 writer.println("No of executions is "+obj.no_executions);
+						 writer.println("No of repeat moves is "+obj.no_repeat_executions);
 					}
-					if(no_executions>max_no_executions)
-						max_no_executions = no_executions;
-					if(no_repeat_executions > max_no_repeat_executions)
-						max_no_repeat_executions = no_repeat_executions;
+					if(obj.no_executions>obj.max_no_executions)
+						obj.max_no_executions = obj.no_executions;
+					if(obj.no_repeat_executions > obj.max_no_repeat_executions)
+						obj.max_no_repeat_executions = obj.no_repeat_executions;
 
 
 					cost = cost*2;  
 					i = i+1;
-					executions.clear();
+					obj.executions.clear();
 					/*
 					 * initialize the repeat moves and exections for the next contour
 					 */
 					for(int d=0;d<obj.dimension;d++){
-						already_visited[d] = false;
-						no_executions = 0;
-						no_repeat_executions =0;
+						obj.already_visited[d] = false;
+						obj.no_executions = 0;
+						obj.no_repeat_executions =0;
 					}
 
 				}
@@ -481,7 +481,7 @@ public OptSB(){}
 			if(print_flag)
 			{
 				for(int d=0;d<obj.dimension;d++) 
-					System.out.print(obj.actual_sel[d]+",");
+					 writer.print(obj.actual_sel[d]+",");
 			}
 			/*
 			 * storing the index of the actual selectivities. Using this printing the
@@ -492,7 +492,7 @@ public OptSB(){}
 
 			if(print_flag)
 			{
-				System.out.print("\nCost of actual_sel ="+obj.cost_generic(index_actual_sel)+" at ");
+				 writer.print("\nCost of actual_sel ="+obj.cost_generic(index_actual_sel)+" at ");
 				for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
 			}
 			SO = (algo_cost/obj.cost_generic(index_actual_sel));
@@ -507,15 +507,248 @@ public OptSB(){}
 				MSO = SO;
 			if(print_flag)
 			{
-				System.out.println("\nSpillBound The SubOptimaility  is "+SO);
-				System.out.println("\nSpillBound Harm  is "+Harm);
+				writer.println("\nSpillBound The SubOptimaility  is "+SO);
+				 writer.println("\nSpillBound Harm  is "+Harm);
 			}
 		} //end of for
 		//Settings
-		obj.writeSuboptToFile(subOpt, apktPath);
-		conn.close();
-		System.out.println("max no of partitions = "+pmax);
-		System.out.println("maximum Tolerance(actual_fraction) = "+tmax+" (should be ideally < 1)");
+		writer.close();
+	}
+	else{
+	
+			max_point = 1; 
+			File fileDel = new File(apktPath+"subOpt.txt");
+			    if (fileDel.exists()) {
+					fileDel.delete();
+				}
+
+			if(MSOCalculation)
+				//if(false)
+					max_point = obj.totalPoints;
+
+			List<OptSBinputParamStruct> inputs = new ArrayList<OptSBinputParamStruct>();
+			for (int j = 0; j < max_point; ++j) {
+				OptSBinputParamStruct input = new OptSBinputParamStruct(new OptSB(obj), j);
+				inputs.add(input);
+			}
+			
+
+			System.out.println("Available Cores " + threads);
+		    ExecutorService service = Executors.newFixedThreadPool(threads-1);
+		    List<Future<OptSBOutputParamStruct>> futures = new ArrayList<Future<OptSBOutputParamStruct>>();
+
+		     for (final OptSBinputParamStruct input : inputs) {
+		        Callable<OptSBOutputParamStruct> callable = new Callable<OptSBOutputParamStruct>() {
+		            public OptSBOutputParamStruct call() throws Exception {
+		            	OptSBOutputParamStruct output = new OptSBOutputParamStruct();
+		            	int j = input.index;
+		            	PrintWriter writer = new PrintWriter(new FileOutputStream(new File(apktPath+"logs/"+String.valueOf((j % 25))+".txt"),true));
+		            	writer.println("Begin execution loop "+ input.index);
+		            	
+		            	OptSB obj = input.obj;
+	            
+//		            	if( j!=7217){
+//		    				output.flag = false;
+//		        			return output;
+//		    			}
+		            	
+		            	
+		            	
+		            	Iterator itr = global_obj.ContourPointsMap.keySet().iterator();
+		            	
+		        		Integer key;
+		        		while(itr.hasNext())
+		        		{
+		        			key = (Integer)itr.next();
+		        			ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
+		        			for(int c=0;c<global_obj.ContourPointsMap.get(key).size();c++){
+		        				point_generic pg = new point_generic(global_obj.ContourPointsMap.get(key).get(c));
+		        				contourPoints.add(pg);
+		        				//pg.printPoint();
+		        			}
+		        			obj.ContourPointsMap.put(key, contourPoints);
+		        		}
+	
+			double algo_cost =0;
+			double	SO =0;
+			double cost = obj.getOptimalCost(0);
+			obj.initialize(writer,j);
+			int[] index = obj.getCoordinates(obj.dimension, obj.resolution, j);
+			//		if(index[0]%5 !=0 || index[1]%5!=0)
+			//			continue;
+			//Settings:
+			//		obj.actual_sel[0] = 0.005;obj.actual_sel[1] = 0.02;obj.actual_sel[2] = 0.005; /*uncomment for single execution*/
+
+			for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
+
+			//If cost of the optimal plan at actual_sel is less than 10000, then skip that point.
+			if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000){
+				output.flag = false;
+				writer.close();
+				return output;
+			}
+			//----------------------------------------------------------
+			int i =1;
+			obj.executions.clear();
+
+
+			int k;
+			
+			while(i<=obj.ContourPointsMap.size() && !obj.remainingDim.isEmpty())
+			{	
+
+				if(cost<(double)10000){
+					cost *= 2;
+					i++;
+					continue;
+				}
+				assert (cost<=2*h_cost) : "cost limit exceeding";
+				if(cost>h_cost)
+					cost=h_cost;
+
+
+				if(print_flag)
+				{
+					writer.println("---------------------------------------------------------------------------------------------\n");
+					writer.println("Contour "+i+" cost : "+cost+"\n");
+				}
+				int prev = obj.remainingDim.size();
+
+				if(prev==1){
+					obj.oneDimensionSearch(writer,i,cost);
+					obj.learning_cost = obj.oneDimCost;
+				}
+				else
+					obj.spillBoundAlgo(writer, i);
+
+				int present = obj.remainingDim.size();
+				if(present < prev - 1 || present > prev)
+					System.out.println("ERROR");
+
+				algo_cost = algo_cost+ (obj.learning_cost);
+				if(present == prev ){    // just to see whether any dimension was learnt
+					// if no dimension is learnt then move on to the next contour
+
+					/*
+					 * capturing the properties of the query execution
+					 */
+					if(print_flag)
+					{
+						writer.println("In Contour "+i+" has the following details");
+						writer.println("No of executions is "+obj.no_executions);
+						writer.println("No of repeat moves is "+obj.no_repeat_executions);
+					}
+					if(obj.no_executions>obj.max_no_executions)
+						obj.max_no_executions = obj.no_executions;
+					if(obj.no_repeat_executions > obj.max_no_repeat_executions)
+						obj.max_no_repeat_executions = obj.no_repeat_executions;
+
+
+					cost = cost*2;  
+					i = i+1;
+					obj.executions.clear();
+					/*
+					 * initialize the repeat moves and exections for the next contour
+					 */
+					for(int d=0;d<obj.dimension;d++){
+						obj.already_visited[d] = false;
+						obj.no_executions = 0;
+						obj.no_repeat_executions =0;
+					}
+
+				}
+				if(print_flag)
+				{
+					writer.println("---------------------------------------------------------------------------------------------\n");
+				}
+
+			}  //end of while
+
+			/*
+			 * printing the actual selectivity
+			 */
+			//		System.out.print("\nThe actual selectivity is original \t");
+			if(print_flag)
+			{
+				for(int d=0;d<obj.dimension;d++) 
+					writer.print(obj.actual_sel[d]+",");
+			}
+			/*
+			 * storing the index of the actual selectivities. Using this printing the
+			 * index (an approximation) of actual selectivities and its cost
+			 */
+			int [] index_actual_sel = new int[obj.dimension]; 
+			for(int d=0;d<obj.dimension;d++) index_actual_sel[d] = obj.findNearestPoint(obj.actual_sel[d]);
+
+			if(print_flag)
+			{
+				writer.print("\nCost of actual_sel ="+obj.cost_generic(index_actual_sel)+" at ");
+				for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
+			}
+			SO = (algo_cost/obj.cost_generic(index_actual_sel));
+			output.SO = SO;
+			output.anshASO += SO*locationWeight[j];
+			output.pmax = obj.pmax;
+			output.tmax = obj.tmax;
+			obj.ContourPointsMap.clear();
+			if(print_flag)
+			{
+				writer.println("\nSpillBound The SubOptimaility  is "+SO);
+//				System.out.println("\nSpillBound Harm  is "+Harm);
+			}
+    			File file = new File(apktPath+"subOpt.txt");
+			    if (!file.exists()) {
+					file.createNewFile();
+				}
+			    FileWriter writerSubOpt = new FileWriter(file, true);
+			    PrintWriter pw = new PrintWriter(writerSubOpt);
+			    pw.format("%d = %f\n", j,SO);
+			    pw.close();writerSubOpt.close();
+			    writer.close();
+	    			return output;
+		 }
+	 };
+	       futures.add(service.submit(callable));			   
+		    
+	}
+	
+		    service.shutdown();
+		    MSO =0;
+			ASO = 0;
+			anshASO = 0;
+			MaxHarm=-1*Double.MAX_VALUE;
+			ASO_points=0;
+			pmax_final = 0;
+			tmax_final = 0;
+			int j=0;
+		    for (Future<OptSBOutputParamStruct> future : futures) {
+		    	OptSBOutputParamStruct output = future.get();
+		    	if(output.flag)
+		    	{
+		    		if(output.pmax > pmax_final){
+		    			pmax_final = output.pmax;
+		    		}
+		    		if(output.tmax > tmax_final){
+		    			tmax_final = output.tmax;
+		    		}
+		    		subOpt[j] = output.SO;
+		    		if(output.SO>MSO)
+		    			MSO = output.SO;
+		    		if(output.Harm > MaxHarm)
+		    			MaxHarm = output.Harm;
+		    		ASO += output.SO;
+		    		ASO_points++;
+		    		anshASO += output.anshASO;
+		    		j++;
+		    	}
+		    }
+
+		}
+
+	//obj.writeSuboptToFile(subOpt, apktPath);
+		//conn.close();
+		System.out.println("max no of partitions = "+ pmax_final);
+		System.out.println("maximum Tolerance(actual_fraction) = "+tmax_final+" (should be ideally < 1)");
 		System.out.println("SpillBound The MaxSubOptimaility  is "+MSO);
 		System.out.println("SpillBound The MaxHarm  is "+MaxHarm);
 		System.out.println("SpillBound Anshuman average Suboptimality is "+(double)anshASO);
@@ -597,7 +830,7 @@ public OptSB(){}
 					System.out.println("Wrong Partition Number");
 					System.exit(1);
 				}
-				partition_info[partition_no].addPoint(p);
+				this.partition_info[partition_no].addPoint(p);
 			}
 		}
 		
@@ -811,7 +1044,7 @@ public OptSB(){}
 	}
 
 
-	public void oneDimensionSearch(int contour_no, double cost) {
+	public void oneDimensionSearch(PrintWriter writer, int contour_no, double cost) {
 
 		String funName = "oneDimensionSearch";
 		/*
@@ -850,7 +1083,7 @@ public OptSB(){}
 				Integer learning_dim = new Integer(ld);
 				if(learning_dim.intValue() != remDim)
 				{
-					System.out.println("ld= "+ld+", remDim="+remDim+", opt_plan_no= "+p.get_plan_no());
+					writer.println("ld= "+ld+", remDim="+remDim+", opt_plan_no= "+p.get_plan_no());
 				}
 				assert (learning_dim.intValue() == remDim) : funName+": ERROR plan's learning dimension not matching with remaining dimension";
 				assert (remainingDim.contains(learning_dim)) : funName+": ERROR remaining dimension does not contain the learning dimension";
@@ -882,13 +1115,13 @@ public OptSB(){}
 
 			if(print_flag)
 			{
-				System.out.println(funName+" learnt "+ remDim+" dimension completely");
+				writer.println(funName+" learnt "+ remDim+" dimension completely");
 			}
 			remainingDim.remove(remainingDim.indexOf(remDim));
 			remove_from_partition(remDim);
 			if(print_flag)
 			{
-				System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
+				writer.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
 			}
 			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 			return; //done if the sel_min is greater than actual selectivity
@@ -929,7 +1162,7 @@ public OptSB(){}
 			remove_from_partition(remDim);
 			if(print_flag)
 			{
-				System.out.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
+				writer.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
 			}
 			if(oneDimCost>2*cost)
 				oneDimCost = 2*cost-1;
@@ -940,7 +1173,7 @@ public OptSB(){}
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	private void spillBoundAlgo(int contour_no) throws IOException {
+	private void spillBoundAlgo(PrintWriter writer, int contour_no) throws IOException {
 
 
 		String funName = "spillBoundAlgo";
@@ -952,7 +1185,7 @@ public OptSB(){}
 		Set<Integer> unique_plans = new HashSet();
 		if(print_flag)
 		{
-			System.out.println("\nContour number ="+contour_no+ " with its size being "+ContourPointsMap.get(contour_no).size());
+			writer.println("\nContour number ="+contour_no+ " with its size being "+ContourPointsMap.get(contour_no).size());
 		}
 		int j;
 
@@ -1045,7 +1278,7 @@ public OptSB(){}
 			assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
 			//-- old
 			m_key = (Integer)itr.next();
-			if(partition_info[m_key].getList().isEmpty())
+			if(this.partition_info[m_key].getList().isEmpty())
 			{
 				//TODO: this code can be reached!
 			//	if(print_flag)
@@ -1058,7 +1291,7 @@ public OptSB(){}
 				//	j = p[m][q];
 				j = cur_partition.get(m_key).get(q); 
 
-				max_pts = partition_info[m_key].getMaxPoints(j);
+				max_pts = this.partition_info[m_key].getMaxPoints(j);
 				if(max_pts == null)
 				{
 					System.out.println("\nNo Max point for returned NULL\n");
@@ -1068,7 +1301,8 @@ public OptSB(){}
 				double min_error = Double.MAX_VALUE;
 				for(int t=0;t<max_pts.size();t++){
 					extreme_pt = max_pts.get(t); 
-					if(plans_list[extreme_pt.getopt_plan()].getcategory(remainingDim)==j)
+					//if(plans_list[extreme_pt.getopt_plan()].getcategory(remainingDim)==j)
+					if(plans_list[getPlanNumber_generic(extreme_pt.get_point_Index())].getcategory(remainingDim)==j)
 					{
 						extreme_pt.set_goodguy();
 						local_points_max.put(j, extreme_pt);
@@ -1096,7 +1330,7 @@ public OptSB(){}
 				if(best_fpc_pt_err > max_pt.getpercent_err())
 					max_pt = temp_pt; 
 				
-				maxPoints[j] = max_pt;
+				this.maxPoints[j] = max_pt;
 
 				//				if(maxPoints[j].get_goodguy()==true)
 				//				{
@@ -1106,13 +1340,13 @@ public OptSB(){}
 				//				}
 				if(q==0)
 				{
-					min_fpc_point[m] = maxPoints[j];
+					min_fpc_point[m] = this.maxPoints[j];
 				}
 
 				
-				if(maxPoints[j].getpercent_err() < min_fpc_point[m].getpercent_err())
+				if(this.maxPoints[j].getpercent_err() < min_fpc_point[m].getpercent_err())
 				{
-					min_fpc_point[m] = maxPoints[j];
+					min_fpc_point[m] = this.maxPoints[j];
 				}
 				
 				if(q==(cur_partition.get(m_key).size()-1))
@@ -1151,15 +1385,15 @@ public OptSB(){}
 	}
 		assert(temp_tol != Double.MAX_VALUE && n_partition_best!=0):"temp_tol is untouched";
 			n_partition = n_partition_best;
-		if(temp_tol > tmax)
+		if(temp_tol > this.tmax)
 		{
-			tmax = temp_tol;
+			this.tmax = temp_tol;
 		}
 		print_points_max(points_max);
 		print_partition(best_partitioning);
-		if(n_partition > pmax)
+		if(n_partition > this.pmax)
 		{
-			pmax = n_partition;
+			this.pmax = n_partition;
 		}
 		/*
 		 * 1. Identify the correct max_point.
@@ -1249,7 +1483,7 @@ public OptSB(){}
 			{
 				if(print_flag)
 				{
-					System.out.println(funName+" Skipping the contour");
+					writer.println(funName+" Skipping the contour");
 				}
 			}
 		}	
@@ -1355,7 +1589,9 @@ public OptSB(){}
 				 * 
 				 */
 				if(p.get_goodguy()){
-					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getopt_plan()))))
+					//if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getopt_plan()))))
+					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(getPlanNumber_generic(p.get_point_Index())))))
+						
 						continue;
 				}
 				else
@@ -1365,7 +1601,7 @@ public OptSB(){}
 				}
 
 
-				sel = getLearntSelectivity(learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no);
+				sel = getLearntSelectivity(writer,learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no);
 		//		sel = getLearntSelectivity(learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)), p, contour_no);
 				//					if(sel_max[d]<=sel)
 				d= learning_dim;
@@ -1375,7 +1611,7 @@ public OptSB(){}
 				else{
 					if(print_flag)
 					{
-						System.out.println("Sel_max["+d+"]= "+sel_max[d]+", sel= "+sel);
+						writer.println("Sel_max["+d+"]= "+sel_max[d]+", sel= "+sel);
 					}
 					assert(sel_max[d]>=sel) : "When Contour Point is zero: getLearntSelectivity is higher than sel[resolution-1]";
 				}
@@ -1415,9 +1651,9 @@ public OptSB(){}
 					{
 						if(print_flag)
 						{
-							System.out.print("\n Plan "+p.get_plan_no()+" executed at ");
+							writer.print("\n Plan "+p.get_plan_no()+" executed at ");
 							for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
-							System.out.println(" and learnt "+d+" dimension completely");
+							writer.println(" and learnt "+d+" dimension completely");
 						}
 					}
 					else
@@ -1426,9 +1662,9 @@ public OptSB(){}
 						{
 							//	System.out.println("--------------FPC CASE-------------");
 							//	System.out.println("Point p");
-							System.out.print("\n FPC Plan "+p.getfpc_plan()+" with fpc_percent_err= "+p.getpercent_err()+" executed at ");
+							writer.print("\n FPC Plan "+p.getfpc_plan()+" with fpc_percent_err= "+p.getpercent_err()+" executed at ");
 							for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
-							System.out.println(" and learnt "+d+" dimension completely");
+							writer.println(" and learnt "+d+" dimension completely");
 						}
 					}
 
@@ -1445,18 +1681,18 @@ public OptSB(){}
 				{
 					if(print_flag)
 					{
-						System.out.print("\n Plan "+p.get_plan_no()+" executed at ");
+						writer.print("\n Plan "+p.get_plan_no()+" executed at ");
 						for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
-						System.out.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
+						writer.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
 					}
 				}
 				else
 				{
 					if(print_flag)
 					{
-						System.out.print("\n FPCPlan "+p.getfpc_plan()+" executed at ");
+						writer.print("\n FPCPlan "+p.getfpc_plan()+" executed at ");
 						for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
-						System.out.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
+						writer.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
 					}
 				}
 				//assert()
@@ -1482,8 +1718,9 @@ public OptSB(){}
 	public double getBestSpillingPlan(point_generic p, int dim_index) {
 
 		String funName = "getBestSpillingPlan";
+		Connection conn = null;
 		Statement stmt = null;
-
+		double execCost = -1;
 		//set the selectedEPP and nonSelectedEPP variables
 		String selectedEPP=null, nonSelectedEPP=null;
 		for(int i=0;i<varyingJoins.length();i+=2){
@@ -1501,8 +1738,15 @@ public OptSB(){}
 		}
 
 		try {
+			conn = source.getConnection();
 			stmt = conn.createStatement();
 			//NOTE,Settings: need not set the page cost's
+	                 if(database_conn==0){
+                                stmt.execute("set effective_cache_size='1GB'");
+                        }
+                        else{
+                                stmt.execute("set effective_cache_size='4GB'");
+                        }       
 			stmt.execute("set  seq_page_cost = 1");
 			stmt.execute("set  random_page_cost=4");
 			stmt.execute("set cpu_operator_cost=0.0025");
@@ -1521,34 +1765,37 @@ public OptSB(){}
 				stmt.execute("set robust_eqjoin_selec"+(d+1)+ "= "+ selectivity[p.get_dimension(d)]); 
 			}			
 			ResultSet rs = stmt.executeQuery(query_opt_spill);
+			if(rs.next()){
+            	
+				String regx = Pattern.quote("..") + "(.*?)" + Pattern.quote("rows=");
+				String str1 =  rs.getString(1);
+				Pattern pattern = Pattern.compile(regx);
+				Matcher matcher = pattern.matcher(str1);
+				while(matcher.find()){
+					execCost = Double.parseDouble(matcher.group(1));	
+				}
+			}
 			//System.out.println(rs);
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
-		File file = new File(cardinalityPath+"spill_opt_plan_cost");
-		FileReader fr;
-		double execCost = -1;
-		try {
-			fr = new FileReader(file);
-			BufferedReader br = new BufferedReader(fr);
-			execCost = Double.parseDouble(br.readLine());
-
-		} catch (NumberFormatException | IOException e) {
-
-			e.printStackTrace();
-		}
-
+		finally{
+	    	if (conn != null) {
+	        try { conn.close(); } catch (SQLException e) {}
+	    		}
+    		}
+	
 		//assert(p.getfpc_cost()>0) : funName+" fpc_cost is not set by lohit's getBestFPC function";
-		double error=((execCost-p.getopt_cost())/p.getopt_cost())*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
-		if(error <= p.getpercent_err()){
+			double p_opt_cost = getOptimalCost(getIndex(p.get_point_Index(),resolution));
+		double error=((execCost-p_opt_cost)/p_opt_cost)*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
+		if(error <= p.getpercent_err()*1.1){
 			p.putfpc_cost(execCost);
 			p.putpercent_err(error);
-			p.putfpc_plan(-2);
+			//p.putfpc_plan(-2);
 		}
 		else{
-			assert(false) : funName+ "the optimal spilling plan cannot have lesser cost than the fpc plan";
+			//assert(false) : funName+ "the optimal spilling plan cannot have lesser cost than the fpc plan with error = "+error+" but earlier fpcError = "+p.getpercent_err();
 		}
 		return p.getpercent_err();
 	}
@@ -1621,149 +1868,149 @@ public OptSB(){}
         return true;
     }
 	
-	static point_generic findMaxPoint(ArrayList<point_generic> contour_points, int dim_index)
-	{
-
-		int loc_opt;
-		int [] index_opt = new int[dimension];
-		int []index = new int[dimension];
-		int [] max_index= new int [dimension];
-		double min_error=100000.0;
-		point_generic max_point=contour_points.get(0);
-		max_index = max_point.get_point_Index();
-
-
-		int OptPlan, cur_category, category,loc,CurFpcPlan;
-		double NewFpcCost, CurFpcCost, CurOptCost,error;
-
-		point_generic cur;
-		ArrayList<point_generic> MaxList = new ArrayList<point_generic>();
-
-
-		for(int i=1;i<contour_points.size();i++)
-		{
-			cur=contour_points.get(i);
-			index=cur.get_point_Index();
-			if(index[dim_index] > max_index[dim_index])
-			{
-				max_point = contour_points.get(i);
-				max_index = max_point.get_point_Index();
-			}
-		}
-
-		/*
-		 * 1. Get the maxindex!
-		 * 2. Put all points having index[dim_index]=max_index into a list;
-		 * 3. Iterate over the list
-		 * 4. Iterate over all the plans, get the best FPC (with dim) at the point. Maintain the point with lowest FPC Cost.
-		 * 
-		 *  5.Return the point
-		 *  
-		 *  ---> Count the FPC/Opt error while doing the above, and show it!!
-		 */
-		//Put all points having index[dim_index]=max_index[dim_index] into a list;
-		for(int i=0;i<contour_points.size();i++)
-		{
-			cur=contour_points.get(i);
-			index=cur.get_point_Index();
-			if(index[dim_index] == max_index[dim_index])
-			{
-				MaxList.add(cur);
-			}
-		}
-		//Iterating over the MaxList to find the lowest cost FPC.
-		for(int i=0;i<MaxList.size();i++)
-		{
-			cur=MaxList.get(i);
-			index=cur.get_point_Index();
-			OptPlan=cur.get_plan_no();
-
-			cur_category = plans_list[OptPlan].getcategory(remainingDim);
-			if(cur_category==dim_index)
-			{
-				cur.set_goodguy();
-				return cur;
-			}
-			for(int j=0;j < nPlans;j++)
-			{
-				if(j==OptPlan)
-					continue;
-				category=plans_list[j].getcategory(remainingDim);
-				if(category == dim_index)
-				{
-					loc= getIndex(index,resolution);
-					NewFpcCost=AllPlanCosts[j][loc];
-
-					/*----------------*/
-					//					loc_opt = plans_list[j].getPoints().get(0);
-					//					index_opt=getCoordinates(dimension, resolution, loc_opt);
-					//					NewFpcCost=getSpillCost(dim_index, j, index_opt, index);
-					/*------------------*/
-
-
-					CurFpcCost=cur.getfpc_cost();
-					CurOptCost=cur.getopt_cost();
-
-					if(CurFpcCost == -1 || CurFpcCost > NewFpcCost)
-					{
-						cur.putfpc_cost(NewFpcCost);
-						cur.putfpc_plan(j);
-						error=((NewFpcCost-CurOptCost)/CurOptCost)*100;
-						cur.putpercent_err(error);
-
-					}
-				}
-			}
-
-		}
-
-		for(int i=0;i<MaxList.size();i++)
-		{
-			cur=MaxList.get(i);
-			index=cur.get_point_Index();
-			error = cur.getpercent_err();
-			if(error < min_error)
-			{
-				min_error = error;
-				max_point = cur;
-			}
-		}
-		/*
-		 * 1. We need to take the first point in case of a line.
-		 */
-		int cur_index,final_index =-1;
-		int[] m_index = new int [dimension];
-		m_index = max_point.get_point_Index();
-
-
-		cur_index = m_index[dim_index];
-		boolean flag;
-		for(int i=1;i<contour_points.size();i++)
-		{
-			flag = true;
-			cur=contour_points.get(i);
-			index=cur.get_point_Index();
-			for(int j=0;j<dimension;j++)
-			{
-				if(j!= dim_index && index[j] != m_index[j])
-				{
-					flag = false;
-					break;
-				}
-			}
-			if(flag == true && index[dim_index] < cur_index && max_point.get_cost() == cur.get_cost())
-				//			if(flag == true && index[dim_index] < cur_index)
-			{
-				//System.out.print("O");
-				//TODO : Try to invalidate the others from MSO calculation!
-				cur_index = index[dim_index];
-				max_point = cur;
-			}
-		}
-
-		max_point.set_fpcSpillDim(dim_index);
-		return max_point;
-	}
+//	static point_generic findMaxPoint(ArrayList<point_generic> contour_points, int dim_index)
+//	{
+//
+//		int loc_opt;
+//		int [] index_opt = new int[dimension];
+//		int []index = new int[dimension];
+//		int [] max_index= new int [dimension];
+//		double min_error=100000.0;
+//		point_generic max_point=contour_points.get(0);
+//		max_index = max_point.get_point_Index();
+//
+//
+//		int OptPlan, cur_category, category,loc,CurFpcPlan;
+//		double NewFpcCost, CurFpcCost, CurOptCost,error;
+//
+//		point_generic cur;
+//		ArrayList<point_generic> MaxList = new ArrayList<point_generic>();
+//
+//
+//		for(int i=1;i<contour_points.size();i++)
+//		{
+//			cur=contour_points.get(i);
+//			index=cur.get_point_Index();
+//			if(index[dim_index] > max_index[dim_index])
+//			{
+//				max_point = contour_points.get(i);
+//				max_index = max_point.get_point_Index();
+//			}
+//		}
+//
+//		/*
+//		 * 1. Get the maxindex!
+//		 * 2. Put all points having index[dim_index]=max_index into a list;
+//		 * 3. Iterate over the list
+//		 * 4. Iterate over all the plans, get the best FPC (with dim) at the point. Maintain the point with lowest FPC Cost.
+//		 * 
+//		 *  5.Return the point
+//		 *  
+//		 *  ---> Count the FPC/Opt error while doing the above, and show it!!
+//		 */
+//		//Put all points having index[dim_index]=max_index[dim_index] into a list;
+//		for(int i=0;i<contour_points.size();i++)
+//		{
+//			cur=contour_points.get(i);
+//			index=cur.get_point_Index();
+//			if(index[dim_index] == max_index[dim_index])
+//			{
+//				MaxList.add(cur);
+//			}
+//		}
+//		//Iterating over the MaxList to find the lowest cost FPC.
+//		for(int i=0;i<MaxList.size();i++)
+//		{
+//			cur=MaxList.get(i);
+//			index=cur.get_point_Index();
+//			OptPlan=cur.get_plan_no();
+//
+//			cur_category = plans_list[OptPlan].getcategory(remainingDim);
+//			if(cur_category==dim_index)
+//			{
+//				cur.set_goodguy();
+//				return cur;
+//			}
+//			for(int j=0;j < nPlans;j++)
+//			{
+//				if(j==OptPlan)
+//					continue;
+//				category=plans_list[j].getcategory(remainingDim);
+//				if(category == dim_index)
+//				{
+//					loc= getIndex(index,resolution);
+//					NewFpcCost=AllPlanCosts[j][loc];
+//
+//					/*----------------*/
+//					//					loc_opt = plans_list[j].getPoints().get(0);
+//					//					index_opt=getCoordinates(dimension, resolution, loc_opt);
+//					//					NewFpcCost=getSpillCost(dim_index, j, index_opt, index);
+//					/*------------------*/
+//
+//
+//					CurFpcCost=cur.getfpc_cost();
+//					CurOptCost=cur.getopt_cost();
+//
+//					if(CurFpcCost == -1 || CurFpcCost > NewFpcCost)
+//					{
+//						cur.putfpc_cost(NewFpcCost);
+//						cur.putfpc_plan(j);
+//						error=((NewFpcCost-CurOptCost)/CurOptCost)*100;
+//						cur.putpercent_err(error);
+//
+//					}
+//				}
+//			}
+//
+//		}
+//
+//		for(int i=0;i<MaxList.size();i++)
+//		{
+//			cur=MaxList.get(i);
+//			index=cur.get_point_Index();
+//			error = cur.getpercent_err();
+//			if(error < min_error)
+//			{
+//				min_error = error;
+//				max_point = cur;
+//			}
+//		}
+//		/*
+//		 * 1. We need to take the first point in case of a line.
+//		 */
+//		int cur_index,final_index =-1;
+//		int[] m_index = new int [dimension];
+//		m_index = max_point.get_point_Index();
+//
+//
+//		cur_index = m_index[dim_index];
+//		boolean flag;
+//		for(int i=1;i<contour_points.size();i++)
+//		{
+//			flag = true;
+//			cur=contour_points.get(i);
+//			index=cur.get_point_Index();
+//			for(int j=0;j<dimension;j++)
+//			{
+//				if(j!= dim_index && index[j] != m_index[j])
+//				{
+//					flag = false;
+//					break;
+//				}
+//			}
+//			if(flag == true && index[dim_index] < cur_index && max_point.get_cost() == cur.get_cost())
+//				//			if(flag == true && index[dim_index] < cur_index)
+//			{
+//				//System.out.print("O");
+//				//TODO : Try to invalidate the others from MSO calculation!
+//				cur_index = index[dim_index];
+//				max_point = cur;
+//			}
+//		}
+//
+//		max_point.set_fpcSpillDim(dim_index);
+//		return max_point;
+//	}
 
 
 	double getBestFPC(point_generic p, int dim_index)
@@ -1799,7 +2046,8 @@ public OptSB(){}
 
 
 				CurFpcCost=p.getfpc_cost();
-				CurOptCost=p.getopt_cost();
+				double p_opt_cost = getOptimalCost(getIndex(p.get_point_Index(),resolution));
+				CurOptCost=p_opt_cost;
 
 				if(CurFpcCost == -1 || CurFpcCost > NewFpcCost)
 				{
@@ -1813,7 +2061,8 @@ public OptSB(){}
 		if(p.getfpc_cost() == Double.MAX_VALUE){
 			//p.putfpc_cost(Double.MAX_VALUE);
 			p.putfpc_plan(-1);
-			error=((p.getfpc_cost()-p.getopt_cost())/p.getopt_cost())*100;
+			double p_opt_cost = getOptimalCost(getIndex(p.get_point_Index(),resolution));
+			error=((p.getfpc_cost()-p_opt_cost)/p_opt_cost)*100;
 			p.putpercent_err(error);
 		}
 		p.set_fpcSpillDim(dim_index);
@@ -1831,9 +2080,9 @@ public OptSB(){}
 
 	}
 
-	static void make_local_partition(int[] p_encoding, int dimension)
+	void make_local_partition(int[] p_encoding, int dimension)
 	{
-		int n = remainingDim.size();
+		int n = this.remainingDim.size();
 		
 		int part_num = 1;
         int i;
@@ -1927,7 +2176,7 @@ public OptSB(){}
 
 
 
-	public double getLearntSelectivity(int dim, double cost,point_generic p, int contour_no) {
+	public double getLearntSelectivity(PrintWriter writer, int dim, double cost,point_generic p, int contour_no) {
 
 		int loc;
 		memo m;
@@ -1963,10 +2212,11 @@ public OptSB(){}
 		double multiplier = 1,selLearnt = Double.MIN_VALUE,execCost=Double.MIN_VALUE, prevExecCost = Double.MIN_VALUE;
 		boolean sel_completely_learnt = false;
 		int [] actual_sel_index = convertSelectivitytoIndex(actual_sel);
+		Connection conn = null;
 		Statement stmt = null;
 
 		try {
-
+			conn = source.getConnection();
 			stmt = conn.createStatement();
 			//System.out.println(funName+ " : database connection statement create successfully");
 			//Settings: constants in BinaryTree   
@@ -2002,8 +2252,9 @@ public OptSB(){}
 			if(p.get_goodguy())
 				temp_cost = p.get_cost();
 			else{
-				temp_cost = AllPlanCosts[plan][p_loc];
-				assert(temp_cost == p.getfpc_cost()) : funName+ "temp_cost wrt fpc is not set correctly";
+				//temp_cost = AllPlanCosts[plan][p_loc];
+				temp_cost = p.getfpc_cost();
+				//assert(temp_cost == p.getfpc_cost()) : funName+ "temp_cost wrt fpc is not set correctly";
 			}
 			
 			if(temp_cost < 2*cost && (temp_cost > cost) )
@@ -2025,27 +2276,27 @@ public OptSB(){}
 
 			//      System.out.println(point_index.hashCode());
 			//      System.out.println(point_index.equals(new Index(p,contour_no,dim)));
-			if(memoization_flag==true)
-			{
-				if(sel_for_point.containsKey(point_index))
-				{
-					m = sel_for_point.get(new Index(p,contour_no,dim));
-					dir_cost = m.getCost(actual_sel_index[dim]);
-					dir_sel_index = actual_sel_index[dim];
-					if( dir_cost == -1)
-					{
-						dir_cost = m.getHCost();
-						dir_sel_index = m.getHSel();
-					}
-					
-					learning_cost += dir_cost; 
-					if(print_flag)
-					{
-						System.out.println("Short circuit : Cost of the spilled execution is "+ dir_cost);
-					}
-					return selectivity[dir_sel_index];
-				}
-			}
+//			if(memoization_flag==true)
+//			{
+//				if(sel_for_point.containsKey(point_index))
+//				{
+//					m = sel_for_point.get(new Index(p,contour_no,dim));
+//					dir_cost = m.getCost(actual_sel_index[dim]);
+//					dir_sel_index = actual_sel_index[dim];
+//					if( dir_cost == -1)
+//					{
+//						dir_cost = m.getHCost();
+//						dir_sel_index = m.getHSel();
+//					}
+//					
+//					learning_cost += dir_cost; 
+//					if(print_flag)
+//					{
+//						System.out.println("Short circuit : Cost of the spilled execution is "+ dir_cost);
+//					}
+//					return selectivity[dir_sel_index];
+//				}
+//			}
 			
 			//m = new memo();
 			//			if(sel_for_point.containsKey(new Index(p,contour_no,dim)))
@@ -2262,8 +2513,8 @@ public OptSB(){}
 				assert(prevExecCost!=Double.MIN_VALUE):"PrevExec Cost is still the default value";
 				if(print_flag)
 				{
-					System.out.println("hashjoinFlag= "+hashjoinFlag);
-					System.out.println("Cost of the spilled execution is "+prevExecCost);
+					writer.println("hashjoinFlag= "+hashjoinFlag);
+					writer.println("Cost of the spilled execution is "+prevExecCost);
 				}
 				//prevExecCost = execCost;
 			}
@@ -2284,8 +2535,8 @@ public OptSB(){}
 //						m.add(idx, cost);
 					if(print_flag)
 					{
-						System.out.println("hashjoinFlag= "+hashjoinFlag);
-						System.out.println("Zip-through - Cost of the spilled execution (not sucessful) is "+cost);
+						writer.println("hashjoinFlag= "+hashjoinFlag);
+						writer.println("Zip-through - Cost of the spilled execution (not sucessful) is "+cost);
 					}
 				}
 				else{
@@ -2294,8 +2545,8 @@ public OptSB(){}
 					assert(prevExecCost!=Double.MIN_VALUE):"PrevExec Cost is still the default value";
 					if(print_flag)
 					{
-						System.out.println("hashjoinFlag= "+hashjoinFlag);
-						System.out.println("Cost of the spilled execution (not sucessful) is "+prevExecCost);
+						writer.println("hashjoinFlag= "+hashjoinFlag);
+						writer.println("Cost of the spilled execution (not sucessful) is "+prevExecCost);
 					}
 					int idx = temp_actual_index[dim];
 					if(!hashjoinFlag && idx>0){	
@@ -2312,12 +2563,16 @@ public OptSB(){}
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 			e.printStackTrace();
 
-		} 		
+		}finally{
+    	if (conn != null) {
+	        try { conn.close(); } catch (SQLException e) {}
+	    }
+    } 		
 		assert(dim<=dimension) : funName+" dim data structure more dimensions possible";
 		assert(selLearnt<=(double)1 && selLearnt >= selectivity[0]):funName+"selectivity learnt ["+selLearnt+"] is greater than 1!";
 		if(print_flag)
 		{
-			System.out.println("Postgres: selectivity learnt  "+selLearnt+" with plan number "+plan);
+			writer.println("Postgres: selectivity learnt  "+selLearnt+" with plan number "+plan);
 		}
 
 		
@@ -2382,7 +2637,7 @@ public OptSB(){}
 	}
 	
 	
-	public void initialize(int location) {
+	public void initialize(PrintWriter writer, int location) {
 
 		//		ArrayList<Integer> a1 = new ArrayList<Integer>();
 		//    	ArrayList<Integer> a2 = new ArrayList<Integer>();
@@ -2398,23 +2653,23 @@ public OptSB(){}
 		remainingDim.clear();
 		for(int i=0;i<dimension;i++)
 			remainingDim.add(i);
-		n_partition = p.length;
+		//n_partition = p.length;
 		cur_partition.clear();
 		//		temp_list.clear();
 		//	Iterator itr = cur_partition.keySet().iterator();
 		int k;
-		for(int i=0;i<n_partition;i++)
-		{
-			//assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
-			temp_list = new ArrayList<Integer>();
-			for(int j=0;j<p[i].length;j++)
-			{
-				k = p[i][j];
-				temp_list.add(k);
-			}
-			cur_partition.put(i, temp_list);
-			//			temp_list.clear();
-		}
+//		for(int i=0;i<n_partition;i++)
+//		{
+//			//assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
+//			temp_list = new ArrayList<Integer>();
+//			for(int j=0;j<p[i].length;j++)
+//			{
+//				k = p[i][j];
+//				temp_list.add(k);
+//			}
+//			cur_partition.put(i, temp_list);
+//			//			temp_list.clear();
+//		}
 		//		a1 = cur_partition.get(0);
 		//    	a2 = cur_partition.get(1);
 		//    	a3 = cur_partition.get(2);
@@ -2437,18 +2692,18 @@ public OptSB(){}
 		actual_sel = new double[dimension];
 		if(print_flag)
 		{
-			System.out.print("\nactual_sel=[");
+			writer.print("\nactual_sel=[");
 		}
 		for(int i=0;i<dimension;i++){
 			actual_sel[i] = selectivity[index[i]];
 			if(print_flag)
 			{
-				System.out.print(actual_sel[i]+",");
+				writer.print(actual_sel[i]+",");
 			}
 		}
 		if(print_flag)
 		{
-			System.out.print("]\n");
+			writer.print("]\n");
 		}
 
 
@@ -2717,7 +2972,7 @@ public OptSB(){}
 		this.loadPlans();
 
 		assert (totalPoints==data.length) : "Data length and the resolution didn't match !";
-		maxPoints = new point_generic[dimension];
+		this.maxPoints = new point_generic[dimension];
 		this.plans = new int [data.length];
 		this.OptimalCost = new double [data.length]; 
 		//	this.points_list = new point[resolution][resolution];
@@ -3635,14 +3890,30 @@ public OptSB(){}
 
 }
 
+class OptSBOutputParamStruct {
+	double pmax = 0;
+	double tmax = 0;
+	double SO = 0;
+	double Harm = 0;
+	double anshASO = 0;
+	boolean flag = true;
+}
+class OptSBinputParamStruct {
+	OptSB obj;
+	int index;
+	public OptSBinputParamStruct(OptSB obj, int index) {
+		this.obj = obj;
+		this.index = index;
+	}
+}
 
 
 class point_generic
 {
 	int dimension=OptSB.dimension;
 	static boolean load_flag = false;
-	int opt_plan=-1;
-	double opt_cost=-1.0;
+//	int opt_plan=-1;
+//	double opt_cost=-1.0;
 	int fpcSpillDim = -1;
 	boolean good_guy=false;
 	int fpc_plan=-1;
@@ -3699,8 +3970,8 @@ class point_generic
 		this.p_no = num;
 		this.cost = cost;
 
-		this.opt_cost=cost;
-		this.opt_plan=num;
+//		this.opt_cost=cost;
+//		this.opt_plan=num;
 
 		order =  new ArrayList<Integer>();
 		storedOrder = new ArrayList<Integer>();
@@ -3746,8 +4017,8 @@ class point_generic
 		this.p_no = num;
 		this.cost = cost;
 
-		this.opt_cost=cost;
-		this.opt_plan=num;
+//		this.opt_cost=cost;
+//		this.opt_plan=num;
 
 		//check: if the order and stored order are being updated/populated
 		order =  new ArrayList<Integer>(predicateOrder);
@@ -3790,16 +4061,16 @@ class point_generic
 	void putfpc_cost(double cost){
 		this.fpc_cost=cost;
 	}
-
-	int getopt_plan(){
-		return this.opt_plan;
-	}
-	double getopt_cost(){
-		return this.opt_cost;
-	}
-	void putopt_cost(double cost){
-		this.opt_cost=cost;
-	}
+//
+//	int getopt_plan(){
+//		return this.opt_plan;
+//	}
+//	double getopt_cost(){
+//		return this.opt_cost;
+//	}
+//	void putopt_cost(double cost){
+//		this.opt_cost=cost;
+//	}
 
 	double getpercent_err(){
 		return this.percent_err;
@@ -4030,14 +4301,18 @@ class partition
 
 			if(OptSB.selectivity[p.get_dimension(i)] >= sel_max[i]){
 			
+				//If it is strictly greater the existing points, then add only the new point, else append into the list
 				if(OptSB.selectivity[p.get_dimension(i)] > sel_max[i]){
 					if(points_max_local.containsKey(i))
 					{
 						points_max_local.remove(i);
 						
 					}
+				}
+				if(!points_max_local.containsKey(i)){
 					points_max_local.put(i, new ArrayList<point_generic>());
 				}
+			//	}
 				points_max_local.get(i).add(p);
 				sel_max[i] = OptSB.selectivity[p.get_dimension(i)]; 
 			}

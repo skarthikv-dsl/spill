@@ -6,6 +6,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Iterator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import iisc.dsl.picasso.common.PicassoConstants;
 
@@ -25,6 +27,7 @@ public class test {
         test obj = new test();
         obj.var = 20;
         test obj1 = new test(obj);
+        obj1.regexTest();
         obj.var++;
         System.out.println(obj.var+"\t"+obj1.var);
         //obj.arrayLengthTest();
@@ -180,7 +183,16 @@ public class test {
     	mapTest.get(2).order.clear();
     	map.get(2).order.get(0);
 	}
-	
+	private void regexTest(){
+		String str1 = new String("QUERY PLAN = \"Hash Join(store_sales.ss_sold_time_sk = time_dim.t_time_sk)  (cost=2001.15..14048042.86 rows=10623 width=24)\"	(typeid = 25, len = -1, typmod = -1, byval = f)");
+		String regx = Pattern.quote("..") + "(.*?)" + Pattern.quote("rows=");
+		Pattern pattern = Pattern.compile(regx);
+		Matcher matcher = pattern.matcher(str1);
+		double execCost = -1;
+		while(matcher.find()){
+			execCost = Double.parseDouble(matcher.group(1));	
+		}
+	}
     private void arrayLengthTest() {
 		// TODO Auto-generated method stub
     	String funName = "arrayLengthTest"; 

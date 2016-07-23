@@ -472,10 +472,10 @@ public class GCI3D
 		            	int j = input.index;
 		            	GCI3D obj = input.obj;
 	            
-		            	if( j!=7217){
-		    				output.flag = false;
-		        			return output;
-		    			}
+//		            	if( j!=7217){
+//		    				output.flag = false;
+//		        			return output;
+//		    			}
 		            	
 		            	Iterator itr = global_obj.ContourPointsMap.keySet().iterator();
 		            	
@@ -1456,6 +1456,7 @@ public class GCI3D
                         stmt.execute("set full_robustness = on");
                         stmt.execute("set oneFPCfull_robustness = on");
                         stmt.execute("set varyingJoins = "+varyingJoins);
+                        stmt.execute("set spill_optimization = off");
 
                         for(int d=0;d<dimension;d++){
                                 stmt.execute("set JS_multiplier"+(d+1)+ "= "+ JS_multiplier[d]);
