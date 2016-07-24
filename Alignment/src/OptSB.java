@@ -27,6 +27,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -45,6 +46,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+//import  org.apache.commons.io.FileUtils;
 
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
@@ -310,6 +312,9 @@ public OptSB(){}
 			Class.forName("org.postgresql.Driver");
 			source = new Jdbc3PoolingDataSource();
 			source.setDataSourceName("A Data Source");
+			File f_ibm = new File("/home/ijcai/spillBound/data/settings/settings.conf");
+			File f_multani = new File("/home/dsluser/Srinivas/data/settings/settings.conf");
+			File f_pahadi = new File("/home/dsladmin/Srinivas/data/settings/settings.conf");
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
@@ -323,8 +328,18 @@ public OptSB(){}
 			else{
 				
 				System.out.println("entered DB tpcds");
-				source.setServerName("localhost:5432");
-				source.setDatabaseName("tpcds");
+				if(f_pahadi.exists()){
+					source.setServerName("localhost:5432");
+					source.setDatabaseName("tpcds");
+				}
+				else if(f_ibm.exists()){
+					source.setServerName("localhost:5431");
+					source.setDatabaseName("tpcdscodd");
+				}
+				else if(f_multani.exists()){
+					source.setServerName("localhost:5432");
+					source.setDatabaseName("tpcdscodd");					
+				}
 //				conn = DriverManager
 //						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
 //								"sa", "database");
@@ -332,7 +347,7 @@ public OptSB(){}
 			}
 			source.setUser("sa");
 			source.setPassword("database");
-			source.setMaxConnections(threads/2);
+			source.setMaxConnections(threads-2);
 			System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
@@ -360,6 +375,18 @@ public OptSB(){}
 		File filelog =  new File(apktPath+"logs/");
 		if(!filelog.exists())
 			assert(filelog.mkdir()) : "was not able to create log directory";
+			//FileUtils.cleanDirectory(filelog);
+			      
+			String[] myFiles;    
+			if(filelog.isDirectory()){
+				myFiles = filelog.list();
+				for (int hi=0; hi<myFiles.length; hi++) {
+					File myFile = new File(filelog, myFiles[hi]); 
+					myFile.delete();
+				}
+			}
+
+				
 			
 	if(singleThread)
 		
@@ -534,7 +561,7 @@ public OptSB(){}
 			
 
 			System.out.println("Available Cores " + threads);
-		    ExecutorService service = Executors.newFixedThreadPool(threads-1);
+		    ExecutorService service = Executors.newFixedThreadPool(threads-2);
 		    List<Future<OptSBOutputParamStruct>> futures = new ArrayList<Future<OptSBOutputParamStruct>>();
 
 		     for (final OptSBinputParamStruct input : inputs) {
@@ -543,7 +570,7 @@ public OptSB(){}
 		            	OptSBOutputParamStruct output = new OptSBOutputParamStruct();
 		            	int j = input.index;
 		            	PrintWriter writer = new PrintWriter(new FileOutputStream(new File(apktPath+"logs/"+String.valueOf((j % 25))+".txt"),true));
-		            	writer.println("Begin execution loop "+ input.index);
+		            	System.out.println("Begin execution loop "+ input.index);
 		            	
 		            	OptSB obj = input.obj;
 	            
@@ -1235,16 +1262,31 @@ public OptSB(){}
 		
 		boolean first_flag = true;
 		int loc_dimension = remainingDim.size();
-		for(int i =0; i< loc_dimension; i++)
-		{
-			p_encoding[i] = 1;
-			until_max[i] = 1;
-		}
+		
+//		for(int i =0; i< loc_dimension; i++)
+//		{
+//			p_encoding[i] = 1;
+//			until_max[i] = 1;
+//		}
 			//	System.arraycopy(p_encoding, 0, prev_encoding, 0, loc_dimension);		
 		int partition_count =0;
-		while(true)
+		int cnt =0;
+		List<List<List<Integer>>> part = new ArrayList<>();
+		for(int i=1; i<=remainingDim.size(); i++) {
+            List<List<List<Integer>>> ret = helper(remainingDim, i);
+            //Iterate over ret and add to part
+            for (int w =0;w<ret.size();w++){
+            	part.add(ret.get(w));
+            }
+            cnt += ret.size();
+            System.out.println(cnt);
+            
+        }
+		int part_idx = 0;
+		while(part_idx < part.size())
 		{
-			if(first_flag == false )
+			
+		/*	if(first_flag == false )
 			{
 				//		break; 
 				if(next(p_encoding, until_max ,loc_dimension )==false)
@@ -1258,10 +1300,12 @@ public OptSB(){}
 				}
 			}
 			System.arraycopy(p_encoding, 0, prev_encoding, 0, loc_dimension);
+			*/
 			cur_tol = 0;
 			first_flag = false;
 			currentContourPoints = 0;
-		make_local_partition(p_encoding, loc_dimension);
+		make_local_partition(part.get(part_idx));
+		part_idx = part_idx+1;
 		assert(n_partition<=remainingDim.size()): funName+" no. of partitions is more than the number of remaining dimensions";
 		doPartition(ContourPointsMap.get(contour_no), min_cost_index, unique_plans);
 		point_generic [] min_fpc_point = new point_generic[n_partition];
@@ -1789,7 +1833,7 @@ public OptSB(){}
 		//assert(p.getfpc_cost()>0) : funName+" fpc_cost is not set by lohit's getBestFPC function";
 			double p_opt_cost = getOptimalCost(getIndex(p.get_point_Index(),resolution));
 		double error=((execCost-p_opt_cost)/p_opt_cost)*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
-		if(error <= p.getpercent_err()*1.1){
+		if(error <= p.getpercent_err()){
 			p.putfpc_cost(execCost);
 			p.putpercent_err(error);
 			//p.putfpc_plan(-2);
@@ -2080,7 +2124,45 @@ public OptSB(){}
 
 	}
 
-	void make_local_partition(int[] p_encoding, int dimension)
+	void make_local_partition(List<List<Integer>> part){
+		int n = this.remainingDim.size();
+		//Iterate over part 
+		int i=0;
+		n_partition = part.size();
+		cur_partition.clear();
+		
+		while(i < part.size()){
+			temp_list = new ArrayList<Integer>(part.get(i));
+			cur_partition.put(i,temp_list);
+			i= i+1;
+		}
+		
+	    int tot_part_size =0;
+        int part_size = 0;
+     for(int it=0;it<cur_partition.size();it++){
+    	 part_size = cur_partition.get(it).size();
+    	 tot_part_size += part_size;
+    	 for(int it1=0;it1<part_size; it1++){
+    		 for(int it2=it+1;it2<cur_partition.size();it2++)
+            	 assert(!cur_partition.get(it2).contains(cur_partition.get(it).get(it1))): "the dimensions are not disjoint in partitions"; 
+    	 }
+     }
+     assert(tot_part_size == n): "union of the elements in the partition is the total elements in the remaining dimension";
+     
+     partition_info = new partition[n_partition];
+
+		Iterator itr = cur_partition.keySet().iterator();
+		Integer i_key;
+		for(i=0;i<n_partition;i++)
+		{
+			assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
+			//				partition_info[i] = new partition(i, p[i]);
+			i_key = (Integer)itr.next();
+			partition_info[i_key] = new partition(i_key, convertIntegers(cur_partition.get(i_key)));  
+		}
+		
+	}
+	void make_local_partition_old(int[] p_encoding, int dimension)
 	{
 		int n = this.remainingDim.size();
 		
@@ -2590,6 +2672,51 @@ public OptSB(){}
 
 	}
 
+	//Input : ori -> [1,2,3], m : Block size
+	// Output : All partitioning of ori with number of partitions = m
+	    List<List<List<Integer>>> helper(List<Integer> ori, int m) {
+	        List<List<List<Integer>>> ret = new ArrayList<>();
+	        if(ori.size() < m || m < 1) return ret;
+
+	        if(m == 1) {
+	            List<List<Integer>> partition = new ArrayList<>();
+	            partition.add(new ArrayList<>(ori));
+	            ret.add(partition);
+	            return ret;
+	        }
+
+	        // f(n-1, m)
+	        List<List<List<Integer>>> prev1 = helper(ori.subList(0, ori.size() - 1), m);
+	        for(int i=0; i<prev1.size(); i++) {
+	            for(int j=0; j<prev1.get(i).size(); j++) {
+	                // Deep copy from prev1.get(i) to l
+	                List<List<Integer>> l = new ArrayList<>();
+	                for(List<Integer> inner : prev1.get(i)) {
+	                    l.add(new ArrayList<>(inner));
+	                }
+
+	                l.get(j).add(ori.get(ori.size()-1));
+	                ret.add(l);
+	            }
+	        }
+
+	        List<Integer> set = new ArrayList<>();
+	        set.add(ori.get(ori.size() - 1));
+	        // f(n-1, m-1)
+	        List<List<List<Integer>>> prev2 = helper(ori.subList(0, ori.size() - 1), m - 1);
+	        for(int i=0; i<prev2.size(); i++) {
+	            List<List<Integer>> l = new ArrayList<>(prev2.get(i));
+	            l.add(set);
+	            ret.add(l);
+	        }
+
+	        return ret;
+	    }
+
+	
+	
+	
+	
 	void remove_from_partition(int dim)
 	{
 		int i,j,k;
