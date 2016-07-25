@@ -20,7 +20,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
+import java.io.Serializable;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -47,6 +49,12 @@ import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 //import  org.apache.commons.io.FileUtils;
+
+
+
+
+
+
 
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
@@ -119,6 +127,8 @@ public class OptSB
 	
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
+	
+	static boolean Nexus_algo = false;
 	//---------------------------------------------------------
 	
 	
@@ -208,7 +218,7 @@ public OptSB(){}
 		this.maxPoints= new point_generic[dimension];
 		//point_generic []maxPoints; 
 	}
-	public static void main(String args[]) throws IOException, SQLException, InterruptedException, ExecutionException
+	public static void main(String args[]) throws IOException, SQLException, InterruptedException, ExecutionException, ClassNotFoundException
 	{
 		long startTime = System.nanoTime();
 
@@ -218,7 +228,7 @@ public OptSB(){}
 		System.out.println("hash_join_optimization_flag ="+hash_join_optimization_flag);
 		int threads = Runtime.getRuntime().availableProcessors();
 		//System.out.println("Partitions = "+part_str);
-
+		boolean singleThread = true;
 		if(src_flag)
 		{
 			paths_init();
@@ -270,38 +280,56 @@ public OptSB(){}
 		for(int d=0;d<obj.dimension;d++){
 			obj.remainingDim.add(d);
 		}
-
-		learntDim.clear();
-		learntDimIndices.clear();
+		
 		double cost = obj.getOptimalCost(0);
-		getAllPermuations(obj.remainingDim,0);
-		assert (allPermutations.size() == obj.factorial(obj.dimension)) : "all the permutations are not generated";
+		
+		boolean contoursReadFromFile = false;
+		if(!Nexus_algo){
+			File ContoursFile = new File(apktPath+"Contours.map");
+			if(ContoursFile.exists()){
+				obj.readContourPointsFromFile();
+				contoursReadFromFile = true;
+			}
+		}
+		
+		if(!contoursReadFromFile){
+			learntDim.clear();
+			learntDimIndices.clear();
+			
+			getAllPermuations(obj.remainingDim,0);
+			assert (allPermutations.size() == obj.factorial(obj.dimension)) : "all the permutations are not generated";
 
-		while(cost < 2*h_cost)
-		{
-			if(cost>h_cost)
-				cost = h_cost;
-			if(print_flag)
+			while(cost < 2*h_cost)
 			{
-				System.out.println("---------------------------------------------------------------------------------------------\n");
-				System.out.println("Contour "+i+" cost : "+cost+"\n");
+				if(cost>h_cost)
+					cost = h_cost;
+				if(print_flag)
+				{
+					System.out.println("---------------------------------------------------------------------------------------------\n");
+					System.out.println("Contour "+i+" cost : "+cost+"\n");
+				}
+				all_contour_points.clear();
+
+				//obj.nexusAlgoContour(cost); 
+
+				for(ArrayList<Integer> order:allPermutations){
+					//			System.out.println("Entering the order"+order);
+					learntDim.clear();
+					learntDimIndices.clear();
+					obj.getContourPoints(order,cost);
+				}
+				//Settings
+				//writeContourPointstoFile(i);
+				//writeContourPlanstoFile(i);
+				int size_of_contour = all_contour_points.size();
+				obj.ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
+				//global_obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
+				System.out.println("Size of contour"+size_of_contour );
+				cost = cost*2;
+				i = i+1;
+				
 			}
-			all_contour_points.clear();
-			for(ArrayList<Integer> order:allPermutations){
-				//			System.out.println("Entering the order"+order);
-				learntDim.clear();
-				learntDimIndices.clear();
-				obj.getContourPoints(order,cost);
-			}
-			//Settings
-			//writeContourPointstoFile(i);
-			//writeContourPlanstoFile(i);
-			int size_of_contour = all_contour_points.size();
-			obj.ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
-			global_obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
-			System.out.println("Size of contour"+size_of_contour );
-			cost = cost*2;
-			i = i+1;
+			obj.writeContourMaptoFile();
 		}
 //System.exit(1);
 		/*
@@ -347,7 +375,10 @@ public OptSB(){}
 			}
 			source.setUser("sa");
 			source.setPassword("database");
-			source.setMaxConnections(threads-2);
+			if(singleThread)
+			source.setMaxConnections(1);
+			else
+				source.setMaxConnections(threads-2);
 			System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
@@ -365,34 +396,48 @@ public OptSB(){}
 		obj.getPlanCountArray();
 		//int max_point = 0; /*not to execute the spillBound algorithm*/
 		int max_point = 1; /*to execute a specific q_a */
+		int min_point = 0;
 		//Settings
 		if(MSOCalculation)
 			//if(false)
 			max_point = totalPoints;
 		double[] subOpt = new double[max_point];
-		boolean singleThread = false;
+		
 		//create logs directory if it does not exist
 		File filelog =  new File(apktPath+"logs/");
 		if(!filelog.exists())
 			assert(filelog.mkdir()) : "was not able to create log directory";
 			//FileUtils.cleanDirectory(filelog);
-			      
-			String[] myFiles;    
-			if(filelog.isDirectory()){
-				myFiles = filelog.list();
-				for (int hi=0; hi<myFiles.length; hi++) {
-					File myFile = new File(filelog, myFiles[hi]); 
-					myFile.delete();
+
+			//			String[] myFiles;    
+			//			if(filelog.isDirectory()){
+			//				myFiles = filelog.list();
+			//				for (int hi=0; hi<myFiles.length; hi++) {
+			//					File myFile = new File(filelog, myFiles[hi]); 
+			//					myFile.delete();
+			//				}
+			//			}
+
+
+			if (args.length > 0) {
+				/*updating the min and the max index if available*/
+				try {
+					min_point = Integer.parseInt(args[0]);
+					max_point = Integer.parseInt(args[1]);
+				} catch (NumberFormatException e) {
+					System.err.println("Argument" + args[0] + " must be an integer.");
+					System.exit(1);
 				}
 			}
 
-				
 			
 	if(singleThread)
 		
 	{	
-		PrintWriter writer = new PrintWriter(apktPath+"logs/SB_serial_log.txt", "UTF-8");
-		for (int  j = 0 ; j < max_point ; j++)
+		//min_point = 995;
+		//max_point = 996;
+		PrintWriter writer = new PrintWriter(apktPath+"logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
+		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
 		{
 			if(print_flag || print_loop_flag)
@@ -569,6 +614,9 @@ public OptSB(){}
 		            public OptSBOutputParamStruct call() throws Exception {
 		            	OptSBOutputParamStruct output = new OptSBOutputParamStruct();
 		            	int j = input.index;
+		            	if(j%100==0){
+		            		System.gc();
+		            	}
 		            	PrintWriter writer = new PrintWriter(new FileOutputStream(new File(apktPath+"logs/"+String.valueOf((j % 25))+".txt"),true));
 		            	System.out.println("Begin execution loop "+ input.index);
 		            	
@@ -776,6 +824,14 @@ public OptSB(){}
 		//conn.close();
 		System.out.println("max no of partitions = "+ pmax_final);
 		System.out.println("maximum Tolerance(actual_fraction) = "+tmax_final+" (should be ideally < 1)");
+		File SubOptfile = new File(apktPath+"subOpt.txt");
+	    if (!SubOptfile.exists()) {
+	    	SubOptfile.createNewFile();
+		}
+	    FileWriter SubOptfileWriter = new FileWriter(SubOptfile, true);
+	    PrintWriter pw = new PrintWriter(SubOptfileWriter);
+	    pw.format("SO=%f\n",MSO);
+	    pw.close();SubOptfileWriter.close();
 		System.out.println("SpillBound The MaxSubOptimaility  is "+MSO);
 		System.out.println("SpillBound The MaxHarm  is "+MaxHarm);
 		System.out.println("SpillBound Anshuman average Suboptimality is "+(double)anshASO);
@@ -786,6 +842,43 @@ public OptSB(){}
 
 	}
 
+	public void readContourPointsFromFile() throws ClassNotFoundException {
+
+		try {
+			
+			ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"Contours.map")));
+			ContourLocationsMap obj = (ContourLocationsMap)ip.readObject();
+			ContourPointsMap = obj.getContourMap();
+			for(int c=1;c<=ContourPointsMap.size();c++){
+				
+				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
+				System.out.println("The no. of locations on contour "+(c)+" is "+ContourPointsMap.get(c).size());
+				System.out.println("--------------------------------------------------------------------------------------");
+				
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		//System.exit(0);
+	}
+	
+	public void writeContourMaptoFile(){
+
+		try {
+			FileOutputStream fos = new FileOutputStream (apktPath+"Contours.map");
+			ObjectOutputStream oos = new ObjectOutputStream(fos);
+			oos.writeObject(new ContourLocationsMap(ContourPointsMap));
+			oos.flush();
+			oos.close();
+
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		//System.exit(0);
+	}
+	
+	
 	void doPartition(ArrayList<point_generic> contour_points, int [] min_cost_index, Set<Integer> unique_plans)
 	{
 		//--For counting
@@ -1345,8 +1438,8 @@ public OptSB(){}
 				double min_error = Double.MAX_VALUE;
 				for(int t=0;t<max_pts.size();t++){
 					extreme_pt = max_pts.get(t); 
-					//if(plans_list[extreme_pt.getopt_plan()].getcategory(remainingDim)==j)
-					if(plans_list[getPlanNumber_generic(extreme_pt.get_point_Index())].getcategory(remainingDim)==j)
+					//if(t==0 || t == max_pts.size()-1)
+					if(plans_list[extreme_pt.get_plan_no()].getcategory(remainingDim)==j)
 					{
 						extreme_pt.set_goodguy();
 						local_points_max.put(j, extreme_pt);
@@ -1357,6 +1450,7 @@ public OptSB(){}
 					else
 					{
 						extreme_pt.set_badguy();
+						//if(NoFPC)
 						double temp_error = getBestFPC(extreme_pt,j);
 						if(temp_error < min_error){
 							min_error = temp_error;
@@ -1604,7 +1698,7 @@ public OptSB(){}
 				assert(plans_list[p.get_plan_no()].getcategory(remainingDim)!=key):"Error in assignment of good guy!";
 				fpc_plan = p.getfpc_plan();
 				assert(fpc_plan != -1): "bad guy doesn't have a fpc plan!!";
-				learning_dim = plans_list[fpc_plan].getcategory(remainingDim);
+				learning_dim = plans_list[fpc_plan].getcategory(remainingDim);//p.getfpc_dim() should contain the forced dimension
 				assert(learning_dim == p.get_fpcSpillDim()) : funName+" FPC learning dimension at max. point";
 				assert(learning_dim == key) : funName+" FPC learning dimension is not key for points_max data structure";
 				
@@ -1634,7 +1728,7 @@ public OptSB(){}
 				 */
 				if(p.get_goodguy()){
 					//if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getopt_plan()))))
-					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(getPlanNumber_generic(p.get_point_Index())))))
+					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.get_plan_no()))))
 						
 						continue;
 				}
@@ -1831,7 +1925,7 @@ public OptSB(){}
     		}
 	
 		//assert(p.getfpc_cost()>0) : funName+" fpc_cost is not set by lohit's getBestFPC function";
-			double p_opt_cost = getOptimalCost(getIndex(p.get_point_Index(),resolution));
+			double p_opt_cost = p.get_cost();
 		double error=((execCost-p_opt_cost)/p_opt_cost)*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
 		if(error <= p.getpercent_err()){
 			p.putfpc_cost(execCost);
@@ -2090,7 +2184,7 @@ public OptSB(){}
 
 
 				CurFpcCost=p.getfpc_cost();
-				double p_opt_cost = getOptimalCost(getIndex(p.get_point_Index(),resolution));
+				double p_opt_cost = p.get_cost();
 				CurOptCost=p_opt_cost;
 
 				if(CurFpcCost == -1 || CurFpcCost > NewFpcCost)
@@ -2105,7 +2199,7 @@ public OptSB(){}
 		if(p.getfpc_cost() == Double.MAX_VALUE){
 			//p.putfpc_cost(Double.MAX_VALUE);
 			p.putfpc_plan(-1);
-			double p_opt_cost = getOptimalCost(getIndex(p.get_point_Index(),resolution));
+			double p_opt_cost = p.get_cost();
 			error=((p.getfpc_cost()-p_opt_cost)/p_opt_cost)*100;
 			p.putpercent_err(error);
 		}
@@ -4013,6 +4107,233 @@ public OptSB(){}
 		return opt;
 	}
 
+	public int findSeedLocation(double seedCost) throws IOException  
+	{
+		point_generic leftInfo, rightInfo, midInfo;
+		int leftcorner = 0;
+		int[] left = createCorner(leftcorner);
+
+		int rightcorner = 1;
+		int[] right = createCorner(rightcorner);
+
+		/*
+		 * The following If condition checks whether any earlier point in all_contour_points 
+		 * had the same plan. If so, no need to open the .../predicateOrder/plan.txt again
+		 */
+
+		leftInfo = new point_generic(left,getPlanNumber_generic(left),cost_generic(left), remainingDim);
+		double leftCost = leftInfo.get_cost();
+		
+		rightInfo = new point_generic(right,getPlanNumber_generic(right),cost_generic(right), remainingDim);
+		double rightCost = rightInfo.get_cost(); 
+		
+		int d=dimension-1;
+				
+		while(rightCost < seedCost && d>0)  
+		{
+			copyLoc(left, right);
+			leftCost = rightCost;
+			right[--d] = resolution-1;
+			rightInfo = new point_generic(right,getPlanNumber_generic(right),cost_generic(right), remainingDim);
+			rightCost = rightInfo.get_cost(); 
+		}
+	
+		//now search between left and right using binary search
+		int mid[] = new int[dimension];
+		double midCost = -1;
+		while(leftCost < rightCost)
+		{
+			for(d=0; d<dimension; d++)
+				mid[d] = (left[d]+right[d])/2;
+	
+			if(sameLoc(mid,left)) 
+			{
+				break;
+			}
+			else
+			{
+				midInfo = new point_generic(mid,getPlanNumber_generic(mid),cost_generic(mid), remainingDim);
+				midCost = midInfo.get_cost();
+	
+				if(midCost >= seedCost) 
+				{
+					copyLoc(right, mid);
+					rightInfo = midInfo;
+					rightCost = midCost;
+				}
+				else 
+				{
+					copyLoc(left, mid);
+					leftInfo = midInfo;
+					leftCost = midCost;
+				}
+			}
+		}
+	
+		System.out.println("\n Found seed location with cost " + seedCost + " as "
+							+ getIndex(right, resolution) + " with cost = " + rightCost);
+		if(!pointAlreadyExist(rightInfo.dim_values))	
+			all_contour_points.add(rightInfo);
+		
+		//isContourPoint[getIndex(rightInfo.dim_values, resolution)] = true;		
+
+		return getIndex(right, resolution);
+	}
+	
+	public  void nexusAlgoContour(double searchCost) throws IOException 
+	{
+		int seed = 0;
+	
+		seed = findSeedLocation(searchCost);
+		
+		exploreSeed(seed, searchCost, dimension-1, dimension-2);
+	}
+	
+	public void exploreSeed(int cur_seed, double search_cost, int focus_dim, int swap_dim) throws IOException{
+		int[] seed_coords;
+		int[] candidate1_coords;
+		int[] candidate2_coords;
+
+		while(cur_seed >= 0 && focus_dim > 0) 
+		{	
+			seed_coords = getCoordinates(dimension, resolution, cur_seed);
+
+			candidate1_coords = nextLocDim(seed_coords, swap_dim); // find next location by increasing value along swapDim
+
+			while(candidate1_coords[0] < 0 && swap_dim > 0) // cant increase anymore along swapdim
+			{
+				swap_dim--;                               
+				candidate1_coords = nextLocDim(seed_coords, swap_dim);
+			}
+
+			if(swap_dim == 0)
+			{
+				swap_dim = focus_dim-1;
+			}
+
+			// find candidate2 location
+			candidate2_coords = prevLocDim(seed_coords, focus_dim);
+
+			if(candidate2_coords[0] < 0)		// reached boundary - candidate2[0] < 0 at that scenario
+			{
+				return;
+			}
+			else if(candidate2_coords[0] >= 0 && candidate1_coords[0] < 0) 
+			{					
+				point_generic seedInfo =  new point_generic(candidate2_coords,getPlanNumber_generic(candidate2_coords),cost_generic(candidate2_coords), remainingDim);
+				int newSeed = getIndex(seedInfo.dim_values,resolution);
+
+				if( seedInfo.get_cost() < search_cost )
+					return;
+				else
+				{
+					if(!pointAlreadyExist(seedInfo.dim_values))
+						all_contour_points.add(seedInfo);
+					if(swap_dim > 0)
+					{
+						exploreSeed(newSeed, search_cost, focus_dim-1,swap_dim-1);					
+					}
+				}
+				return;	
+			}
+
+			// get cost of candidate locations
+			point_generic cand1Info = new point_generic(candidate1_coords,getPlanNumber_generic(candidate1_coords),cost_generic(candidate1_coords), remainingDim);
+			point_generic cand2Info = new point_generic(candidate2_coords,getPlanNumber_generic(candidate2_coords),cost_generic(candidate2_coords), remainingDim);
+			point_generic seedInfo;
+
+			// assign next seed location
+			if (cand1Info.get_cost() > search_cost && cand2Info.get_cost() >= search_cost)
+			{			
+				seedInfo = cand2Info;
+			}
+			else if (cand1Info.get_cost() >= search_cost && cand2Info.get_cost() < search_cost)
+			{			
+				seedInfo = cand1Info;
+			}
+			else
+			{
+				int d1 = (int)Math.abs(cand1Info.get_cost() - search_cost);
+				int d2 = (int)Math.abs(cand2Info.get_cost() - search_cost);
+				if(d1 < d2)
+					seedInfo = cand1Info;
+				else
+					seedInfo = cand2Info;
+			}
+
+			if(!pointAlreadyExist(seedInfo.dim_values))
+				all_contour_points.add(seedInfo);
+
+			cur_seed = getIndex(seedInfo.dim_values,resolution);
+
+			if(swap_dim > 0)
+			{
+				exploreSeed(getIndex(seedInfo.dim_values,resolution), search_cost, focus_dim-1, swap_dim-1);				
+			}
+		}
+		System.out.println("Nexus exploration done !");
+	}
+
+	//find the next location wrt a specific dimension
+	public int[] nextLocDim(int index[], int dim)
+	{
+		int newIndex[] = new int[dimension];
+		copyLoc(newIndex, index);
+		if(index[dim] < resolution-1)
+			newIndex[dim] = index[dim] + 1;
+		else
+			newIndex[0] = -1;		// end - cant move anymore
+	
+		return newIndex;
+	}
+
+	//find the previous location wrt a specific dimension
+	public int[] prevLocDim(int index[], int dim)
+	{
+		int newIndex[] = new int[dimension];
+		copyLoc(newIndex,index);
+		if(index[dim] > 0)
+			newIndex[dim] = index[dim]-1;
+		else
+			newIndex[0] = -1;	// end - cant move anymore
+	
+		return newIndex;
+	}
+
+	
+	public void copyLoc(int destIdx[], int srcIdx[])
+	{
+		for(int d=0; d<dimension; d++)
+			destIdx[d] = srcIdx[d];
+	}
+	
+	public boolean sameLoc(int[] index1, int[] index2) 
+	{
+		for(int d=0; d<dimension; d++)
+			if(index1[d] != index2[d])
+				return false;
+	
+		return true;
+	}
+
+	
+	//required in findSeed() routine
+	public int[] createCorner(int corner) 
+	{
+		int index[] = new int[dimension];
+		int d=dimension-1;
+		
+		while(corner > 0) 
+		{
+			if((corner % 2) > 0) 
+			{
+				index[d] = resolution-1;
+			}
+			corner /= 2;
+			d--;
+		}
+		return index;
+	}
 
 
 }
@@ -4035,9 +4356,10 @@ class OptSBinputParamStruct {
 }
 
 
-class point_generic
+class point_generic implements Serializable
 {
-	int dimension=OptSB.dimension;
+	private static final long serialVersionUID = 223L;
+	int dimension;
 	static boolean load_flag = false;
 //	int opt_plan=-1;
 //	double opt_cost=-1.0;

@@ -45,11 +45,13 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -222,7 +224,7 @@ public class GCI3D
 		getAllPermuations(obj.remainingDim,0);
 		assert (allPermutations.size() == obj.factorial(obj.dimension)) : "all the permutations are not generated";
 
-		obj.isContourPoint = new boolean[obj.totalPoints];
+		//obj.isContourPoint = new boolean[obj.totalPoints];
 		while(cost < 2*h_cost)
 		{
 			if(cost>h_cost)
@@ -1118,6 +1120,7 @@ public class GCI3D
 		}
 		System.out.println("the violation count is "+violation_count);
 	}
+	
 	
 	private void spillBoundAlgo(int contour_no) throws IOException {
 

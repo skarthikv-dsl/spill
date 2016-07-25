@@ -105,11 +105,11 @@ public class CostGreedyGCI3D
 
 	static ArrayList<Integer> remainingDim;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
-	 static ArrayList<point_generic_opt_sb> all_contour_points = new ArrayList<point_generic_opt_sb>();
+	 static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	 static ArrayList<Integer> learntDim = new ArrayList<Integer>();
 		//static ArrayList<Integer> learntDimIndices = new ArrayList<Integer>();
 	 static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
-	 static HashMap<Integer,ArrayList<point_generic_opt_sb>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic_opt_sb>>();
+	 static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
 	 static HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
 	 static HashMap<Integer,Double> minContourCostMap = new HashMap<Integer,Double>();
 	 static double learning_cost = 0;
@@ -189,7 +189,7 @@ public class CostGreedyGCI3D
 			}
 			writeContourPointstoFile(i);
 			int size_of_contour = all_contour_points.size();
-			ContourPointsMap.put(i, new ArrayList<point_generic_opt_sb>(all_contour_points)); //storing the contour points
+			ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
 				cost = cost*2;
 				i = i+1;
@@ -623,7 +623,7 @@ public  void getPlanCountArray() {
 		
 		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
 			
-			point_generic_opt_sb p = ContourPointsMap.get(contour_no).get(c);
+			point_generic p = ContourPointsMap.get(contour_no).get(c);
 			
 			/*needed for testing the code*/
 			unique_points ++;
@@ -887,7 +887,7 @@ public void initialize(int location) {
 	    PrintWriter pway = new PrintWriter(writeray);
 //	    PrintWriter pwaz = new PrintWriter(writeraz);
 	    //Take iterator over the list
-	    for(point_generic_opt_sb p : all_contour_points) {
+	    for(point_generic p : all_contour_points) {
 		    //        System.out.println(p.getX()+":"+p.getY()+": Plan ="+p.p_no);
 	   	 pwax.print((int)p.get_dimension(0) + "\t");
 	   	 pway.print((int)p.get_dimension(1)+ "\t");
@@ -988,7 +988,7 @@ public void initialize(int location) {
 				{
 					if(!pointAlreadyExist(arr)){ //No need to check if the point already exist
 					//if(true){								// its okay to have redundancy
-						point_generic_opt_sb p;
+						point_generic p;
 
 						/*
 						 * The following If condition checks whether any earlier point in all_contour_points 
@@ -996,9 +996,9 @@ public void initialize(int location) {
 						 */
 						
 						if(planVisited(getPlanNumber_generic(arr))!=null)
-							p = new point_generic_opt_sb(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
+							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
 						else
-							p = new point_generic_opt_sb(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
+							p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim);
 						
 						if(minContourCostMap.containsKey(contour_no) && p.get_cost()<minContourCostMap.get(contour_no)){
 							minContourCostMap.remove(contour_no);
@@ -1019,11 +1019,11 @@ public void initialize(int location) {
 					{
 						if(!pointAlreadyExist(arr)){ //check if the point already exist
 						//if(true){	
-							point_generic_opt_sb p; 
+							point_generic p; 
 							if(planVisited(getPlanNumber_generic(arr))!=null)
-								p = new point_generic_opt_sb(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
+								p = new point_generic(arr,getPlanNumber_generic(arr),cur_val, remainingDim,planVisited(getPlanNumber_generic(arr)).getPredicateOrder());
 							else
-								p = new point_generic_opt_sb(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
+								p = new point_generic(arr,getPlanNumber_generic(arr), cur_val,remainingDim);
 							
 							if(minContourCostMap.containsKey(contour_no) && p.get_cost()<minContourCostMap.get(contour_no)){
 								minContourCostMap.remove(contour_no);
@@ -1059,11 +1059,11 @@ public void initialize(int location) {
 		
 	}
 	
-	private point_generic_opt_sb planVisited(int plan_no) {
+	private point_generic planVisited(int plan_no) {
 
 		String funName = "planVisited";
 		
-		for(point_generic_opt_sb p: all_contour_points){
+		for(point_generic p: all_contour_points){
 				if(p.get_plan_no()== plan_no){
 					return p;
 				}
@@ -1074,7 +1074,7 @@ public void initialize(int location) {
 	private boolean pointAlreadyExist(int[] arr) {
 
 		boolean flag = false;
-		for(point_generic_opt_sb p: all_contour_points){
+		for(point_generic p: all_contour_points){
 			flag = true;
 			for(int i=0;i<dimension;i++){
 				if(p.get_dimension(i)!= arr[i]){
