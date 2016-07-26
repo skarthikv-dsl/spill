@@ -127,8 +127,11 @@ public class OptSB
 	
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
-	
+	static boolean singleThread = true;
+	static boolean allPlanCost = false;
+	static boolean generateSpecificContour = true;	
 	static boolean Nexus_algo = false;
+	static int genContourNumber = -1;
 	//---------------------------------------------------------
 	
 	
@@ -228,7 +231,11 @@ public OptSB(){}
 		System.out.println("hash_join_optimization_flag ="+hash_join_optimization_flag);
 		int threads = Runtime.getRuntime().availableProcessors();
 		//System.out.println("Partitions = "+part_str);
-		boolean singleThread = true;
+		//int genContourNumber = -1;
+		if(generateSpecificContour)
+			if(args.length>0)
+				genContourNumber = Integer.parseInt(args[0]);
+		
 		if(src_flag)
 		{
 			paths_init();
@@ -261,7 +268,7 @@ public OptSB(){}
 		//		ADiagramPacket reducedgdp = cg.cgFpc(threshold, gdp,apktPath);
 
 		//Populate the OptimalCost Matrix.
-		obj.readpkt(gdp);
+		obj.readpkt(gdp, allPlanCost);
 		obj.loadPropertiesFile();
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
@@ -284,7 +291,7 @@ public OptSB(){}
 		double cost = obj.getOptimalCost(0);
 		
 		boolean contoursReadFromFile = false;
-		if(!Nexus_algo){
+		if(!Nexus_algo && !generateSpecificContour){
 			File ContoursFile = new File(apktPath+"Contours.map");
 			if(ContoursFile.exists()){
 				obj.readContourPointsFromFile();
@@ -308,6 +315,12 @@ public OptSB(){}
 					System.out.println("---------------------------------------------------------------------------------------------\n");
 					System.out.println("Contour "+i+" cost : "+cost+"\n");
 				}
+				if(i!=genContourNumber){
+					cost = cost*2;
+					i++;
+					continue;
+					
+				}
 				all_contour_points.clear();
 
 				//obj.nexusAlgoContour(cost); 
@@ -327,7 +340,7 @@ public OptSB(){}
 				System.out.println("Size of contour"+size_of_contour );
 				cost = cost*2;
 				i = i+1;
-				
+			
 			}
 			obj.writeContourMaptoFile();
 		}
@@ -434,8 +447,8 @@ public OptSB(){}
 	if(singleThread)
 		
 	{	
-		//min_point = 995;
-		//max_point = 996;
+		min_point = 0;
+		max_point = 1000;
 		PrintWriter writer = new PrintWriter(apktPath+"logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -865,7 +878,12 @@ public OptSB(){}
 	public void writeContourMaptoFile(){
 
 		try {
-			FileOutputStream fos = new FileOutputStream (apktPath+"Contours.map");
+			String path;
+			if(generateSpecificContour)
+				path = new String (apktPath+"Contour"+genContourNumber+".map");
+			else
+				path = new String (apktPath+"Contours.map");
+			FileOutputStream fos = new FileOutputStream (path);
 			ObjectOutputStream oos = new ObjectOutputStream(fos);
 			oos.writeObject(new ContourLocationsMap(ContourPointsMap));
 			oos.flush();
@@ -875,7 +893,8 @@ public OptSB(){}
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		//System.exit(0);
+		if(generateSpecificContour)
+			System.exit(0);
 	}
 	
 	
@@ -1891,7 +1910,7 @@ public OptSB(){}
 			stmt.execute("set cpu_index_tuple_cost=0.005");
 			stmt.execute("set cpu_tuple_cost=0.01");	
 			stmt.execute("set full_robustness = on");
-			stmt.execute("set oneFPCfull_robustness = on");
+			//stmt.execute("set oneFPCfull_robustness = on");
 			stmt.execute("set spill_optimization = on");
 			stmt.execute("set varyingJoins = "+varyingJoins);
 			stmt.execute("set selectedEPP = "+selectedEPP);
@@ -3179,7 +3198,7 @@ public OptSB(){}
 	}
 
 
-	void readpkt(ADiagramPacket gdp) throws IOException
+	void readpkt(ADiagramPacket gdp, boolean allPlanCost) throws IOException
 	{
 		String funName="readpkt";
 		//ADiagramPacket gdp = getGDP(new File(pktPath));
@@ -3254,19 +3273,19 @@ public OptSB(){}
 
 		// ------------------------------------- Read pcst files
 		nPlans = totalPlans;
-		AllPlanCosts = new double[nPlans][totalPoints];
-		//costBouquet = new double[total_points];
-		double CurFpcCost,CurOptCost;
-		double error,max_err=-1;
-		int x,y;
-		for (int i = 0; i < nPlans; i++) {
-			try {
+		if(allPlanCost){
+			AllPlanCosts = new double[nPlans][totalPoints];
+			//costBouquet = new double[total_points];
+			
+			int x,y;
+			for (int i = 0; i < nPlans; i++) {
+				try {
 
-				ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(plansPath + i + ".pcst")));
-				double[] cost = (double[]) ip.readObject();
-				for (int j = 0; j < totalPoints; j++)
-				{
-					/*
+					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(plansPath + i + ".pcst")));
+					double[] cost = (double[]) ip.readObject();
+					for (int j = 0; j < totalPoints; j++)
+					{
+						/*
 							index=getCoordinates(dimension,resolution,j);
 							x=index[0];
 							y=index[1];
@@ -3280,14 +3299,16 @@ public OptSB(){}
 								error=((cost[j]-CurOptCost)/CurOptCost)*100;
 								points_list[x][y].putpercent_err(error);
 							}
-					 */
+						 */
 
-					AllPlanCosts[i][j] = cost[j];
+						AllPlanCosts[i][j] = cost[j];
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
 				}
-			} catch (Exception e) {
-				e.printStackTrace();
 			}
-		}
+			
+		
 		/*
 				 for(int i=0;i<resolution;i++)
 				{
@@ -3305,7 +3326,8 @@ public OptSB(){}
 		/*to test the FPC functionality*/
 		int fpc_count=0;
 		//double error;
-		double max_error = -1.0;
+		double CurFpcCost,CurOptCost;
+		double error,max_error=-1;
 		for(int i=0;i<data.length;i++){		
 			int p = data[i].getPlanNumber();
 			double c1= data[i].getCost(); //optimal cost at i
@@ -3327,7 +3349,7 @@ public OptSB(){}
 		}
 		System.out.println(funName+": FPC ERROR: for 5% deviation is "+fpc_count+" Max Error%="+max_error);
 
-
+		}
 
 
 	}
