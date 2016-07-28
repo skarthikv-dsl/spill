@@ -56,6 +56,7 @@ import java.util.regex.Pattern;
 
 
 
+
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -128,10 +129,12 @@ public class OptSB
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
 	static boolean singleThread = true;
-	static boolean allPlanCost = false;
-	static boolean generateSpecificContour = true;	
+	static boolean allPlanCost = true;
+	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
+	static boolean FPC_for_Alignment = true;
 	static int genContourNumber = -1;
+	static boolean AlignmentPenaltyCode = false;
 	//---------------------------------------------------------
 	
 	
@@ -268,7 +271,11 @@ public OptSB(){}
 		//		ADiagramPacket reducedgdp = cg.cgFpc(threshold, gdp,apktPath);
 
 		//Populate the OptimalCost Matrix.
-		obj.readpkt(gdp, allPlanCost);
+		if(FPC_for_Alignment && !Nexus_algo)
+			obj.readpkt(gdp, true);
+		else
+			obj.readpkt(gdp, false);
+		
 		obj.loadPropertiesFile();
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
@@ -291,13 +298,13 @@ public OptSB(){}
 		double cost = obj.getOptimalCost(0);
 		
 		boolean contoursReadFromFile = false;
-		if(!Nexus_algo && !generateSpecificContour){
-			File ContoursFile = new File(apktPath+"Contours.map");
-			if(ContoursFile.exists()){
-				obj.readContourPointsFromFile();
-				contoursReadFromFile = true;
-			}
-		}
+//		if(!Nexus_algo && !generateSpecificContour){
+//			File ContoursFile = new File(apktPath+"Contours.map");
+//			if(ContoursFile.exists()){
+//				obj.readContourPointsFromFile();
+//				contoursReadFromFile = true;
+//			}
+//		}
 		
 		if(!contoursReadFromFile){
 			learntDim.clear();
@@ -315,21 +322,24 @@ public OptSB(){}
 					System.out.println("---------------------------------------------------------------------------------------------\n");
 					System.out.println("Contour "+i+" cost : "+cost+"\n");
 				}
-				if(i!=genContourNumber){
-					cost = cost*2;
-					i++;
-					continue;
-					
-				}
+//				if(i!=genContourNumber && generateSpecificContour){
+//					cost = cost*2;
+//					i++;
+//					continue;
+//					
+//				}
 				all_contour_points.clear();
 
-				//obj.nexusAlgoContour(cost); 
+				if(Nexus_algo)
+					obj.nexusAlgoContour(cost); 
 
-				for(ArrayList<Integer> order:allPermutations){
-					//			System.out.println("Entering the order"+order);
-					learntDim.clear();
-					learntDimIndices.clear();
-					obj.getContourPoints(order,cost);
+				else{
+					for(ArrayList<Integer> order:allPermutations){
+						//			System.out.println("Entering the order"+order);
+						learntDim.clear();
+						learntDimIndices.clear();
+						obj.getContourPoints(order,cost);
+					}
 				}
 				//Settings
 				//writeContourPointstoFile(i);
@@ -342,8 +352,9 @@ public OptSB(){}
 				i = i+1;
 			
 			}
-			obj.writeContourMaptoFile();
+			//obj.writeContourMaptoFile();
 		}
+		
 //System.exit(1);
 		/*
 		 * Setting up the DB connection to Postgres/TPCH/TPCDS Benchmark. 
@@ -356,6 +367,7 @@ public OptSB(){}
 			File f_ibm = new File("/home/ijcai/spillBound/data/settings/settings.conf");
 			File f_multani = new File("/home/dsluser/Srinivas/data/settings/settings.conf");
 			File f_pahadi = new File("/home/dsladmin/Srinivas/data/settings/settings.conf");
+			File f_ibm84 = new File("/data/spillBound/data/settings/settings.conf");
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
@@ -381,6 +393,10 @@ public OptSB(){}
 					source.setServerName("localhost:5432");
 					source.setDatabaseName("tpcdscodd");					
 				}
+				else if(f_ibm84.exists()){
+					source.setServerName("localhost:5431");
+					source.setDatabaseName("tpcdscodd");
+					}
 //				conn = DriverManager
 //						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
 //								"sa", "database");
@@ -389,7 +405,7 @@ public OptSB(){}
 			source.setUser("sa");
 			source.setPassword("database");
 			if(singleThread)
-			source.setMaxConnections(1);
+				source.setMaxConnections(1);
 			else
 				source.setMaxConnections(threads-2);
 			System.out.println("Opened database successfully");
@@ -403,6 +419,10 @@ public OptSB(){}
 		/*
 		 * running the spillBound and plan bouquet algorithm 
 		 */
+		
+		if(AlignmentPenaltyCode)
+			obj.checkAlignmentPenalty();
+
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
 		double pmax_final=0, tmax_final=0;
 		int ASO_points=0;
@@ -447,8 +467,8 @@ public OptSB(){}
 	if(singleThread)
 		
 	{	
-		min_point = 0;
-		max_point = 1000;
+//		min_point = 0;
+//		max_point = 1000;
 		PrintWriter writer = new PrintWriter(apktPath+"logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -582,7 +602,8 @@ public OptSB(){}
 			}
 			SO = (algo_cost/obj.cost_generic(index_actual_sel));
 			subOpt[j] = SO;
-			Harm = obj.maxHarmCalculation(j, SO);
+			if(FPC_for_Alignment)
+				Harm = obj.maxHarmCalculation(j, SO);
 			if(Harm > MaxHarm)
 				MaxHarm = Harm;
 			ASO += SO;
@@ -1182,6 +1203,140 @@ public OptSB(){}
 
 	}
 
+	  private void checkAlignmentPenalty() throws NumberFormatException, IOException {
+	       
+	        HashMap<Integer,ArrayList<Integer>> spillDimensionPlanMap = new HashMap<Integer,ArrayList<Integer>>();
+	        double[] penalty_threshold = {1, 1.2, 1.5, 2};
+	        boolean aligned = false;
+	        int [] contour_penalty_count = new int[penalty_threshold.length];
+	        buildSpillDimensionMap(spillDimensionPlanMap);
+	   
+	        double max_penality = Double.MIN_VALUE;
+	        //find the extreme locations for each dimensions
+	        for(int c=1; c<=ContourPointsMap.size(); c++){
+	           
+	            System.out.println("------------------------------------Contour "+c+"---------------------------------");
+	            //get the extreme locations for each dimension in points_max for each contour
+	            HashMap<Integer,point_generic> points_max = new HashMap<Integer,point_generic>();
+
+	            for(int l=0; l <ContourPointsMap.get(c).size(); l++){
+	                point_generic p = ContourPointsMap.get(c).get(l);
+	                for(int d=0; d<dimension; d++){
+	                	 if(!points_max.containsKey(d))
+	                         points_max.put(d, p);
+	                     else{
+	                         if(points_max.get(d).dim_values[d] < p.dim_values[d]){
+	                             points_max.remove(new Integer(d));
+	                             points_max.put(d, p);
+	                         }
+	                     }
+	                }
+	            }
+
+	            aligned = false;
+	            //calculate the penalty for aligning each dimension
+	            double penalty[] = new double[dimension];
+	            for(int d=0; d<dimension; d++){
+	            	
+	            	 double original_cost = OptimalCost[getIndex(points_max.get(d).dim_values, resolution)];
+	                 double min_fpc_cost = Double.MAX_VALUE;
+	                 int min_fpc_plan = -1;
+	                 for(int planno=0; spillDimensionPlanMap.containsKey(d) && planno<spillDimensionPlanMap.get(d).size(); planno++ ){
+	                	 if(FPC_for_Alignment && !Nexus_algo){
+	                     if(AllPlanCosts[spillDimensionPlanMap.get(d).get(planno)][getIndex(points_max.get(d).dim_values, resolution)] < min_fpc_cost){
+	                         min_fpc_cost = AllPlanCosts[spillDimensionPlanMap.get(d).get(planno)][getIndex(points_max.get(d).dim_values, resolution)];
+	                         min_fpc_plan = spillDimensionPlanMap.get(d).get(planno);
+	                     	}
+	                     }
+	                 }
+	                 System.out.print("\nThe dimension is "+d+" at (max) point ");
+	                 for(int dim=0; dim<dimension; dim++)
+	                     System.out.print("\t"+points_max.get(d).dim_values[dim]);
+	                 System.out.println(" with optimal cost "+original_cost+" while forcing plan "+min_fpc_plan+" having forced cost "+min_fpc_cost+" with penalty "+min_fpc_cost/original_cost);
+	 
+	                
+
+	                double error = ((min_fpc_cost-original_cost)/original_cost)*100;
+	                points_max.get(d).putpercent_err(error);
+	                getBestSpillingPlan(points_max.get(d), d);
+	                if(points_max.get(d).getfpc_cost() < min_fpc_cost ){
+	                	System.out.println(" Spilling Optimal plan improved cost from "+min_fpc_cost+" to "+points_max.get(d).getfpc_cost());
+	                	min_fpc_cost = points_max.get(d).getfpc_cost();
+	                	//System.out.println(" After Spilling: with optimal cost "+original_cost+" while forcing plan "+min_fpc_plan+" having forced cost "+min_fpc_cost+" with penalty "+min_fpc_cost/original_cost);
+	               
+	            	}   
+	                
+	                //see if the contour is aligned along dimension d
+	                if(points_max.get(d).storedOrder.get(0) == d)
+	                    aligned = true;
+	                
+	                if(aligned)
+	                	penalty[d] = 1.0;
+	                else
+	                penalty[d] = min_fpc_cost/original_cost;
+	               
+	                //see if the contour is aligned along dimension d
+	               
+	            }
+	           
+	           
+	            //update the max penalty of min penalty among these dimension
+	            double min_penalty = Double.MAX_VALUE;
+	            for(int d=0; d<dimension; d++)
+	                if(penalty[d] < min_penalty)
+	                    min_penalty = penalty[d];
+	           
+	            for(int i=0;i<penalty_threshold.length;i++){
+	                if(aligned){
+	                    contour_penalty_count[i]++;
+	                }
+	                else if(min_penalty <= penalty_threshold[i])
+	                    contour_penalty_count[i]++;
+	            }
+	           
+	            if(min_penalty > max_penality)
+	                max_penality = min_penalty;
+	           
+	            System.out.println("-----------------------------------------------------------------------------------------------------");
+	        }
+	       
+	        System.out.println("The max penalty is "+max_penality);
+	        for(int i=0;i<penalty_threshold.length;i++){
+	            System.out.println("% of contour within the threshold of "+(double)(penalty_threshold[i]-1)*100.0+" is "+(double)(contour_penalty_count[i]*1.0/(ContourPointsMap.size()*1.0)));
+	        }
+	        System.exit(1);
+	    }
+		private void buildSpillDimensionMap(HashMap<Integer,ArrayList<Integer>> spillDimensionPlanMap) throws NumberFormatException, IOException {
+
+			for(int p=0;p<totalPlans;p++){
+				try{
+					String plansPath = apktPath+"predicateOrder/";
+					FileReader file = new FileReader(plansPath+p+".txt");
+
+					BufferedReader br = new BufferedReader(file);
+					String s;
+					while((s = br.readLine()) != null) {
+						//System.out.println(Integer.parseInt(s));
+						int value = Integer.parseInt(s);
+						if(spillDimensionPlanMap.containsKey(value)){
+							spillDimensionPlanMap.get(value).add(p);
+						}
+						else{
+							ArrayList<Integer> al = new ArrayList<Integer>();
+							al.add(p);
+							spillDimensionPlanMap.put(value, al);
+						}	
+						break;
+					}
+					br.close();
+					file.close();
+				}
+				catch(FileNotFoundException e){
+					e.printStackTrace();
+				}	
+			}
+
+		}
 
 	public void oneDimensionSearch(PrintWriter writer, int contour_no, double cost) {
 
@@ -1239,13 +1394,25 @@ public OptSB(){}
 						 */
 						int fpc_plan = p.get_plan_no();
 						int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
-						if(fpc_cost_generic(int_actual_sel, fpc_plan)<oneDimCost)
-							oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
+						double fpc_cost_generic = Double.MAX_VALUE;
+						if(FPC_for_Alignment){
+							fpc_cost_generic = fpc_cost_generic(int_actual_sel, fpc_plan); 
+						}
+						else{
+							try {
+
+								ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + fpc_plan + ".pcst")));
+								double[] fpc_cost_array = (double[]) ip.readObject();
+								fpc_cost_generic = fpc_cost_array[getIndex(int_actual_sel, resolution)];
+							} catch (Exception e) {
+								e.printStackTrace();
+							}
+						}
+						if(fpc_cost_generic<oneDimCost)
+							oneDimCost = fpc_cost_generic;
 						if(cost_generic(int_actual_sel)> oneDimCost)
 							oneDimCost = cost_generic(int_actual_sel);
-
-					}
-
+					}	
 				}
 			}
 		}
@@ -1293,10 +1460,25 @@ public OptSB(){}
 			 */
 			int fpc_plan = getPlanNumber_generic(arr);
 			int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
-			if(fpc_cost_generic(int_actual_sel, fpc_plan)<oneDimCost)
-				oneDimCost = fpc_cost_generic(int_actual_sel, fpc_plan);
+			double fpc_cost_generic = Double.MAX_VALUE;
+			if(FPC_for_Alignment){
+				fpc_cost_generic = fpc_cost_generic(int_actual_sel, fpc_plan); 
+			}
+			else{
+				try {
+
+					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + fpc_plan + ".pcst")));
+					double[] fpc_cost_array = (double[]) ip.readObject();
+					fpc_cost_generic = fpc_cost_array[getIndex(int_actual_sel, resolution)];
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+			if(fpc_cost_generic<oneDimCost)
+				oneDimCost = fpc_cost_generic;
 			if(cost_generic(int_actual_sel)> oneDimCost)
 				oneDimCost = cost_generic(int_actual_sel);
+			
 			remainingDim.remove(remainingDim.indexOf(remDim));
 			remove_from_partition(remDim);
 			if(print_flag)
@@ -1457,7 +1639,10 @@ public OptSB(){}
 				double min_error = Double.MAX_VALUE;
 				for(int t=0;t<max_pts.size();t++){
 					extreme_pt = max_pts.get(t); 
-					//if(t==0 || t == max_pts.size()-1)
+//					if(t==1)
+//						System.out.print("interseting");
+					if(!FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
+						continue;
 					if(plans_list[extreme_pt.get_plan_no()].getcategory(remainingDim)==j)
 					{
 						extreme_pt.set_goodguy();
@@ -1469,8 +1654,11 @@ public OptSB(){}
 					else
 					{
 						extreme_pt.set_badguy();
-						//if(NoFPC)
-						double temp_error = getBestFPC(extreme_pt,j);
+						double temp_error = Double.MAX_VALUE;
+						if(FPC_for_Alignment)
+							temp_error = getBestFPC(extreme_pt,j);
+						else
+							temp_error = getBestSpillingPlan(extreme_pt, j);
 						if(temp_error < min_error){
 							min_error = temp_error;
 							max_pt = extreme_pt;
@@ -1481,11 +1669,12 @@ public OptSB(){}
 				
 				if(max_pt.get_goodguy())
 					break;
-				
-				point_generic temp_pt = new point_generic(max_pt);
-				double best_fpc_pt_err = getBestSpillingPlan(temp_pt, j);
-				if(best_fpc_pt_err > max_pt.getpercent_err())
-					max_pt = temp_pt; 
+				if(FPC_for_Alignment){
+					point_generic temp_pt = new point_generic(max_pt);
+					double best_fpc_pt_err = getBestSpillingPlan(temp_pt, j);
+					if(best_fpc_pt_err > max_pt.getpercent_err())
+						max_pt = temp_pt; 
+				}
 				
 				this.maxPoints[j] = max_pt;
 
@@ -1716,9 +1905,10 @@ public OptSB(){}
 			{
 				assert(plans_list[p.get_plan_no()].getcategory(remainingDim)!=key):"Error in assignment of good guy!";
 				fpc_plan = p.getfpc_plan();
-				assert(fpc_plan != -1): "bad guy doesn't have a fpc plan!!";
-				learning_dim = plans_list[fpc_plan].getcategory(remainingDim);//p.getfpc_dim() should contain the forced dimension
-				assert(learning_dim == p.get_fpcSpillDim()) : funName+" FPC learning dimension at max. point";
+				//assert(fpc_plan != -1): "bad guy doesn't have a fpc plan!!";
+				//learning_dim = plans_list[fpc_plan].getcategory(remainingDim);// should contain the forced dimension
+				//assert(learning_dim == p.get_fpcSpillDim()) : funName+" FPC learning dimension at max. point";
+				learning_dim = p.get_fpcSpillDim();
 				assert(learning_dim == key) : funName+" FPC learning dimension is not key for points_max data structure";
 				
 				tolerance = 1+(p.getpercent_err()/100.0);
@@ -1884,7 +2074,7 @@ public OptSB(){}
 			if(i/2 == dim_index){
 				selectedEPP = new String(varyingJoins.substring(i, i+2));
 			}
-			else{
+			else if(remainingDim.contains(i/2)){
 				if(nonSelectedEPP==null)
 					nonSelectedEPP = new String(varyingJoins.substring(i, i+2));
 				else{
@@ -1898,12 +2088,12 @@ public OptSB(){}
 			conn = source.getConnection();
 			stmt = conn.createStatement();
 			//NOTE,Settings: need not set the page cost's
-	                 if(database_conn==0){
-                                stmt.execute("set effective_cache_size='1GB'");
-                        }
-                        else{
-                                stmt.execute("set effective_cache_size='4GB'");
-                        }       
+	         if(database_conn==0){
+                  stmt.execute("set effective_cache_size='1GB'");
+              }
+              else{
+                 stmt.execute("set effective_cache_size='4GB'");
+              }       
 			stmt.execute("set  seq_page_cost = 1");
 			stmt.execute("set  random_page_cost=4");
 			stmt.execute("set cpu_operator_cost=0.0025");
@@ -1949,11 +2139,13 @@ public OptSB(){}
 		if(error <= p.getpercent_err()){
 			p.putfpc_cost(execCost);
 			p.putpercent_err(error);
+			p.set_fpcSpillDim(dim_index);
 			//p.putfpc_plan(-2);
 		}
-		else{
-			//assert(false) : funName+ "the optimal spilling plan cannot have lesser cost than the fpc plan with error = "+error+" but earlier fpcError = "+p.getpercent_err();
-		}
+//		else{
+//			assert(false) : funName+ "the optimal spilling plan cannot have lesser cost than the fpc plan with error = "+error+" but earlier fpcError = "+p.getpercent_err();
+//		}
+		p.set_fpcSpillDim(dim_index);
 		return p.getpercent_err();
 	}
 
@@ -2391,13 +2583,13 @@ public OptSB(){}
 		double dir_cost;
 		int dir_sel_index;
 		p_loc = getIndex(p.get_point_Index(),resolution);
-		if(p.get_goodguy())
+		if(p.get_goodguy() || !FPC_for_Alignment)
 		{
 			//If it is a good guy
 			plan = p.get_plan_no();
 			q_index = p.get_point_Index();
 		}
-		else
+		else if(FPC_for_Alignment)
 		{	
 			plan = p.getfpc_plan();
 			loc = plans_list[plan].getPoints().get(0);
@@ -2524,7 +2716,28 @@ public OptSB(){}
 				stmt.execute("set cpu_tuple_cost=0.01");	
 				stmt.execute("set full_robustness = on");
 				stmt.execute("set oneFPCfull_robustness = on");
-				stmt.execute("set spill_optimization = off");
+				if(FPC_for_Alignment)
+					stmt.execute("set spill_optimization = off");
+				else{
+					stmt.execute("set spill_optimization = on");
+					String selectedEPP=null, nonSelectedEPP=null;
+					for(int i=0;i<varyingJoins.length();i+=2){
+						if(i/2 == dim){
+							selectedEPP = new String(varyingJoins.substring(i, i+2));
+						}
+						else if(remainingDim.contains(i/2)){
+							if(nonSelectedEPP==null)
+								nonSelectedEPP = new String(varyingJoins.substring(i, i+2));
+							else{
+								String str = new String(varyingJoins.substring(i, i+2));
+								nonSelectedEPP = nonSelectedEPP.concat(str);
+							}					
+						}
+					}
+					stmt.execute("set selectedEPP = "+selectedEPP);
+					stmt.execute("set nonSelectedEPP = "+nonSelectedEPP);
+					
+				}
 				stmt.execute("set varyingJoins = "+varyingJoins);
 
 				for(int d=0;d<dimension;d++){
@@ -4388,8 +4601,8 @@ class point_generic implements Serializable
 	int fpcSpillDim = -1;
 	boolean good_guy=false;
 	int fpc_plan=-1;
-	double fpc_cost=Double.MAX_VALUE;
-	double percent_err=-1.0;
+	double fpc_cost = Double.MAX_VALUE;
+	double percent_err = Double.MAX_VALUE;
 	ArrayList<Integer> order;
 	ArrayList<Integer> storedOrder;
 	int value;

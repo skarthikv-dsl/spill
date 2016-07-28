@@ -1012,7 +1012,7 @@ public class GCI3D
 				for(int d=0; d<dimension; d++){
 					if(!points_max.containsKey(d))
 						points_max.put(d, p);
-					else{
+					else if(points_max.get(d).dim_values[d] <= p.dim_values[d]){
 						if(points_max.get(d).dim_values[d] < p.dim_values[d]){
 							points_max.remove(new Integer(d));
 							points_max.put(d, p);
