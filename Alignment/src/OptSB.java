@@ -233,6 +233,7 @@ public OptSB(){}
 		System.out.println("print_loop_flag ="+print_loop_flag);
 		System.out.println("hash_join_optimization_flag ="+hash_join_optimization_flag);
 		int threads = Runtime.getRuntime().availableProcessors();
+		int num_of_usable_threads = threads-1;
 		//System.out.println("Partitions = "+part_str);
 		//int genContourNumber = -1;
 		if(generateSpecificContour)
@@ -631,191 +632,214 @@ public OptSB(){}
 			if(MSOCalculation)
 				//if(false)
 					max_point = obj.totalPoints;
-
+			
+			int step_size = max_point/num_of_usable_threads;
+			
 			List<OptSBinputParamStruct> inputs = new ArrayList<OptSBinputParamStruct>();
-			for (int j = 0; j < max_point; ++j) {
-				OptSBinputParamStruct input = new OptSBinputParamStruct(new OptSB(obj), j);
+			int cur_min_val = 0;
+			int cur_max_val =  -1;
+			for (int j = 0; j < num_of_usable_threads ; ++j) {
+
+				cur_min_val = cur_max_val+1;
+				cur_max_val = cur_min_val + step_size -1;
+				
+				if(j==num_of_usable_threads-1)
+					cur_max_val = max_point -1;
+
+				OptSBinputParamStruct input = new OptSBinputParamStruct(new OptSB(obj), cur_min_val, cur_max_val);
 				inputs.add(input);
 			}
 			
 
 			System.out.println("Available Cores " + threads);
-		    ExecutorService service = Executors.newFixedThreadPool(threads-2);
+		    ExecutorService service = Executors.newFixedThreadPool(num_of_usable_threads);
 		    List<Future<OptSBOutputParamStruct>> futures = new ArrayList<Future<OptSBOutputParamStruct>>();
 
 		     for (final OptSBinputParamStruct input : inputs) {
 		        Callable<OptSBOutputParamStruct> callable = new Callable<OptSBOutputParamStruct>() {
 		            public OptSBOutputParamStruct call() throws Exception {
 		            	OptSBOutputParamStruct output = new OptSBOutputParamStruct();
-		            	int j = input.index;
-		            	if(j%100==0){
-		            		System.gc();
-		            	}
-		            	PrintWriter writer = new PrintWriter(new FileOutputStream(new File(apktPath+"logs/"+String.valueOf((j % 25))+".txt"),true));
-		            	System.out.println("Begin execution loop "+ input.index);
-		            	
+		            	int min_index = input.min_index;
+		            	int max_index = input.max_index;
+		            	PrintWriter writer = new PrintWriter(apktPath+"logs/SB_serial_log("+min_index+"-"+max_index+").txt", "UTF-8");
+
 		            	OptSB obj = input.obj;
-	            
-//		            	if( j!=7217){
-//		    				output.flag = false;
-//		        			return output;
-//		    			}
-		            	
-		            	
-		            	
+
 		            	Iterator itr = global_obj.ContourPointsMap.keySet().iterator();
-		            	
-		        		Integer key;
-		        		while(itr.hasNext())
-		        		{
-		        			key = (Integer)itr.next();
-		        			ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
-		        			for(int c=0;c<global_obj.ContourPointsMap.get(key).size();c++){
-		        				point_generic pg = new point_generic(global_obj.ContourPointsMap.get(key).get(c));
-		        				contourPoints.add(pg);
-		        				//pg.printPoint();
-		        			}
-		        			obj.ContourPointsMap.put(key, contourPoints);
-		        		}
-	
-			double algo_cost =0;
-			double	SO =0;
-			double cost = obj.getOptimalCost(0);
-			obj.initialize(writer,j);
-			int[] index = obj.getCoordinates(obj.dimension, obj.resolution, j);
-			//		if(index[0]%5 !=0 || index[1]%5!=0)
-			//			continue;
-			//Settings:
-			//		obj.actual_sel[0] = 0.005;obj.actual_sel[1] = 0.02;obj.actual_sel[2] = 0.005; /*uncomment for single execution*/
 
-			for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
+		            	Integer key;
+		            	while(itr.hasNext())
+		            	{
+		            		key = (Integer)itr.next();
+		            		ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
+		            		for(int c=0;c<global_obj.ContourPointsMap.get(key).size();c++){
+		            			point_generic pg = new point_generic(global_obj.ContourPointsMap.get(key).get(c));
+		            			contourPoints.add(pg);
+		            			//pg.printPoint();
+		            		}
+		            		obj.ContourPointsMap.put(key, contourPoints);
+		            	}
 
-			//If cost of the optimal plan at actual_sel is less than 10000, then skip that point.
-			if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000){
-				output.flag = false;
-				writer.close();
-				return output;
-			}
-			//----------------------------------------------------------
-			int i =1;
-			obj.executions.clear();
+		            	for(int j= min_index;j<=max_index;j++){
+		            		System.out.println("Begin execution loop "+ j);
+		            		if(j%1000==0){
+		            			System.gc();
+		            		}
+
+		            		//		            	if( j!=7217){
+		            		//		    				output.flag = false;
+		            		//		        			return output;
+		            		//		    			}
 
 
-			int k;
-			
-			while(i<=obj.ContourPointsMap.size() && !obj.remainingDim.isEmpty())
-			{	
+		            		double algo_cost =0;
+		            		double	SO =0;
+		            		double cost = obj.getOptimalCost(0);
+		            		obj.initialize(writer,j);
+		            		int[] index = obj.getCoordinates(obj.dimension, obj.resolution, j);
+		            		//		if(index[0]%5 !=0 || index[1]%5!=0)
+		            		//			continue;
+		            		//Settings:
+		            		//		obj.actual_sel[0] = 0.005;obj.actual_sel[1] = 0.02;obj.actual_sel[2] = 0.005; /*uncomment for single execution*/
 
-				if(cost<(double)10000){
-					cost *= 2;
-					i++;
-					continue;
-				}
-				assert (cost<=2*h_cost) : "cost limit exceeding";
-				if(cost>h_cost)
-					cost=h_cost;
+		            		for(int d=0;d<obj.dimension;d++) obj.actual_sel[d] = obj.findNearestSelectivity(obj.actual_sel[d]);
 
-
-				if(print_flag)
-				{
-					writer.println("---------------------------------------------------------------------------------------------\n");
-					writer.println("Contour "+i+" cost : "+cost+"\n");
-				}
-				int prev = obj.remainingDim.size();
-
-				if(prev==1){
-					obj.oneDimensionSearch(writer,i,cost);
-					obj.learning_cost = obj.oneDimCost;
-				}
-				else
-					obj.spillBoundAlgo(writer, i);
-
-				int present = obj.remainingDim.size();
-				if(present < prev - 1 || present > prev)
-					System.out.println("ERROR");
-
-				algo_cost = algo_cost+ (obj.learning_cost);
-				if(present == prev ){    // just to see whether any dimension was learnt
-					// if no dimension is learnt then move on to the next contour
-
-					/*
-					 * capturing the properties of the query execution
-					 */
-					if(print_flag)
-					{
-						writer.println("In Contour "+i+" has the following details");
-						writer.println("No of executions is "+obj.no_executions);
-						writer.println("No of repeat moves is "+obj.no_repeat_executions);
-					}
-					if(obj.no_executions>obj.max_no_executions)
-						obj.max_no_executions = obj.no_executions;
-					if(obj.no_repeat_executions > obj.max_no_repeat_executions)
-						obj.max_no_repeat_executions = obj.no_repeat_executions;
+		            		//If cost of the optimal plan at actual_sel is less than 10000, then skip that point.
+		            		if(obj.cost_generic(obj.convertSelectivitytoIndex(obj.actual_sel))<10000){
+		            			continue;
+		            		}
+		            		//----------------------------------------------------------
+		            		int i =1;
+		            		obj.executions.clear();
 
 
-					cost = cost*2;  
-					i = i+1;
-					obj.executions.clear();
-					/*
-					 * initialize the repeat moves and exections for the next contour
-					 */
-					for(int d=0;d<obj.dimension;d++){
-						obj.already_visited[d] = false;
-						obj.no_executions = 0;
-						obj.no_repeat_executions =0;
-					}
+		            		int k;
+		            		output.num_of_points ++; //keeping track of number of qa's > 10000 cost for this thread
 
-				}
-				if(print_flag)
-				{
-					writer.println("---------------------------------------------------------------------------------------------\n");
-				}
+		            		while(i<=obj.ContourPointsMap.size() && !obj.remainingDim.isEmpty())
+		            		{	
 
-			}  //end of while
+		            			if(cost<(double)10000){
+		            				cost *= 2;
+		            				i++;
+		            				continue;
+		            			}
+		            			assert (cost<=2*h_cost) : "cost limit exceeding";
+		            			if(cost>h_cost)
+		            				cost=h_cost;
 
-			/*
-			 * printing the actual selectivity
-			 */
-			//		System.out.print("\nThe actual selectivity is original \t");
-			if(print_flag)
-			{
-				for(int d=0;d<obj.dimension;d++) 
-					writer.print(obj.actual_sel[d]+",");
-			}
-			/*
-			 * storing the index of the actual selectivities. Using this printing the
-			 * index (an approximation) of actual selectivities and its cost
-			 */
-			int [] index_actual_sel = new int[obj.dimension]; 
-			for(int d=0;d<obj.dimension;d++) index_actual_sel[d] = obj.findNearestPoint(obj.actual_sel[d]);
 
-			if(print_flag)
-			{
-				writer.print("\nCost of actual_sel ="+obj.cost_generic(index_actual_sel)+" at ");
-				for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
-			}
-			SO = (algo_cost/obj.cost_generic(index_actual_sel));
-			output.SO = SO;
-			output.anshASO += SO*locationWeight[j];
-			output.pmax = obj.pmax;
-			output.tmax = obj.tmax;
-			obj.ContourPointsMap.clear();
-			if(print_flag)
-			{
-				writer.println("\nSpillBound The SubOptimaility  is "+SO);
-//				System.out.println("\nSpillBound Harm  is "+Harm);
-			}
-    			File file = new File(apktPath+"subOpt.txt");
-			    if (!file.exists()) {
-					file.createNewFile();
-				}
-			    FileWriter writerSubOpt = new FileWriter(file, true);
-			    PrintWriter pw = new PrintWriter(writerSubOpt);
-			    pw.format("%d = %f\n", j,SO);
-			    pw.close();writerSubOpt.close();
-			    writer.close();
-	    			return output;
-		 }
+		            			if(print_flag)
+		            			{
+		            				writer.println("---------------------------------------------------------------------------------------------\n");
+		            				writer.println("Contour "+i+" cost : "+cost+"\n");
+		            			}
+		            			int prev = obj.remainingDim.size();
+
+		            			if(prev==1){
+		            				obj.oneDimensionSearch(writer,i,cost);
+		            				obj.learning_cost = obj.oneDimCost;
+		            			}
+		            			else
+		            				obj.spillBoundAlgo(writer, i);
+
+		            			int present = obj.remainingDim.size();
+		            			if(present < prev - 1 || present > prev)
+		            				System.out.println("ERROR");
+
+		            			algo_cost = algo_cost+ (obj.learning_cost);
+		            			if(present == prev ){    // just to see whether any dimension was learnt
+		            				// if no dimension is learnt then move on to the next contour
+
+		            				/*
+		            				 * capturing the properties of the query execution
+		            				 */
+		            				if(print_flag)
+		            				{
+		            					writer.println("In Contour "+i+" has the following details");
+		            					writer.println("No of executions is "+obj.no_executions);
+		            					writer.println("No of repeat moves is "+obj.no_repeat_executions);
+		            				}
+		            				if(obj.no_executions>obj.max_no_executions)
+		            					obj.max_no_executions = obj.no_executions;
+		            				if(obj.no_repeat_executions > obj.max_no_repeat_executions)
+		            					obj.max_no_repeat_executions = obj.no_repeat_executions;
+
+
+		            				cost = cost*2;  
+		            				i = i+1;
+		            				obj.executions.clear();
+		            				/*
+		            				 * initialize the repeat moves and exections for the next contour
+		            				 */
+		            				for(int d=0;d<obj.dimension;d++){
+		            					obj.already_visited[d] = false;
+		            					obj.no_executions = 0;
+		            					obj.no_repeat_executions =0;
+		            				}
+
+		            			}
+		            			if(print_flag)
+		            			{
+		            				writer.println("---------------------------------------------------------------------------------------------\n");
+		            			}
+
+		            		}  //end of while
+
+		            		/*
+		            		 * printing the actual selectivity
+		            		 */
+		            		//		System.out.print("\nThe actual selectivity is original \t");
+		            		if(print_flag)
+		            		{
+		            			for(int d=0;d<obj.dimension;d++) 
+		            				writer.print(obj.actual_sel[d]+",");
+		            		}
+		            		/*
+		            		 * storing the index of the actual selectivities. Using this printing the
+		            		 * index (an approximation) of actual selectivities and its cost
+		            		 */
+		            		int [] index_actual_sel = new int[obj.dimension]; 
+		            		for(int d=0;d<obj.dimension;d++) index_actual_sel[d] = obj.findNearestPoint(obj.actual_sel[d]);
+
+		            		if(print_flag)
+		            		{
+		            			writer.print("\nCost of actual_sel ="+obj.cost_generic(index_actual_sel)+" at ");
+		            			for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
+		            		}
+		            		SO = (algo_cost/obj.cost_generic(index_actual_sel));
+		            		if(SO > output.MSO)
+		            			output.MSO = SO;
+		            		output.sumSo += SO;
+		            		output.anshASO += SO*locationWeight[j];
+
+		            		if(obj.pmax > output.pmax)
+		            			output.pmax = obj.pmax;
+
+		            		if(obj.tmax > output.tmax)
+		            			output.tmax = obj.tmax;
+		            		//obj.ContourPointsMap.clear();
+		            		if(print_flag)
+		            		{
+		            			writer.println("\nSpillBound The SubOptimaility  is "+SO);
+		            			//				System.out.println("\nSpillBound Harm  is "+Harm);
+		            		}
+
+		            	}		
+
+		            	//		    			File file = new File(apktPath+"subOpt.txt");
+		            	//					    if (!file.exists()) {
+		            	//							file.createNewFile();
+		            	//						}
+		            	//					    FileWriter writerSubOpt = new FileWriter(file, true);
+		            	//					    PrintWriter pw = new PrintWriter(writerSubOpt);
+		            	//					    pw.format("%d = %f\n",output.MSO);
+		            	//					    pw.close();writerSubOpt.close();
+		            	//					    writer.close();
+		            	if(output.num_of_points > 0)
+		            		output.flag = true;
+		            	return output;   	
+		            }
 	 };
 	       futures.add(service.submit(callable));			   
 		    
@@ -840,13 +864,13 @@ public OptSB(){}
 		    		if(output.tmax > tmax_final){
 		    			tmax_final = output.tmax;
 		    		}
-		    		subOpt[j] = output.SO;
-		    		if(output.SO>MSO)
-		    			MSO = output.SO;
+		    		//subOpt[j] = output.SO;
+		    		if(output.MSO>MSO)
+		    			MSO = output.MSO;
 		    		if(output.Harm > MaxHarm)
 		    			MaxHarm = output.Harm;
-		    		ASO += output.SO;
-		    		ASO_points++;
+		    		ASO += output.sumSo;
+		    		ASO_points += output.num_of_points;
 		    		anshASO += output.anshASO;
 		    		j++;
 		    	}
@@ -858,18 +882,18 @@ public OptSB(){}
 		//conn.close();
 		System.out.println("max no of partitions = "+ pmax_final);
 		System.out.println("maximum Tolerance(actual_fraction) = "+tmax_final+" (should be ideally < 1)");
-		File SubOptfile = new File(apktPath+"subOpt.txt");
-	    if (!SubOptfile.exists()) {
-	    	SubOptfile.createNewFile();
-		}
-	    FileWriter SubOptfileWriter = new FileWriter(SubOptfile, true);
-	    PrintWriter pw = new PrintWriter(SubOptfileWriter);
-	    pw.format("SO=%f\n",MSO);
-	    pw.close();SubOptfileWriter.close();
+//		File SubOptfile = new File(apktPath+"subOpt.txt");
+//	    if (!SubOptfile.exists()) {
+//	    	SubOptfile.createNewFile();
+//		}
+//	    FileWriter SubOptfileWriter = new FileWriter(SubOptfile, true);
+//	    PrintWriter pw = new PrintWriter(SubOptfileWriter);
+//	    pw.format("SO=%f\n",MSO);
+//	    pw.close();SubOptfileWriter.close();
 		System.out.println("SpillBound The MaxSubOptimaility  is "+MSO);
 		System.out.println("SpillBound The MaxHarm  is "+MaxHarm);
 		System.out.println("SpillBound Anshuman average Suboptimality is "+(double)anshASO);
-		System.out.println("SpillBound The AverageSubOptimaility  is "+(double)ASO/ASO_points);
+		System.out.println("SpillBound The AverageSubOptimaility  is "+(double)(ASO*1.0)/(ASO_points*1.0));
 
 		long endTime = System.nanoTime();
 		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
@@ -4576,17 +4600,21 @@ public OptSB(){}
 class OptSBOutputParamStruct {
 	double pmax = 0;
 	double tmax = 0;
-	double SO = 0;
+	double MSO = 0;
+	int sumSo = 0;
 	double Harm = 0;
 	double anshASO = 0;
-	boolean flag = true;
+	boolean flag = false;
+	int num_of_points =0;
 }
 class OptSBinputParamStruct {
 	OptSB obj;
-	int index;
-	public OptSBinputParamStruct(OptSB obj, int index) {
+	int min_index;
+	int max_index;
+	public OptSBinputParamStruct(OptSB obj, int min_index, int max_index) {
 		this.obj = obj;
-		this.index = index;
+		this.min_index = min_index;
+		this.max_index = max_index;
 	}
 }
 
