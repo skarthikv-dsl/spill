@@ -136,6 +136,7 @@ public class OptSB
 	static int genContourNumber = -1;
 	static boolean AlignmentPenaltyCode = false;
 	static boolean DEBUG = true;
+	static boolean spill_opt_for_Alignment = false;
 	//---------------------------------------------------------
 	
 	
@@ -1285,6 +1286,7 @@ public OptSB(){}
 
 	                double error = ((min_fpc_cost-original_cost)/original_cost)*100;
 	                points_max.get(d).putpercent_err(error);
+	                if(spill_opt_for_Alignment){
 	                getBestSpillingPlan(points_max.get(d), d);
 	                if(points_max.get(d).getfpc_cost() < min_fpc_cost ){
 	                	System.out.println(" Spilling Optimal plan improved cost from "+min_fpc_cost+" to "+points_max.get(d).getfpc_cost());
@@ -1292,7 +1294,7 @@ public OptSB(){}
 	                	//System.out.println(" After Spilling: with optimal cost "+original_cost+" while forcing plan "+min_fpc_plan+" having forced cost "+min_fpc_cost+" with penalty "+min_fpc_cost/original_cost);
 	               
 	            	}   
-	                
+	                }
 	                //see if the contour is aligned along dimension d
 	                if(points_max.get(d).storedOrder.get(0) == d)
 	                    aligned = true;
@@ -1668,7 +1670,7 @@ public OptSB(){}
 					extreme_pt = max_pts.get(t); 
 //					if(t==1)
 //						System.out.print("interseting");
-					if(!FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
+					if(FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
 						continue;
 					if(plans_list[extreme_pt.get_plan_no()].getcategory(remainingDim)==j)
 					{
@@ -1684,7 +1686,7 @@ public OptSB(){}
 						double temp_error = Double.MAX_VALUE;
 						if(FPC_for_Alignment)
 							temp_error = getBestFPC(extreme_pt,j);
-						else
+						else if(spill_opt_for_Alignment)
 							temp_error = getBestSpillingPlan(extreme_pt, j);
 						if(temp_error < min_error){
 							min_error = temp_error;
@@ -1696,7 +1698,7 @@ public OptSB(){}
 				
 				if(max_pt.get_goodguy())
 					break;
-				if(FPC_for_Alignment){
+				if(spill_opt_for_Alignment){
 					point_generic temp_pt = new point_generic(max_pt);
 					double best_fpc_pt_err = getBestSpillingPlan(temp_pt, j);
 					if(best_fpc_pt_err > max_pt.getpercent_err())
@@ -2745,7 +2747,7 @@ public OptSB(){}
 				stmt.execute("set oneFPCfull_robustness = on");
 				if(FPC_for_Alignment)
 					stmt.execute("set spill_optimization = off");
-				else{
+				else if (spill_opt_for_Alignment){
 					stmt.execute("set spill_optimization = on");
 					String selectedEPP=null, nonSelectedEPP=null;
 					for(int i=0;i<varyingJoins.length();i+=2){
