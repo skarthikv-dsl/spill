@@ -128,13 +128,14 @@ public class OptSB
 	
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
-	static boolean singleThread = true;
+	static boolean singleThread = false;
 	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
 	static boolean FPC_for_Alignment = true;
 	static int genContourNumber = -1;
 	static boolean AlignmentPenaltyCode = false;
+	static boolean DEBUG = true;
 	//---------------------------------------------------------
 	
 	
@@ -347,7 +348,7 @@ public OptSB(){}
 				//writeContourPlanstoFile(i);
 				int size_of_contour = all_contour_points.size();
 				obj.ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
-				//global_obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
+				global_obj.ContourPointsMap.put(i, new ArrayList<point_generic>(obj.all_contour_points)); //storing the contour points
 				System.out.println("Size of contour"+size_of_contour );
 				cost = cost*2;
 				i = i+1;
@@ -408,7 +409,7 @@ public OptSB(){}
 			if(singleThread)
 				source.setMaxConnections(1);
 			else
-				source.setMaxConnections(threads-2);
+				source.setMaxConnections(num_of_usable_threads);
 			System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
@@ -681,7 +682,7 @@ public OptSB(){}
 		            	}
 
 		            	for(int j= min_index;j<=max_index;j++){
-		            		System.out.println("Begin execution loop "+ j);
+		            		writer.println("Begin execution loop "+ j);
 		            		if(j%1000==0){
 		            			System.gc();
 		            		}
@@ -1003,6 +1004,8 @@ public OptSB(){}
 				currentContourPoints ++;
 				//-- For counting
 				category=plans_list[plan_no].getcategory(remainingDim);
+				if(p.getLearningDimension()!=category && DEBUG==true)
+					System.out.println("debug");
 				assert(p.getLearningDimension()==category): "getLearning Dimension of spillBound is not equal to category of opt-SB";
 				
 				spillDim_planCnt[category]++;
