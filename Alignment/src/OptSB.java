@@ -371,6 +371,8 @@ public OptSB(){}
 			File f_multani = new File("/home/dsluser/Srinivas/data/settings/settings.conf");
 			File f_pahadi = new File("/home/dsladmin/Srinivas/data/settings/settings.conf");
 			File f_ibm84 = new File("/data/spillBound/data/settings/settings.conf");
+			File f_tkde2 = new File("/media/ssd256gg/data/settings/settings.conf");
+			File f_tkde1 = new File("/media/ssd256g/data/settings/settings.conf");
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
@@ -397,6 +399,14 @@ public OptSB(){}
 					source.setDatabaseName("tpcdscodd");					
 				}
 				else if(f_ibm84.exists()){
+					source.setServerName("localhost:5431");
+					source.setDatabaseName("tpcdscodd");
+					}
+				else if(f_tkde2.exists()){
+					source.setServerName("localhost:5431");
+					source.setDatabaseName("tpcdscodd");
+					}
+				else if(f_tkde1.exists()){
 					source.setServerName("localhost:5431");
 					source.setDatabaseName("tpcdscodd");
 					}
