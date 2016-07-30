@@ -235,7 +235,7 @@ public OptSB(){}
 		System.out.println("print_loop_flag ="+print_loop_flag);
 		System.out.println("hash_join_optimization_flag ="+hash_join_optimization_flag);
 		int threads = Runtime.getRuntime().availableProcessors();
-		int num_of_usable_threads = threads-1;
+		int num_of_usable_threads = threads/2;
 		//System.out.println("Partitions = "+part_str);
 		//int genContourNumber = -1;
 		if(generateSpecificContour)
@@ -455,14 +455,14 @@ public OptSB(){}
 			assert(filelog.mkdir()) : "was not able to create log directory";
 			//FileUtils.cleanDirectory(filelog);
 
-			//			String[] myFiles;    
-			//			if(filelog.isDirectory()){
-			//				myFiles = filelog.list();
-			//				for (int hi=0; hi<myFiles.length; hi++) {
-			//					File myFile = new File(filelog, myFiles[hi]); 
-			//					myFile.delete();
-			//				}
-			//			}
+						String[] myFiles;    
+						if(filelog.isDirectory()){
+							myFiles = filelog.list();
+							for (int hi=0; hi<myFiles.length; hi++) {
+								File myFile = new File(filelog, myFiles[hi]); 
+								myFile.delete();
+							}
+						}
 
 
 			if (args.length > 0) {
@@ -611,7 +611,7 @@ public OptSB(){}
 			if(print_flag)
 			{
 				 writer.print("\nCost of actual_sel ="+obj.cost_generic(index_actual_sel)+" at ");
-				for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
+				for(int d=0;d<obj.dimension;d++) writer.print(index_actual_sel[d]+",");
 			}
 			SO = (algo_cost/obj.cost_generic(index_actual_sel));
 			subOpt[j] = SO;
@@ -694,9 +694,9 @@ public OptSB(){}
 
 		            	for(int j= min_index;j<=max_index;j++){
 		            		writer.println("Begin execution loop "+ j);
-		            		if(j%1000==0){
-		            			System.gc();
-		            		}
+		            //		if(j%1000==0){
+		            	//		System.gc();
+		            		//}
 
 		            		//		            	if( j!=7217){
 		            		//		    				output.flag = false;
@@ -817,7 +817,7 @@ public OptSB(){}
 		            		if(print_flag)
 		            		{
 		            			writer.print("\nCost of actual_sel ="+obj.cost_generic(index_actual_sel)+" at ");
-		            			for(int d=0;d<obj.dimension;d++) System.out.print(index_actual_sel[d]+",");
+		            			for(int d=0;d<obj.dimension;d++) writer.print(index_actual_sel[d]+",");
 		            		}
 		            		SO = (algo_cost/obj.cost_generic(index_actual_sel));
 		            		if(SO > output.MSO)
@@ -1015,8 +1015,12 @@ public OptSB(){}
 				currentContourPoints ++;
 				//-- For counting
 				category=plans_list[plan_no].getcategory(remainingDim);
-				if(p.getLearningDimension()!=category && DEBUG==true)
+				if(p.getLearningDimension()!=category && DEBUG==true){
 					System.out.println("debug");
+					category=plans_list[plan_no].getcategory(remainingDim);
+					System.out.println("remaining Dim"+remainingDim);
+					System.out.println("Predicate Order"+p.getPredicateOrder());
+				}
 				assert(p.getLearningDimension()==category): "getLearning Dimension of spillBound is not equal to category of opt-SB";
 				
 				spillDim_planCnt[category]++;
@@ -1612,7 +1616,7 @@ public OptSB(){}
             	part.add(ret.get(w));
             }
             cnt += ret.size();
-            System.out.println(cnt);
+          //  writer.println(cnt);
             
         }
 		int part_idx = 0;
@@ -1774,8 +1778,8 @@ public OptSB(){}
 		{
 			this.tmax = temp_tol;
 		}
-		print_points_max(points_max);
-		print_partition(best_partitioning);
+		print_points_max(points_max,writer);
+		print_partition(best_partitioning,writer);
 		if(n_partition > this.pmax)
 		{
 			this.pmax = n_partition;
@@ -1953,7 +1957,7 @@ public OptSB(){}
 				tolerance = 1+(p.getpercent_err()/100.0);
 				if(print_flag)
 				{
-					System.out.println("\nTolerance = "+tolerance);
+					writer.println("\nTolerance = "+tolerance);
 				}
 			}
 			
@@ -2038,7 +2042,7 @@ public OptSB(){}
 						if(print_flag)
 						{
 							writer.print("\n Plan "+p.get_plan_no()+" executed at ");
-							for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
+							for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
 							writer.println(" and learnt "+d+" dimension completely");
 						}
 					}
@@ -2049,7 +2053,7 @@ public OptSB(){}
 							//	System.out.println("--------------FPC CASE-------------");
 							//	System.out.println("Point p");
 							writer.print("\n FPC Plan "+p.getfpc_plan()+" with fpc_percent_err= "+p.getpercent_err()+" executed at ");
-							for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
+							for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
 							writer.println(" and learnt "+d+" dimension completely");
 						}
 					}
@@ -2068,7 +2072,7 @@ public OptSB(){}
 					if(print_flag)
 					{
 						writer.print("\n Plan "+p.get_plan_no()+" executed at ");
-						for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
+						for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
 						writer.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
 					}
 				}
@@ -2077,7 +2081,7 @@ public OptSB(){}
 					if(print_flag)
 					{
 						writer.print("\n FPCPlan "+p.getfpc_plan()+" executed at ");
-						for(int m=0;m<dimension;m++) System.out.print(p.get_dimension(m)+",");
+						for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
 						writer.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
 					}
 				}
@@ -2190,17 +2194,17 @@ public OptSB(){}
 
 
 
-	void print_points_max(HashMap<Integer,point_generic>points_max)
+	void print_points_max(HashMap<Integer,point_generic>points_max, PrintWriter writer)
 	{
 		Iterator itr = points_max.keySet().iterator();
 		Integer key;
 		while(itr.hasNext())
 		{
 			key = (Integer)itr.next();
-			System.out.println("Max "+key+" = "+points_max.get(key).get_dimension(key));
+			writer.println("Max "+key+" = "+points_max.get(key).get_dimension(key));
 		}
 	}
-	void print_partition(int[]best_partitioning){
+	void print_partition(int[]best_partitioning, PrintWriter writer){
 		int n = remainingDim.size();
 	   	int part_num = 1;
         int i;
@@ -2211,50 +2215,50 @@ public OptSB(){}
         /* Print the p partitions. */
         int p;
         for (p = part_num; p >= 1; --p) {
-            System.out.printf("{");
+            writer.printf("{");
             /* If s[i] == p, then i + 1 is part of the pth partition. */
             for (i = 0; i < n; ++i)
                 if (best_partitioning[i] == p)
-                    System.out.printf("%d, ",remainingDim.get(i) );
+                    writer.printf("%d, ",remainingDim.get(i) );
          //   System.out.printf("\b\b} ");
-            System.out.printf("} ");
+            writer.printf("} ");
         }
-        System.out.printf("\n");
+        writer.printf("\n");
 	}
 	
-	static  boolean next(int []s, int []m, int n) {
-        /* Update s: 1 1 1 1 -> 2 1 1 1 -> 1 2 1 1 -> 2 2 1 1 -> 3 2 1 1 ->
-        1 1 2 1 ... */
-        /*int j;
-        printf(" -> (");
-        for (j = 0; j &lt; n; ++j)
-            printf("%d, ", s[j]);
-        printf("\\b\\b)\\n");*/
-        int i = 0;
-        ++s[i];
-        while ((i < n - 1) && (s[i] > m[i] + 1)) {
-            s[i] = 1;
-            ++i;
-            ++s[i];
-        }
-     
-        /* If i is has reached n-1 th element, then the last unique partitiong
-        has been found*/
-        if (i == n - 1)
-            return false;
-     
-        /* Because all the first i elements are now 1, s[i] (i + 1 th element)
-        is the largest. So we update max by copying it to all the first i
-        positions in m.*/
-        int max = s[i];
-        for (i = i - 1; i >= 0; --i)
-            m[i] = max;
-     
-    /*  for (i = 0; i &lt; n; ++i)
-            printf("%d ", m[i]);
-        getchar();*/
-        return true;
-    }
+//	static  boolean next(int []s, int []m, int n) {
+//        /* Update s: 1 1 1 1 -> 2 1 1 1 -> 1 2 1 1 -> 2 2 1 1 -> 3 2 1 1 ->
+//        1 1 2 1 ... */
+//        /*int j;
+//        printf(" -> (");
+//        for (j = 0; j &lt; n; ++j)
+//            printf("%d, ", s[j]);
+//        printf("\\b\\b)\\n");*/
+//        int i = 0;
+//        ++s[i];
+//        while ((i < n - 1) && (s[i] > m[i] + 1)) {
+//            s[i] = 1;
+//            ++i;
+//            ++s[i];
+//        }
+//     
+//        /* If i is has reached n-1 th element, then the last unique partitiong
+//        has been found*/
+//        if (i == n - 1)
+//            return false;
+//     
+//        /* Because all the first i elements are now 1, s[i] (i + 1 th element)
+//        is the largest. So we update max by copying it to all the first i
+//        positions in m.*/
+//        int max = s[i];
+//        for (i = i - 1; i >= 0; --i)
+//            m[i] = max;
+//     
+//    /*  for (i = 0; i &lt; n; ++i)
+//            printf("%d ", m[i]);
+//        getchar();*/
+//        return true;
+//    }
 	
 //	static point_generic findMaxPoint(ArrayList<point_generic> contour_points, int dim_index)
 //	{
@@ -3967,7 +3971,9 @@ public OptSB(){}
 			//query = "explain analyze FPC(\"lineitem\") (\"104949\")  select	supp_nation,	cust_nation,	l_year,	volume from	(select n1.n_name as supp_nation, n2.n_name as cust_nation, 	DATE_PART('YEAR',l_shipdate) as l_year,	l_extendedprice * (1 - l_discount) as volume	from	supplier, lineitem, orders, 	customer, nation n1,	nation n2 where s_suppkey = l_suppkey	and o_orderkey = l_orderkey and c_custkey = o_custkey		and s_nationkey = n1.n_nationkey and c_nationkey = n2.n_nationkey	and  c_acctbal<=10000 and l_extendedprice<=22560 ) as temp";
 			//query = "explain analyze FPC(\"catalog_sales\")  (\"150.5\") select ca_zip, cs_sales_price from catalog_sales,customer,customer_address,date_dim where cs_bill_customer_sk = c_customer_sk and c_current_addr_sk = ca_address_sk and cs_sold_date_sk = d_date_sk and ca_gmt_offset <= -7.0   and d_year <= 1900  and cs_list_price <= 150.5";
 			query = prop.getProperty("query");
-			query_opt_spill = prop.getProperty("query_opt_spill");
+			if(spill_opt_for_Alignment == true){
+				query_opt_spill = prop.getProperty("query_opt_spill");
+			}
 			
 			cardinalityPath = prop.getProperty("cardinalityPath");
 
@@ -4652,7 +4658,7 @@ class point_generic implements Serializable
 	int p_no;
 	double cost;
 	static String plansPath;
-
+	int idx;
 	int [] dim_values;
 	
 
@@ -4667,8 +4673,14 @@ class point_generic implements Serializable
 		this.fpc_plan = pg.fpc_plan;
 		this.fpc_cost = pg.fpc_cost;
 		this.percent_err = pg.percent_err;
-		this.order = new ArrayList<Integer>(pg.order);
-		this.storedOrder = new ArrayList<Integer>(pg.storedOrder);
+		this.order = new ArrayList<Integer>();
+		this.storedOrder = new ArrayList<Integer>();
+		for(this.idx=0;this.idx < pg.order.size();this.idx++){
+			this.order.add(pg.order.get(this.idx));
+		}
+		for(this.idx=0;this.idx < pg.storedOrder.size();this.idx++){
+			this.storedOrder.add(pg.storedOrder.get(this.idx));
+		}
 		this.value = pg.value;
 		this.p_no = pg.p_no;
 		this.cost = pg.cost;
@@ -4748,8 +4760,16 @@ class point_generic implements Serializable
 //		this.opt_plan=num;
 
 		//check: if the order and stored order are being updated/populated
-		order =  new ArrayList<Integer>(predicateOrder);
-		storedOrder = new ArrayList<Integer>(predicateOrder);		
+		//order =  new ArrayList<Integer>(predicateOrder);
+		//storedOrder = new ArrayList<Integer>(predicateOrder);	
+		this.order = new ArrayList<Integer>();
+		this.storedOrder = new ArrayList<Integer>();
+		for(this.idx=0;this.idx < predicateOrder.size();this.idx++){
+			this.order.add(predicateOrder.get(this.idx));
+		}
+		for(this.idx=0;this.idx < predicateOrder.size();this.idx++){
+			this.storedOrder.add(predicateOrder.get(this.idx));
+		}
 	}
 	int getLearningDimension(){
 		if(order.isEmpty())
@@ -5114,8 +5134,9 @@ class plan{
 			cur_dim = order.get(i);
 			if(remainingDim.contains(cur_dim))
 			{
-				category=cur_dim;
-				return category;
+				//category=cur_dim;
+				//return category;
+				return(cur_dim);
 			}
 		}
 		System.out.println("\nError in getcategory\n");
