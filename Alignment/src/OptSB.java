@@ -103,7 +103,7 @@ public class OptSB
 	static int sel_distribution; 
 	static boolean FROM_CLAUSE;
 	static Connection conn = null;
-	static int database_conn=1;
+	static int database_conn;
 	static double h_cost;
 	static double planCount[], planRelativeArea[];
 	static double picsel[], locationWeight[];
@@ -264,7 +264,7 @@ public OptSB(){}
 		final OptSB global_obj = new OptSB();
 		obj.maxPoints= new point_generic[dimension];
 
-		String pktPath = plansPath + QTName + ".apkt" ;
+		String pktPath = apktPath + qtName + ".apkt" ;
 		System.out.println("Query Template: "+QTName);
 
 

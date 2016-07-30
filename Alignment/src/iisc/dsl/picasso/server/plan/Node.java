@@ -32,6 +32,7 @@ package iisc.dsl.picasso.server.plan;
 
 import java.util.Vector;
 import java.util.ListIterator;
+
 import iisc.dsl.picasso.server.network.ServerMessageUtil;
 import iisc.dsl.picasso.common.HardCoded;
 import iisc.dsl.picasso.common.PicassoConstants;
@@ -46,6 +47,7 @@ public class Node implements Serializable {
 	private int 	id, parentId, type;
 	private String 	name;
 	private double 	cost, card;
+	private String predicate;
 	private Vector argType, argValue;
 	
 	public Node()
@@ -82,7 +84,17 @@ public class Node implements Serializable {
 		else
 			this.name = "";
 	}
-	
+	public String getPredicate()
+	{
+		return predicate;
+	}
+	public void setPredicate(String pred)
+	{
+		if(pred != null)
+			this.predicate = pred.trim();
+		else
+			this.predicate = "";
+	}
 	public double getCost()
 	{
 		return cost;
