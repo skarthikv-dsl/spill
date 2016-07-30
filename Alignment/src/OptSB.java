@@ -137,6 +137,7 @@ public class OptSB
 	static boolean AlignmentPenaltyCode = false;
 	static boolean DEBUG = true;
 	static boolean spill_opt_for_Alignment = false;
+	static boolean contoursReadFromFile = false;
 	//---------------------------------------------------------
 	
 	
@@ -300,14 +301,14 @@ public OptSB(){}
 		
 		double cost = obj.getOptimalCost(0);
 		
-		boolean contoursReadFromFile = false;
-//		if(!Nexus_algo && !generateSpecificContour){
-//			File ContoursFile = new File(apktPath+"Contours.map");
-//			if(ContoursFile.exists()){
-//				obj.readContourPointsFromFile();
-//				contoursReadFromFile = true;
-//			}
-//		}
+		
+		if(!Nexus_algo && !generateSpecificContour && contoursReadFromFile){
+			File ContoursFile = new File(apktPath+"Contours.map");
+			if(ContoursFile.exists()){
+				obj.readContourPointsFromFile();
+				contoursReadFromFile = true;
+			}
+		}
 		
 		if(!contoursReadFromFile){
 			learntDim.clear();
@@ -325,12 +326,12 @@ public OptSB(){}
 					System.out.println("---------------------------------------------------------------------------------------------\n");
 					System.out.println("Contour "+i+" cost : "+cost+"\n");
 				}
-//				if(i!=genContourNumber && generateSpecificContour){
-//					cost = cost*2;
-//					i++;
-//					continue;
-//					
-//				}
+				if(i!=genContourNumber && generateSpecificContour){
+					cost = cost*2;
+					i++;
+					continue;
+					
+				}
 				all_contour_points.clear();
 
 				if(Nexus_algo)
@@ -355,7 +356,8 @@ public OptSB(){}
 				i = i+1;
 			
 			}
-			//obj.writeContourMaptoFile();
+			if(generateSpecificContour)
+				obj.writeContourMaptoFile();
 		}
 		
 //System.exit(1);
@@ -919,10 +921,12 @@ public OptSB(){}
 			ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"Contours.map")));
 			ContourLocationsMap obj = (ContourLocationsMap)ip.readObject();
 			ContourPointsMap = obj.getContourMap();
-			for(int c=1;c<=ContourPointsMap.size();c++){
+			Iterator itr = ContourPointsMap.keySet().iterator();
+			while(itr.hasNext()){
+				Integer key = (Integer) itr.next();
 				
 				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
-				System.out.println("The no. of locations on contour "+(c)+" is "+ContourPointsMap.get(c).size());
+				System.out.println("The no. of locations on contour "+(key.intValue())+" is "+ContourPointsMap.get(key).size());
 				System.out.println("--------------------------------------------------------------------------------------");
 				
 			}
@@ -937,7 +941,7 @@ public OptSB(){}
 		try {
 			String path;
 			if(generateSpecificContour)
-				path = new String (apktPath+"Contour"+genContourNumber+".map");
+				path = new String (apktPath+"contours/Contour"+genContourNumber+".map");
 			else
 				path = new String (apktPath+"Contours.map");
 			FileOutputStream fos = new FileOutputStream (path);
