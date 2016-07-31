@@ -103,7 +103,7 @@ public class OptSB
 	static int sel_distribution; 
 	static boolean FROM_CLAUSE;
 	static Connection conn = null;
-	static int database_conn;
+	static int database_conn=1;
 	static double h_cost;
 	static double planCount[], planRelativeArea[];
 	static double picsel[], locationWeight[];
@@ -236,7 +236,7 @@ public OptSB(){}
 		System.out.println("print_loop_flag ="+print_loop_flag);
 		System.out.println("hash_join_optimization_flag ="+hash_join_optimization_flag);
 		int threads = Runtime.getRuntime().availableProcessors();
-		int num_of_usable_threads = threads/2;
+		int num_of_usable_threads = threads;
 		//System.out.println("Partitions = "+part_str);
 		//int genContourNumber = -1;
 		if(generateSpecificContour)
@@ -301,11 +301,12 @@ public OptSB(){}
 		
 		double cost = obj.getOptimalCost(0);
 		
-		
+		boolean contoursReadFromFile = true;
 		if(!Nexus_algo && !generateSpecificContour && contoursReadFromFile){
-			File ContoursFile = new File(apktPath+"Contours.map");
+			File ContoursFile = new File(apktPath+"contours/Contours.map");
 			if(ContoursFile.exists()){
 				obj.readContourPointsFromFile();
+				global_obj.readContourPointsFromFile();
 				contoursReadFromFile = true;
 			}
 		}
@@ -326,12 +327,12 @@ public OptSB(){}
 					System.out.println("---------------------------------------------------------------------------------------------\n");
 					System.out.println("Contour "+i+" cost : "+cost+"\n");
 				}
-				if(i!=genContourNumber && generateSpecificContour){
-					cost = cost*2;
-					i++;
-					continue;
-					
-				}
+//				if(i!=genContourNumber && generateSpecificContour){
+//					cost = cost*2;
+//					i++;
+//					continue;
+//					
+//				}
 				all_contour_points.clear();
 
 				if(Nexus_algo)
@@ -549,7 +550,7 @@ public OptSB(){}
 					obj.learning_cost = obj.oneDimCost;
 				}
 				else
-					obj.spillBoundAlgo(writer,i);
+					obj.spillBoundAlgo(writer,i,j);
 
 				int present = obj.remainingDim.size();
 				if(present < prev - 1 || present > prev)
@@ -755,7 +756,7 @@ public OptSB(){}
 		            				obj.learning_cost = obj.oneDimCost;
 		            			}
 		            			else
-		            				obj.spillBoundAlgo(writer, i);
+		            				obj.spillBoundAlgo(writer, i, j);
 
 		            			int present = obj.remainingDim.size();
 		            			if(present < prev - 1 || present > prev)
@@ -918,7 +919,7 @@ public OptSB(){}
 
 		try {
 			
-			ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"Contours.map")));
+			ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"contours/Contours.map")));
 			ContourLocationsMap obj = (ContourLocationsMap)ip.readObject();
 			ContourPointsMap = obj.getContourMap();
 			Iterator itr = ContourPointsMap.keySet().iterator();
@@ -943,7 +944,7 @@ public OptSB(){}
 			if(generateSpecificContour)
 				path = new String (apktPath+"contours/Contour"+genContourNumber+".map");
 			else
-				path = new String (apktPath+"Contours.map");
+				path = new String (apktPath+"contours/Contours.map");
 			FileOutputStream fos = new FileOutputStream (path);
 			ObjectOutputStream oos = new ObjectOutputStream(fos);
 			oos.writeObject(new ContourLocationsMap(ContourPointsMap));
@@ -1541,7 +1542,7 @@ public OptSB(){}
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	private void spillBoundAlgo(PrintWriter writer, int contour_no) throws IOException {
+	private void spillBoundAlgo(PrintWriter writer, int contour_no, int loop) throws IOException {
 
 
 		String funName = "spillBoundAlgo";
@@ -1573,7 +1574,8 @@ public OptSB(){}
 
 
 		ArrayList<point_generic>  max_pts = new ArrayList<point_generic>(); 
-		point_generic extreme_pt,max_pt = null;
+		point_generic temp_pt1 = null;
+		point_generic max_pt = null;
 		/*
 		 * to store the max selectivity each dimension  can learn in a contour
 		 */
@@ -1683,9 +1685,10 @@ public OptSB(){}
 					System.exit(1);
 				}
 				
-				double min_error = Double.MAX_VALUE;
+				double min_fpc_cost = Double.MAX_VALUE;
 				for(int t=0;t<max_pts.size();t++){
-					extreme_pt = max_pts.get(t); 
+					temp_pt1 = max_pts.get(t); 
+					point_generic extreme_pt = new point_generic(temp_pt1);
 //					if(t==1)
 //						System.out.print("interseting");
 					if(FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
@@ -1701,15 +1704,17 @@ public OptSB(){}
 					else
 					{
 						extreme_pt.set_badguy();
-						double temp_error = Double.MAX_VALUE;
+						double temp_fpc_cost = Double.MAX_VALUE;
 						if(FPC_for_Alignment)
-							temp_error = getBestFPC(extreme_pt,j);
+							temp_fpc_cost = getBestFPC(extreme_pt,j);
 						else if(spill_opt_for_Alignment)
-							temp_error = getBestSpillingPlan(extreme_pt, j);
-						if(temp_error < min_error){
-							min_error = temp_error;
+							temp_fpc_cost = getBestSpillingPlan(extreme_pt, j);
+						if(temp_fpc_cost < min_fpc_cost){
+							min_fpc_cost = temp_fpc_cost;
 							max_pt = extreme_pt;
 						}
+						if(max_pt.getfpc_cost() < Double.MAX_VALUE/10)
+						assert( max_pt.get_fpcSpillDim() == j): "for loop "+loop+" max_pt fpc_dim is not matching"; 
 					}
 					//		maxPoints[j]=findMaxPoint(partition_info[m].getList(),j);
 				}
@@ -1956,7 +1961,7 @@ public OptSB(){}
 				//learning_dim = plans_list[fpc_plan].getcategory(remainingDim);// should contain the forced dimension
 				//assert(learning_dim == p.get_fpcSpillDim()) : funName+" FPC learning dimension at max. point";
 				learning_dim = p.get_fpcSpillDim();
-				assert(learning_dim == key) : funName+" FPC learning dimension is not key for points_max data structure";
+				assert(learning_dim == key) : funName+" for loop no.= "+loop+" FPC learning dimension is not key for points_max data structure";
 				
 				tolerance = 1+(p.getpercent_err()/100.0);
 				if(print_flag)
@@ -2192,8 +2197,8 @@ public OptSB(){}
 //		else{
 //			assert(false) : funName+ "the optimal spilling plan cannot have lesser cost than the fpc plan with error = "+error+" but earlier fpcError = "+p.getpercent_err();
 //		}
-		p.set_fpcSpillDim(dim_index);
-		return p.getpercent_err();
+		//p.set_fpcSpillDim(dim_index);
+		return p.getfpc_cost();
 	}
 
 
@@ -2451,6 +2456,7 @@ public OptSB(){}
 					p.putfpc_plan(j);
 					error=((NewFpcCost-CurOptCost)/CurOptCost)*100;
 					p.putpercent_err(error);
+					p.set_fpcSpillDim(dim_index);
 				}
 			}
 		}
@@ -2461,9 +2467,9 @@ public OptSB(){}
 			error=((p.getfpc_cost()-p_opt_cost)/p_opt_cost)*100;
 			p.putpercent_err(error);
 		}
-		p.set_fpcSpillDim(dim_index);
+		//p.set_fpcSpillDim(dim_index);
 		assert(dim_index!=p.getLearningDimension()) : funName+" it should not the aligned scenario";
-		return p.getpercent_err();
+		return p.getfpc_cost();
 	}
 	private void removeDimensionFromContourPoints(int d) {
 		String funName = "removeDimensionFromContourPoints";
