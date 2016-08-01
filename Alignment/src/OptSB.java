@@ -137,7 +137,7 @@ public class OptSB
 	static boolean AlignmentPenaltyCode = false;
 	static boolean DEBUG = true;
 	static boolean spill_opt_for_Alignment = false;
-	static boolean contoursReadFromFile = false;
+	static boolean contoursReadFromFile = true;
 	//---------------------------------------------------------
 	
 	
@@ -301,7 +301,7 @@ public OptSB(){}
 		
 		double cost = obj.getOptimalCost(0);
 		
-		boolean contoursReadFromFile = true;
+
 		if(!Nexus_algo && !generateSpecificContour && contoursReadFromFile){
 			File ContoursFile = new File(apktPath+"contours/Contours.map");
 			if(ContoursFile.exists()){
@@ -493,10 +493,10 @@ public OptSB(){}
 			{
 				 writer.println("Entering loop "+j);
 			}
-			//		if(j==320)
-			//			System.out.println("Interesting");
-			//		else
-			//			continue;
+					if(j==31599)
+						System.out.println("Interesting");
+					else
+						continue;
 			//initiliazation for every loop
 			//	int j=totalPoints -1;
 
@@ -542,6 +542,8 @@ public OptSB(){}
 				{
 					 writer.println("---------------------------------------------------------------------------------------------\n");
 					 writer.println("Contour "+i+" cost : "+cost+"\n");
+					 System.out.println("---------------------------------------------------------------------------------------------\n");
+					 System.out.println("Contour "+i+" cost : "+cost+"\n");
 				}
 				int prev = obj.remainingDim.size();
 
