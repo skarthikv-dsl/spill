@@ -135,7 +135,7 @@ public class OptSB
 	static boolean FPC_for_Alignment = true;
 	static int genContourNumber = -1;
 	static boolean AlignmentPenaltyCode = false;
-	static boolean DEBUG = true;
+	static boolean DEBUG = false;
 	static boolean spill_opt_for_Alignment = false;
 	static boolean contoursReadFromFile = true;
 	//---------------------------------------------------------
@@ -494,7 +494,7 @@ public OptSB(){}
 			{
 				 writer.println("Entering loop "+j);
 			}
-					if(j==31599)
+					if(j==81069)
 						System.out.println("Interesting");
 					else
 						continue;
@@ -1014,8 +1014,8 @@ public OptSB(){}
 
 
 			//Settings: for higher just see if you want to comment this
-			if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
-
+			//if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
+			if(true){
 //				if(local_partition_flag==true)
 //				{
 //					cur_contour_points.add(p);
@@ -1399,8 +1399,8 @@ public OptSB(){}
 		assert(findNearestSelectivity(actual_sel[0]) == findNearestSelectivity(findNearestSelectivity(actual_sel[0]))) : funName+ " : findNearSelectivity Error";
 		assert (findNearestPoint(actual_sel[0]) == findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) : funName+ " : findNearPoint Error";
 
-		// added code Feb28; 8:00 pm
-		if(cost_generic(convertSelectivitytoIndex(actual_sel)) > 2*cost){
+		//  TODO: changed 2*cost to cost
+		if(cost_generic(convertSelectivitytoIndex(actual_sel)) > cost){
 			oneDimCost = cost;
 			return;
 		}
@@ -1468,6 +1468,10 @@ public OptSB(){}
 			}
 		}
 
+		if(cost_generic(convertSelectivitytoIndex(actual_sel)) < cost && oneDimCost > cost ){
+			sel_min = actual_sel[remDim];
+			oneDimCost = cost;
+		}
 		if(sel_min < (double) 1 && sel_min >= actual_sel[remDim]){
 
 			if(print_flag)
@@ -1632,6 +1636,8 @@ public OptSB(){}
 		while(part_idx < part.size())
 		{
 			
+			if(part.get(part_idx).size()==3 && remainingDim.size()==3 && DEBUG)
+				System.out.println("interesting");
 		/*	if(first_flag == false )
 			{
 				//		break; 
@@ -1651,7 +1657,7 @@ public OptSB(){}
 			first_flag = false;
 			currentContourPoints = 0;
 		make_local_partition(part.get(part_idx));
-		part_idx = part_idx+1;
+		
 		assert(n_partition<=remainingDim.size()): funName+" no. of partitions is more than the number of remaining dimensions";
 		doPartition(ContourPointsMap.get(contour_no), min_cost_index, unique_plans);
 	//	point_generic [] min_fpc_point = new point_generic[n_partition];
@@ -1829,6 +1835,7 @@ public OptSB(){}
 			}
 			//System.arraycopy(p_encoding, 0, best_partitioning, 0, loc_dimension);
 		}
+		part_idx = part_idx+1;
 	}
 		assert(temp_tol != Double.MAX_VALUE && n_partition_best!=0):"temp_tol is untouched";
 			n_partition = n_partition_best;
@@ -2046,7 +2053,9 @@ public OptSB(){}
 						continue;
 				}
 
-
+				writer.println("current contour points is "+currentContourPoints);
+				//System.out.println("current contour points is "+currentContourPoints);
+				
 				double temp_learning_cost = learning_cost;
 				sel = getLearntSelectivity(writer,learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no);
 		//		sel = getLearntSelectivity(learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)), p, contour_no);
@@ -2056,8 +2065,9 @@ public OptSB(){}
 				if(selectivity[p.get_dimension(learning_dim)]>=actual_sel[learning_dim] && 
 						q_a_cost <= (Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance)){
 					sel = actual_sel[learning_dim];
-					temp_learning_cost += (Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance);
-					if(learning_cost > temp_learning_cost){
+					temp_learning_cost += (Math.pow(2, contour_no-1)*getOptimalCost(0))*tolerance;
+					writer.println("The cost of learning this dimension is revised to "+(Math.pow(2, contour_no-1)*getOptimalCost(0))*tolerance)
+;;					if(learning_cost > temp_learning_cost){
 						learning_cost = temp_learning_cost;
 					}
 				}
