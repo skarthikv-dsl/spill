@@ -128,7 +128,7 @@ public class OptSB
 	
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
-	static boolean singleThread = false;
+	static boolean singleThread = true;
 	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
@@ -184,7 +184,8 @@ public class OptSB
 	
 	int [] p_encoding = new int[10];
 	int [] prev_encoding = new int[10];
-	int [] best_partitioning = new int[10];
+//	int [] best_partitioning = new int[10];
+	List<List<Integer>> best_partitioning = new ArrayList<>();
 	int [] until_max = new int [10];	
 	ArrayList<Integer> temp_list = new ArrayList<Integer>();
 	 partition partition_info[];
@@ -1653,7 +1654,10 @@ public OptSB(){}
 		part_idx = part_idx+1;
 		assert(n_partition<=remainingDim.size()): funName+" no. of partitions is more than the number of remaining dimensions";
 		doPartition(ContourPointsMap.get(contour_no), min_cost_index, unique_plans);
-		point_generic [] min_fpc_point = new point_generic[n_partition];
+	//	point_generic [] min_fpc_point = new point_generic[n_partition];
+		point_generic [] min_cost_point = new point_generic[n_partition];
+		boolean [] min_cost_good_guy = new boolean[n_partition];
+		Double min_block_cost=Double.MAX_VALUE;
 
 	//	points_max.clear();
 		local_points_max.clear();
@@ -1698,9 +1702,9 @@ public OptSB(){}
 					if(plans_list[extreme_pt.get_plan_no()].getcategory(remainingDim)==j)
 					{
 						extreme_pt.set_goodguy();
-						local_points_max.put(j, extreme_pt);
+					//	local_points_max.put(j, extreme_pt);
 						max_pt = extreme_pt;
-						cur_val = cur_val + 1;  // TODO: curval += max_pt.getOptCost();
+					//	cur_val = cur_val + 1;  // TODO: curval += max_pt.getOptCost();
 						break;
 					}
 					else
@@ -1721,8 +1725,8 @@ public OptSB(){}
 					//		maxPoints[j]=findMaxPoint(partition_info[m].getList(),j);
 				}
 				
-				if(max_pt.get_goodguy())
-					break;
+			//	if(max_pt.get_goodguy())
+			//		break;
 				if(spill_opt_for_Alignment){
 					point_generic temp_pt = new point_generic(max_pt);
 					double best_fpc_pt_err = getBestSpillingPlan(temp_pt, j);
@@ -1740,23 +1744,50 @@ public OptSB(){}
 				//				}
 				if(q==0)
 				{
-					min_fpc_point[m] = this.maxPoints[j];
+					min_cost_point[m] = this.maxPoints[j];
+					min_cost_good_guy[m] = this.maxPoints[j].get_goodguy();
+					if(this.maxPoints[j].get_goodguy()){
+						min_block_cost = this.maxPoints[j].get_cost();
+					}
+					else{
+						min_block_cost = this.maxPoints[j].getfpc_cost();
+					} 
 				}
 
-				
-				if(this.maxPoints[j].getpercent_err() < min_fpc_point[m].getpercent_err())
-				{
-					min_fpc_point[m] = this.maxPoints[j];
+				//TODO: this.maxPoints[j].getfpcCost()
+				if(this.maxPoints[j].get_goodguy() && (this.maxPoints[j].get_cost()< min_block_cost)){
+					min_cost_point[m] = this.maxPoints[j];
+					min_cost_good_guy[m]=this.maxPoints[j].get_goodguy();
+					min_block_cost = this.maxPoints[j].get_cost();
 				}
+				else if (!this.maxPoints[j].get_goodguy() && (this.maxPoints[j].getfpc_cost() < min_block_cost)){
+					min_cost_point[m] = this.maxPoints[j];
+					min_cost_good_guy[m]=this.maxPoints[j].get_goodguy();
+					min_block_cost = this.maxPoints[j].getfpc_cost();
+				}
+				
 				
 				if(q==(cur_partition.get(m_key).size()-1))
 				{
-					ld = min_fpc_point[m].get_fpcSpillDim();   //are you getting the real minimum cost partition?
-					assert(ld!=-1):"Spill Dimension is -1";
-					min_fpc_point[m].set_badguy();
-					local_points_max.put(ld, min_fpc_point[m]);  
-					cur_tol = (min_fpc_point[m].getpercent_err()/100.0);
-					cur_val = cur_val + (1+cur_tol); //cost*(1+cur_tol)
+					if(min_cost_good_guy[m]==true){
+						ld = min_cost_point[m].getLearningDimension();
+						min_cost_point[m].set_goodguy();
+						cur_tol = 1;
+						
+					}
+					else{
+						ld = min_cost_point[m].get_fpcSpillDim();
+						assert(ld!=-1):"Spill Dimension is -1";
+						min_cost_point[m].set_badguy();
+						cur_tol = 1+ (min_cost_point[m].getpercent_err()/100.0);
+						
+					}
+					cur_val = cur_val + (min_block_cost);
+					assert(!local_points_max.containsKey(ld)):" local_points_max already contains key : "+ld;
+					local_points_max.put(ld, min_cost_point[m]); 
+					//TODO :  Change getpercent_err() with getFpcCost()
+					
+					 //cost*(1+cur_tol)
 					if( cur_tol > local_tmax)
 						local_tmax = cur_tol;
 			//		 if(print_flag)
@@ -1774,13 +1805,29 @@ public OptSB(){}
 		//double cur_val = ((2*dnp*loc_dimension) - (dnp*dnp) + (3*dnp) )*(1+local_tmax);
 	//	 cur_val = ((loc_dimension-dnp)*dnp + (dnp*(dnp+1)*0.5))*(1+local_tmax);
 	//	double cur_val = (n_partition)*(1+local_tmax);
+		// TODO : Use cur_cost instead of cur_val
+		
 		if(cur_val < min_val)
 		{
 			min_val = cur_val;
-			points_max = new HashMap<Integer, point_generic>(local_points_max);
+			//TODO  : Use deep copy to get the points_max
+			points_max = new HashMap<Integer, point_generic>();
+			Iterator itr_pm = local_points_max.keySet().iterator();
+			while(itr_pm.hasNext()){
+				Integer cur_key = (Integer)itr_pm.next();
+				point_generic new_point = new point_generic(local_points_max.get(cur_key));
+				points_max.put(cur_key,new_point);
+			}
+			
 			temp_tol = local_tmax;
 			n_partition_best = n_partition;
-			System.arraycopy(p_encoding, 0, best_partitioning, 0, loc_dimension);
+			// TODO : Copy part.get(part_idx) to best_partitioning
+			best_partitioning.clear();
+			int part_size_temp1 = part.get(part_idx).size();
+			for(int p_idx1 =0;p_idx1 < part_size_temp1; p_idx1++){
+				best_partitioning.add(part.get(part_idx).get(p_idx1));
+			}
+			//System.arraycopy(p_encoding, 0, best_partitioning, 0, loc_dimension);
 		}
 	}
 		assert(temp_tol != Double.MAX_VALUE && n_partition_best!=0):"temp_tol is untouched";
@@ -1933,11 +1980,9 @@ public OptSB(){}
 		Integer key;
 		Iterator itr1 = points_max.keySet().iterator();
 		int d;
-		for(int y=0;y<n_partition;y++){
-			if(itr1.hasNext() == false)
-			{
-				break;
-			}
+		//for(int y=0;y<n_partition;y++){
+		while(itr1.hasNext()){
+			
 			//assert(itr.hasNext()==true):"Points_max doesnt have enough points as the number of partitions";
 			key = (Integer)itr1.next();
 			d = key;
@@ -1972,7 +2017,7 @@ public OptSB(){}
 				}
 			}
 			
-			assert(tolerance<=(tmax+1)): funName+" the tolerance is beyond the max. tolerance during execution";
+			assert(tolerance<=(tmax)): funName+" the tolerance is beyond the max. tolerance during execution";
 			assert(points_max.containsKey(learning_dim )): funName+" not learning a leader dimension";
 			
 			
@@ -2002,10 +2047,21 @@ public OptSB(){}
 				}
 
 
+				double temp_learning_cost = learning_cost;
 				sel = getLearntSelectivity(writer,learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no);
 		//		sel = getLearntSelectivity(learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)), p, contour_no);
 				//					if(sel_max[d]<=sel)
 				d= learning_dim;
+				
+				if(selectivity[p.get_dimension(learning_dim)]>=actual_sel[learning_dim] && 
+						q_a_cost <= (Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance)){
+					sel = actual_sel[learning_dim];
+					temp_learning_cost += (Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance);
+					if(learning_cost > temp_learning_cost){
+						learning_cost = temp_learning_cost;
+					}
+				}
+				
 				if(currentContourPoints!=0)
 					sel_max[d] = sel;
 				
@@ -2215,25 +2271,18 @@ public OptSB(){}
 			writer.println("Max "+key+" = "+points_max.get(key).get_dimension(key));
 		}
 	}
-	void print_partition(int[]best_partitioning, PrintWriter writer){
+	void print_partition(List<List<Integer>> best_partitioning, PrintWriter writer){
 		int n = remainingDim.size();
 	   	int part_num = 1;
         int i;
-        for (i = 0; i < n; ++i)
-            if (best_partitioning[i] > part_num)
-                part_num = best_partitioning[i];
-     
-        /* Print the p partitions. */
-        int p;
-        for (p = part_num; p >= 1; --p) {
-            writer.printf("{");
-            /* If s[i] == p, then i + 1 is part of the pth partition. */
-            for (i = 0; i < n; ++i)
-                if (best_partitioning[i] == p)
-                    writer.printf("%d, ",remainingDim.get(i) );
-         //   System.out.printf("\b\b} ");
-            writer.printf("} ");
-        }
+        writer.print(best_partitioning);
+//        for(int outer_i = 0;outer_i < best_partitioning.size();outer_i++){
+//        	for (int inner_i = 0; inner_i < best_partitioning.get(outer_i).size();inner_i++){
+//        		writer.print(best_partitioning.get(outer_i).get(inner_i));
+//        	}
+//        }
+//        
+      
         writer.printf("\n");
 	}
 	
