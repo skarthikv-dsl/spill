@@ -128,7 +128,7 @@ public class OptSB
 	
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
-	static boolean singleThread = true;
+	static boolean singleThread = false;
 	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
@@ -309,6 +309,9 @@ public OptSB(){}
 				obj.readContourPointsFromFile();
 				global_obj.readContourPointsFromFile();
 				contoursReadFromFile = true;
+			}
+			else{
+				contoursReadFromFile = false;
 			}
 		}
 		
@@ -494,7 +497,7 @@ public OptSB(){}
 			{
 				 writer.println("Entering loop "+j);
 			}
-					if(j==81069)
+					if(j==50000)
 						System.out.println("Interesting");
 					else
 						continue;
@@ -1703,8 +1706,8 @@ public OptSB(){}
 					point_generic extreme_pt = new point_generic(temp_pt1);
 //					if(t==1)
 //						System.out.print("interseting");
-					if(FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
-						continue;
+//					if(FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
+//						continue;
 					if(plans_list[extreme_pt.get_plan_no()].getcategory(remainingDim)==j)
 					{
 						extreme_pt.set_goodguy();
@@ -2057,7 +2060,7 @@ public OptSB(){}
 				//System.out.println("current contour points is "+currentContourPoints);
 				
 				double temp_learning_cost = learning_cost;
-				sel = getLearntSelectivity(writer,learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no);
+				sel = getLearntSelectivity(writer,learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no, loop);
 		//		sel = getLearntSelectivity(learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)), p, contour_no);
 				//					if(sel_max[d]<=sel)
 				d= learning_dim;
@@ -2677,7 +2680,7 @@ public OptSB(){}
 
 
 
-	public double getLearntSelectivity(PrintWriter writer, int dim, double cost,point_generic p, int contour_no) {
+	public double getLearntSelectivity(PrintWriter writer, int dim, double cost,point_generic p, int contour_no, int loop) {
 
 		int loc;
 		memo m;
@@ -2915,6 +2918,9 @@ public OptSB(){}
 						if(remainingBudget<=0)
 						{
 							temp_actual_index[dim] = temp_actual_index[dim] -1;
+							if(temp_actual_index[dim] < 0){
+								temp_actual_index[dim] = 0;
+							}
 							//m.add(temp_actual_index[dim], cost);
 							break;
 						}
@@ -3045,8 +3051,11 @@ public OptSB(){}
 					learning_cost += cost; //just adding the cost of the contour in the while loop zips through in the starting iteration itself
 					prevExecCost = cost; //for the sake of printing
 					selLearnt = selectivity[p.get_dimension(dim)];
-					if(hashjoinFlag)
+					if(hashjoinFlag){
+						if(temp_actual_index[dim]==-1)
+							System.out.println("the loop is "+loop);
 						selLearnt = selectivity[temp_actual_index[dim]];
+					}
 					int idx = temp_actual_index[dim];
 					if(!hashjoinFlag && idx>0){	
 						idx --;
@@ -3084,6 +3093,7 @@ public OptSB(){}
 		catch ( Exception e ) {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 			e.printStackTrace();
+			System.exit(1);
 
 		}finally{
     	if (conn != null) {
