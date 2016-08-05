@@ -139,7 +139,7 @@ public class OptSB
 	static int partition_size = 1;
 	static boolean DEBUG = false;
 	static boolean spill_opt_for_Alignment = false;
-	static boolean contoursReadFromFile = false;
+	static boolean contoursReadFromFile = true;
 	//---------------------------------------------------------
 	
 	
@@ -1377,7 +1377,14 @@ public OptSB(){}
 	        boolean aligned = false;
 	        int [] contour_penalty_count = new int[penalty_threshold.length];
 	        //buildSpillDimensionMap(spillDimensionPlanMap);
-	   
+	        for(int i=1;i<=ContourPointsMap.size();i++){
+				for(int j=0;j<ContourPointsMap.get(i).size();j++){
+					point_generic p = ContourPointsMap.get(i).get(j);
+					p.reloadOrderList(remainingDim);
+					assert(p.getPredicateOrder().size() == dimension) : " reLoading predicate Order not done properly";
+				}
+			}
+	        
 	        double max_penality = Double.MIN_VALUE;
 	        //find the extreme locations for each dimensions
 	        //Code for generating all paritions
