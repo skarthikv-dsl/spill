@@ -129,14 +129,16 @@ public class OptSB
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
 	static boolean singleThread = false;
-	static boolean allPlanCost = true;
+	static boolean allPlanCost = false;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
-	static boolean FPC_for_Alignment = true;
+	static boolean FPC_for_Alignment = false;
 	static int genContourNumber = -1;
 	static boolean AlignmentPenaltyCode = false;
+	static boolean AlignmentPenaltyCode_generic = true;
+	static int partition_size = 2;
 	static boolean DEBUG = false;
-	static boolean spill_opt_for_Alignment = false;
+	static boolean spill_opt_for_Alignment = true;
 	static boolean contoursReadFromFile = true;
 	//---------------------------------------------------------
 	
@@ -442,6 +444,9 @@ public OptSB(){}
 		
 		if(AlignmentPenaltyCode)
 			obj.checkAlignmentPenalty();
+		
+		if(AlignmentPenaltyCode_generic)
+			obj.checkAlignmentPenalty_generic(partition_size);
 
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
 		double pmax_final=0, tmax_final=0;
@@ -845,6 +850,7 @@ public OptSB(){}
 		            			writer.println("\nSpillBound The SubOptimaility  is "+SO);
 		            			//				System.out.println("\nSpillBound Harm  is "+Harm);
 		            		}
+		            		writer.flush();
 
 		            	}		
 
@@ -857,6 +863,8 @@ public OptSB(){}
 		            	//					    pw.format("%d = %f\n",output.MSO);
 		            	//					    pw.close();writerSubOpt.close();
 		            	//					    writer.close();
+		            	writer.flush();
+		            	writer.close();
 		            	if(output.num_of_points > 0)
 		            		output.flag = true;
 		            	return output;   	
@@ -1360,6 +1368,325 @@ public OptSB(){}
 	        }
 	        System.exit(1);
 	    }
+	  
+	  private void checkAlignmentPenalty_generic(int partition_size) throws NumberFormatException, IOException {
+	       
+		  String funName="checkAlignmentPenalty_generic";
+	        HashMap<Integer,ArrayList<Integer>> spillDimensionPlanMap = new HashMap<Integer,ArrayList<Integer>>();
+	        double[] penalty_threshold = {1, 1.2, 1.5, 2};
+	        boolean aligned = false;
+	        int [] contour_penalty_count = new int[penalty_threshold.length];
+	        //buildSpillDimensionMap(spillDimensionPlanMap);
+	   
+	        double max_penality = Double.MIN_VALUE;
+	        //find the extreme locations for each dimensions
+	        //Code for generating all paritions
+	        int partition_count =0;
+			int cnt =0;
+			//HashMap<Integer, List<List<List<Integer>>> > part  = new HashMap<Integer, List<List<List<Integer>>>>();
+			//List<List<List<Integer>>>  part  = new ArrayList<>();
+			System.out.println("Partition_size = "+partition_size);
+			List<List<List<Integer>>>  part  = helper(remainingDim, partition_size);
+			/*for(int i=1; i<=remainingDim.size(); i++) {
+	            List<List<List<Integer>>> ret = helper(remainingDim, i);
+	            //Iterate over ret and add to part
+	            for (int w =0;w<ret.size();w++){
+	            	part.add(ret.get(w));
+	            }
+	            //part.put(i, ret);
+	            cnt += ret.size();
+	          //  writer.println(cnt);
+	            
+	        }*/
+		
+	        //--
+			int learning_dim;
+			double tolerance = -1;
+			int fpc_plan;
+			double cur_val=0;
+			 
+			Set<Integer> unique_plans = new HashSet();
+			
+			int j;
+
+			//declaration and initialization of variables
+			learning_cost = 0;
+			oneDimCost = 0;
+			double cur_tol = 0;
+			max_cost=0;
+			min_cost = OptimalCost[totalPoints-1]+1;
+			int ld;
+			int [] min_cost_index = new int[dimension];
+
+			double [] sel_max = new double[dimension];
+			//		double min_fpc_cost = Double.MAX_VALUE;
+			//		int min_fpc_plan = Integer.MAX_VALUE;
+			//		int min_fpc_dim =Integer.MAX_VALUE;
+
+
+			ArrayList<point_generic>  max_pts = new ArrayList<point_generic>(); 
+			point_generic temp_pt1 = null;
+			point_generic max_pt = null;
+			double local_tmax =0;
+			/*
+			 * to store the max selectivity each dimension  can learn in a contour
+			 */
+			for(int d=0;d<dimension;d++) sel_max[d] = -1;
+
+			/*
+			 * store the plan/point corresponding to the sel_max locations in a hashmap
+			 * for which the key is the dimension
+			 */
+			HashMap<Integer,point_generic> local_points_max = new HashMap<Integer,point_generic>();
+			HashMap<Integer,point_generic> points_max = new HashMap<Integer,point_generic>();
+			//	HashMap<Integer, point_generic> fpc_points_max = new HashMap<Integer, point_generic>();
+
+			//end of declaration of variables
+			
+			if(local_partition_flag==false)
+			{
+				for(int k=0;k<partition_info.length;k++)
+				{
+					partition_info[k].clearPartition();
+				}
+			}
+			//----------------------------------Initialize variables-----------------------------------------------------
+			
+			double min_val = Double.MAX_VALUE;
+			double temp_tol = Double.MAX_VALUE;
+			
+			
+			int loc_dimension = remainingDim.size();
+	        //--
+	        int highest_penalty[] = new int[dimension];
+	      
+	        boolean first_flag ;
+	        int contour_no;
+	      
+	        for(int c=1; c<=ContourPointsMap.size(); c++){
+	           contour_no = c;
+	            System.out.println("------------------------------------Contour "+c+"---------------------------------");
+	    		int part_idx = 0;
+	    		temp_tol = Double.MAX_VALUE;
+	    		min_val = Double.MAX_VALUE;
+	    		while(part_idx < part.size())
+	    		{
+
+	    			cur_tol = 0;
+	    			first_flag = false;
+	    			currentContourPoints = 0;
+	    		make_local_partition(part.get(part_idx));
+	    		
+	    		assert(n_partition<=remainingDim.size()): funName+" no. of partitions is more than the number of remaining dimensions";
+	    		doPartition(ContourPointsMap.get(contour_no), min_cost_index, unique_plans);
+	    	//	point_generic [] min_fpc_point = new point_generic[n_partition];
+	    		point_generic [] min_cost_point = new point_generic[n_partition];
+	    		boolean [] min_cost_good_guy = new boolean[n_partition];
+	    		Double min_block_cost=Double.MAX_VALUE;
+
+	    	//	points_max.clear();
+	    		local_points_max.clear();
+	    		//old code
+	    		Integer m_key;
+	    		Iterator itr = cur_partition.keySet().iterator();
+	    		local_tmax = 0;
+	    		cur_val = 0;
+	    		for(int m =0;m<n_partition;m++)
+	    		{
+	    			assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
+	    			//-- old
+	    			m_key = (Integer)itr.next();
+	    			if(this.partition_info[m_key].getList().isEmpty())
+	    			{
+	    				//TODO: this code can be reached!
+	    			//	if(print_flag)
+	               //         System.out.println("Partition "+m_key+" is empty");
+	    				continue;
+	    			}
+	    			
+	    			for(int q=0;q<cur_partition.get(m_key).size();q++)
+	    			{
+	    				//	j = p[m][q];
+	    				j = cur_partition.get(m_key).get(q); 
+
+	    				max_pts = this.partition_info[m_key].getMaxPoints(j);
+	    				if(max_pts == null)
+	    				{
+	    					System.out.println("\nNo Max point for returned NULL\n");
+	    					System.exit(1);
+	    				}
+	    				max_pt = null;
+	    				double min_fpc_cost = Double.MAX_VALUE;
+	    				for(int t=0;t<max_pts.size();t++){
+	    					temp_pt1 = max_pts.get(t); 
+	    					point_generic extreme_pt = new point_generic(temp_pt1);
+//	    					if(t==1)
+//	    						System.out.print("interseting");
+//	    					if(FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
+//	    						continue;
+	    					if(plans_list[extreme_pt.get_plan_no()].getcategory(remainingDim)==j)
+	    					{
+	    						extreme_pt.set_goodguy();
+	    					//	local_points_max.put(j, extreme_pt);
+	    						max_pt = extreme_pt;
+	    					//	cur_val = cur_val + 1;  // TODO: curval += max_pt.getOptCost();
+	    						break;
+	    					}
+	    					else
+	    					{
+	    						extreme_pt.set_badguy();
+	    						double temp_fpc_cost = Double.MAX_VALUE;
+	    						if(FPC_for_Alignment)
+	    							temp_fpc_cost = getBestFPC(extreme_pt,j);
+	    						else if(spill_opt_for_Alignment)
+	    							temp_fpc_cost = getBestSpillingPlan(extreme_pt, j);
+	    						if(temp_fpc_cost <= min_fpc_cost){
+	    							min_fpc_cost = temp_fpc_cost;
+	    							max_pt = extreme_pt;
+	    						}
+	    						if(max_pt.getfpc_cost() < Double.MAX_VALUE/10){
+	    							if(max_pt.get_fpcSpillDim() != j){
+	    								System.out.println("1734");
+	    							}
+	    							assert( max_pt.get_fpcSpillDim() == j): " max_pt fpc_dim is not matching";
+	    						}
+	    						
+	    					}
+	    					//		maxPoints[j]=findMaxPoint(partition_info[m].getList(),j);
+	    				}
+	    				
+	    			//	if(max_pt.get_goodguy()){
+	    			//		cur_val = cur_val + max_pt.get_cost();		
+	    					//break;
+	    			//	}
+	    				if(spill_opt_for_Alignment){
+	    					point_generic temp_pt = new point_generic(max_pt);
+	    					double best_fpc_pt_err = getBestSpillingPlan(temp_pt, j);
+	    					if(best_fpc_pt_err > max_pt.getpercent_err())
+	    						max_pt = temp_pt; 
+	    				}
+	    				
+	    				this.maxPoints[j] = max_pt;
+
+	    				//				if(maxPoints[j].get_goodguy()==true)
+	    				//				{
+	    				//					points_max.put(j,maxPoints[j]);
+	    				//					//put into points_max
+	    				//					break;
+	    				//				}
+	    				if(q==0)
+	    				{
+	    					min_cost_point[m] = this.maxPoints[j];
+	    					min_cost_good_guy[m] = this.maxPoints[j].get_goodguy();
+	    					if(this.maxPoints[j].get_goodguy()){
+	    						min_block_cost = this.maxPoints[j].get_cost();
+	    					}
+	    					else{
+	    						min_block_cost = this.maxPoints[j].getfpc_cost();
+	    					} 
+	    				}
+
+	    				//TODO: this.maxPoints[j].getfpcCost()
+	    				if(this.maxPoints[j].get_goodguy() && (this.maxPoints[j].get_cost()<= min_block_cost)){
+	    					min_cost_point[m] = this.maxPoints[j];
+	    					min_cost_good_guy[m]=this.maxPoints[j].get_goodguy();
+	    					min_block_cost = this.maxPoints[j].get_cost();
+	    				}
+	    				else if (!this.maxPoints[j].get_goodguy() && (this.maxPoints[j].getfpc_cost() <= min_block_cost)){
+	    					min_cost_point[m] = this.maxPoints[j];
+	    					min_cost_good_guy[m]=this.maxPoints[j].get_goodguy();
+	    					min_block_cost = this.maxPoints[j].getfpc_cost();
+	    				}
+	    				
+	    				
+	    				if(q==(cur_partition.get(m_key).size()-1))
+	    				{
+	    					if(min_cost_good_guy[m]==true){
+	    						ld = min_cost_point[m].getLearningDimension();
+	    						min_cost_point[m].set_goodguy();
+	    						cur_tol = 1;
+	    						
+	    					}
+	    					else{
+	    						ld = min_cost_point[m].get_fpcSpillDim();
+	    						assert(ld!=-1):"Spill Dimension is -1";
+	    						min_cost_point[m].set_badguy();
+	    						cur_tol = 1+ (min_cost_point[m].getpercent_err()/100.0);
+	    						
+	    					}
+	    					cur_val = cur_val + (min_block_cost);
+	    					assert(!local_points_max.containsKey(ld)):" local_points_max already contains key : "+ld;
+	    					local_points_max.put(ld, min_cost_point[m]); 
+	    					//TODO :  Change getpercent_err() with getFpcCost()
+	    					
+	    					 //cost*(1+cur_tol)
+	    					if( cur_tol > local_tmax)
+	    						local_tmax = cur_tol;
+	    			//		 if(print_flag)
+	                      //       System.out.println("BG: t="+cur_tol+" max_point for partition "+m_key+ " for dimension "+ld+" is "+min_fpc_point[m].get_point_Index()[ld]);
+
+	    				}
+
+	    			//Now go to the next dimension in the block	
+	    			}
+
+	    		//Now go to the next block	
+	    		}
+	    		
+	    		double dnp = (double) n_partition;
+//	    		if(cur_tol > 25)
+	    	//		System.out.println("d");
+	    		//double cur_val = ((2*dnp*loc_dimension) - (dnp*dnp) + (3*dnp) )*(1+local_tmax);
+	    	//	 cur_val = ((loc_dimension-dnp)*dnp + (dnp*(dnp+1)*0.5))*(1+local_tmax);
+	    	//	double cur_val = (n_partition)*(1+local_tmax);
+	    		// TODO : Use cur_cost instead of cur_val
+	    		
+	    		if(cur_val < min_val)
+	    		{
+	    			min_val = cur_val;
+	    			//TODO  : Use deep copy to get the points_max
+	    			points_max = new HashMap<Integer, point_generic>();
+	    			Iterator itr_pm = local_points_max.keySet().iterator();
+	    			while(itr_pm.hasNext()){
+	    				Integer cur_key = (Integer)itr_pm.next();
+	    				point_generic new_point = new point_generic(local_points_max.get(cur_key));
+	    				points_max.put(cur_key,new_point);
+	    			}
+	    			
+	    			temp_tol = local_tmax;
+	    			n_partition_best = n_partition;
+	    			// TODO : Copy part.get(part_idx) to best_partitioning
+	    			best_partitioning.clear();
+	    			int part_size_temp1 = part.get(part_idx).size();
+	    			for(int p_idx1 =0;p_idx1 < part_size_temp1; p_idx1++){
+	    				best_partitioning.add(part.get(part_idx).get(p_idx1));
+	    			}
+	    			//System.arraycopy(p_encoding, 0, best_partitioning, 0, loc_dimension);
+	    		}
+	    		part_idx = part_idx+1;
+	    		//Now go to the next partition
+	    	}
+	    		System.out.println("temp_tol = "+temp_tol);
+	    		for(int hi =0;hi < penalty_threshold.length;hi++){
+	    			
+	    			if(temp_tol <= penalty_threshold[hi]){
+	    				contour_penalty_count[hi] ++ ;
+	    			}
+	    		}
+	    		
+	    		//Now go to the next contour
+	        }
+	       
+	        for(int hi =0;hi < penalty_threshold.length;hi++){
+    				System.out.println("more than ["+penalty_threshold[hi]+"] = "+contour_penalty_count[hi]);
+    		
+    		}
+	       // System.out.println("The max penalty is "+temp_tol);
+	        for(int i=0;i<penalty_threshold.length;i++){
+	            System.out.println("% of contour within the threshold of "+(double)(penalty_threshold[i]-1)*100.0+" is "+(double)(contour_penalty_count[i]*1.0/(ContourPointsMap.size()*1.0)));
+	        }
+	        System.exit(1);
+	    }
 		private void buildSpillDimensionMap(HashMap<Integer,ArrayList<Integer>> spillDimensionPlanMap) throws NumberFormatException, IOException {
 
 			for(int p=0;p<totalPlans;p++){
@@ -1687,7 +2014,7 @@ public OptSB(){}
            //         System.out.println("Partition "+m_key+" is empty");
 				continue;
 			}
-
+			
 			for(int q=0;q<cur_partition.get(m_key).size();q++)
 			{
 				//	j = p[m][q];
@@ -1699,7 +2026,7 @@ public OptSB(){}
 					System.out.println("\nNo Max point for returned NULL\n");
 					System.exit(1);
 				}
-				
+				max_pt = null;
 				double min_fpc_cost = Double.MAX_VALUE;
 				for(int t=0;t<max_pts.size();t++){
 					temp_pt1 = max_pts.get(t); 
@@ -1724,12 +2051,17 @@ public OptSB(){}
 							temp_fpc_cost = getBestFPC(extreme_pt,j);
 						else if(spill_opt_for_Alignment)
 							temp_fpc_cost = getBestSpillingPlan(extreme_pt, j);
-						if(temp_fpc_cost < min_fpc_cost){
+						if(temp_fpc_cost <= min_fpc_cost){
 							min_fpc_cost = temp_fpc_cost;
 							max_pt = extreme_pt;
 						}
-						if(max_pt.getfpc_cost() < Double.MAX_VALUE/10)
-						assert( max_pt.get_fpcSpillDim() == j): "for loop "+loop+" max_pt fpc_dim is not matching"; 
+						if(max_pt.getfpc_cost() < Double.MAX_VALUE/10){
+							if(max_pt.get_fpcSpillDim() != j){
+								System.out.println("1734");
+							}
+							assert( max_pt.get_fpcSpillDim() == j): "for loop "+loop+" max_pt fpc_dim is not matching";
+						}
+						
 					}
 					//		maxPoints[j]=findMaxPoint(partition_info[m].getList(),j);
 				}
@@ -4804,7 +5136,7 @@ class point_generic implements Serializable
 				//System.out.println(Integer.parseInt(s));
 				value = Integer.parseInt(s);
 				storedOrder.add(value);
-
+				order.add(value);
 			}
 			br.close();
 			file.close();
