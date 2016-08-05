@@ -129,17 +129,17 @@ public class OptSB
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
 	static boolean singleThread = false;
-	static boolean allPlanCost = false;
+	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
-	static boolean FPC_for_Alignment = false;
+	static boolean FPC_for_Alignment = true;
 	static int genContourNumber = -1;
 	static boolean AlignmentPenaltyCode = false;
 	static boolean AlignmentPenaltyCode_generic = true;
-	static int partition_size = 2;
+	static int partition_size = 1;
 	static boolean DEBUG = false;
-	static boolean spill_opt_for_Alignment = true;
-	static boolean contoursReadFromFile = true;
+	static boolean spill_opt_for_Alignment = false;
+	static boolean contoursReadFromFile = false;
 	//---------------------------------------------------------
 	
 	
@@ -363,7 +363,7 @@ public OptSB(){}
 				i = i+1;
 			
 			}
-			if(generateSpecificContour)
+			//if(generateSpecificContour)
 				obj.writeContourMaptoFile();
 		}
 		
@@ -1666,7 +1666,16 @@ public OptSB(){}
 	    		part_idx = part_idx+1;
 	    		//Now go to the next partition
 	    	}
-	    		System.out.println("temp_tol = "+temp_tol);
+	    		System.out.println("max_tol for this contour = "+temp_tol);
+	    		
+	    		for(int li =0; li < best_partitioning.size();li ++){
+	    			System.out.print("[");
+	    			for(int li_inner =0 ; li_inner < best_partitioning.get(li).size();li_inner ++){
+	    			System.out.print(best_partitioning.get(li).get(li_inner)+",");
+	    			}
+	    			System.out.print("]");
+	    		}
+	    		System.out.println("");
 	    		for(int hi =0;hi < penalty_threshold.length;hi++){
 	    			
 	    			if(temp_tol <= penalty_threshold[hi]){
