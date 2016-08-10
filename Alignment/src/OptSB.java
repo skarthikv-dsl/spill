@@ -140,6 +140,7 @@ public class OptSB
 	static boolean DEBUG = false;
 	static boolean spill_opt_for_Alignment = false;
 	static boolean contoursReadFromFile = false;
+	static boolean mod_flag = true;
 	static int mod_value = 2;
 	static int mod_base = 3;
 			
@@ -715,8 +716,10 @@ public OptSB(){}
 		            	}
 
 		            	for(int j= min_index;j<=max_index;j++){
-		            		if( (j % mod_base) != mod_value){
-		            			continue;
+		            		if(mod_flag == true){
+		            			if( (j % mod_base) != mod_value){
+		            				continue;
+		            			}
 		            		}
 		            		writer.println("Begin execution loop "+ j);
 		            //		if(j%1000==0){
