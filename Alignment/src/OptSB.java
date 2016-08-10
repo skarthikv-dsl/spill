@@ -140,7 +140,7 @@ public class OptSB
 	static boolean DEBUG = false;
 	static boolean spill_opt_for_Alignment = false;
 	static boolean contoursReadFromFile = false;
-	static boolean mod_flag = true;
+	static boolean mod_flag = false;
 	static int mod_value = 2;
 	static int mod_base = 3;
 			
@@ -387,6 +387,8 @@ public OptSB(){}
 			File f_tkde2 = new File("/media/ssd256gg/data/settings/settings.conf");
 			File f_tkde1 = new File("/media/ssd256g/data/settings/settings.conf");
 			File f_tkde3 = new File("/media/ssd256ggg/data/settings/settings.conf");
+			File f_tkde4 = new File("/media/ssd256g4/data/settings/settings.conf");
+			File f_tkde5 = new File("/media/ssd256g5/data/settings/settings.conf");
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
@@ -421,6 +423,14 @@ public OptSB(){}
 					source.setDatabaseName("tpcdscodd");
 					}
 				else if(f_tkde3.exists()){
+					source.setServerName("localhost:5431");
+					source.setDatabaseName("tpcdscodd");
+					}
+				else if(f_tkde4.exists()){
+					source.setServerName("localhost:5431");
+					source.setDatabaseName("tpcdscodd");
+					}
+				else if(f_tkde5.exists()){
 					source.setServerName("localhost:5431");
 					source.setDatabaseName("tpcdscodd");
 					}
