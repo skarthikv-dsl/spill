@@ -53,6 +53,7 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
+import java.io.Serializable;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -86,7 +87,7 @@ public class CostGreedyGCI3D_parallel
 
 	static double err = 0.03;//no use
 	//Settings
-	static double threshold = 20;
+	static double threshold = 5;
 
 	static int plans[];
 	static int OptimalCost[];
@@ -175,7 +176,7 @@ public class CostGreedyGCI3D_parallel
 		ADiagramPacket reducedgdp = obj.getGDP(new File(pktPath_red));
 		
 		obj.readpkt(reducedgdp);
-
+		
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 			
@@ -528,7 +529,7 @@ public class CostGreedyGCI3D_parallel
 		{
 			//Srinivas: this is were the diagram apkt packets are written to file
 			
-			String fName = apktPath+qtName+"_Red" + ".apkt";
+			String fName = apktPath+qtName+"_Red_5pc" + ".apkt";
 			FileOutputStream fis = new FileOutputStream (fName);
 			ObjectOutputStream ois;				
 			ois = new ObjectOutputStream (fis);			
@@ -2482,7 +2483,298 @@ public void readContourPointsFromFile() throws ClassNotFoundException {
 		//System.exit(0);
 	}
  
+ 
 }
+
+class point_generic implements Serializable
+{
+	private static final long serialVersionUID = 223L;
+	int dimension;
+ boolean load_flag = false;
+//	int opt_plan=-1;
+//	double opt_cost=-1.0;
+	int fpcSpillDim = -1;
+	boolean good_guy=false;
+	int fpc_plan=-1;
+	double fpc_cost = Double.MAX_VALUE;
+	double percent_err = Double.MAX_VALUE;
+	ArrayList<Integer> order;
+	ArrayList<Integer> storedOrder;
+	int value;
+	int p_no;
+	double cost;
+	static String plansPath;
+	int idx;
+	int [] dim_values;
+	
+
+	public point_generic(point_generic pg) {
+	
+		this.dimension = pg.dimension;
+		this.load_flag = pg.load_flag;
+	//	this.opt_plan = pg.opt_plan;
+	//	this.opt_cost = pg.opt_cost;
+		this.fpcSpillDim = pg.fpcSpillDim;
+		this.good_guy = pg.good_guy;
+		this.fpc_plan = pg.fpc_plan;
+		this.fpc_cost = pg.fpc_cost;
+		this.percent_err = pg.percent_err;
+		this.order = new ArrayList<Integer>();
+		this.storedOrder = new ArrayList<Integer>();
+		for(this.idx=0;this.idx < pg.order.size();this.idx++){
+			this.order.add(pg.order.get(this.idx));
+		}
+		for(this.idx=0;this.idx < pg.storedOrder.size();this.idx++){
+			this.storedOrder.add(pg.storedOrder.get(this.idx));
+		}
+		this.value = pg.value;
+		this.p_no = pg.p_no;
+		this.cost = pg.cost;
+		this.plansPath = pg.plansPath;
+
+		this.dim_values = new int[dimension];
+		//System.arraycopy(pg.dim_values, 0, dim_values, 0, dimension);
+		for(int it=0;it<dimension;it++)
+			this.dim_values[it] = pg.dim_values[it];
+
+	}
+	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim) throws  IOException{
+
+//		if(load_flag == false)
+//		{
+			loadPropertiesFile();
+//			load_flag = true;
+//		}
+		//	System.out.println();
+		dim_values = new int[dimension];
+		for(int i=0;i<dimension;i++){
+			dim_values[i] = arr[i];
+			//		System.out.print(arr[i]+",");
+		}
+		//	System.out.println("   having cost = "+cost+" and plan "+num);
+		this.p_no = num;
+		this.cost = cost;
+
+//		this.opt_cost=cost;
+//		this.opt_plan=num;
+
+		order =  new ArrayList<Integer>();
+		storedOrder = new ArrayList<Integer>();
+		try{
+			FileReader file = new FileReader(plansPath+num+".txt");
+
+			BufferedReader br = new BufferedReader(file);
+			String s;
+			while((s = br.readLine()) != null) {
+				//System.out.println(Integer.parseInt(s));
+				value = Integer.parseInt(s);
+				storedOrder.add(value);
+				order.add(value);
+			}
+			br.close();
+			file.close();
+		}
+		catch(FileNotFoundException e){
+			if(plansPath.contains("SQL")){
+				for(int i=0;i<dimension;i++){
+					storedOrder.add(i);
+				}
+			}
+		}
+
+
+	}
+	point_generic(int arr[], int num, double cost,ArrayList<Integer> remainingDim,ArrayList<Integer> predicateOrder ) throws  IOException{
+
+//		if(load_flag == false)
+//		{
+			loadPropertiesFile();
+//			load_flag = true;
+//		}
+		//	System.out.println();
+
+		dim_values = new int[dimension];
+		for(int i=0;i<dimension;i++){
+			dim_values[i] = arr[i];
+			//			System.out.print(arr[i]+",");
+		}
+		//	System.out.println("   having cost = "+cost+" and plan "+num);
+		this.p_no = num;
+		this.cost = cost;
+
+//		this.opt_cost=cost;
+//		this.opt_plan=num;
+
+		//check: if the order and stored order are being updated/populated
+		//order =  new ArrayList<Integer>(predicateOrder);
+		//storedOrder = new ArrayList<Integer>(predicateOrder);	
+		this.order = new ArrayList<Integer>();
+		this.storedOrder = new ArrayList<Integer>();
+		for(this.idx=0;this.idx < predicateOrder.size();this.idx++){
+			this.order.add(predicateOrder.get(this.idx));
+		}
+		for(this.idx=0;this.idx < predicateOrder.size();this.idx++){
+			this.storedOrder.add(predicateOrder.get(this.idx));
+		}
+	}
+	int getLearningDimension(){
+		if(order.isEmpty())
+			System.out.println("ERROR: all dimensions learnt");
+		return order.get(0);
+	}
+
+	/*
+	 * get the selectivity/index of the dimension
+	 */
+	public int get_dimension(int d){
+		return dim_values[d];
+	}
+
+	/*
+	 * get the plan number for this point
+	 */
+	public int get_plan_no(){
+		
+	//	return reducedPlanMap.get(p_no);
+		return p_no;
+
+	}
+
+	public double get_cost(){
+		return cost;
+	}
+	int getfpc_plan(){
+		return this.fpc_plan;
+	}
+	void putfpc_plan(int p_no){
+		this.fpc_plan=p_no;
+	}
+
+	double getfpc_cost(){
+		return this.fpc_cost;
+	}
+	void putfpc_cost(double cost){
+		this.fpc_cost=cost;
+	}
+//
+//	int getopt_plan(){
+//		return this.opt_plan;
+//	}
+//	double getopt_cost(){
+//		return this.opt_cost;
+//	}
+//	void putopt_cost(double cost){
+//		this.opt_cost=cost;
+//	}
+
+	double getpercent_err(){
+		return this.percent_err;
+	}
+	void putpercent_err(double p_err){
+		this.percent_err=p_err;
+	}
+	void set_goodguy(){
+		this.good_guy = true;
+	}
+	void set_badguy(){
+		this.good_guy = false;
+	}
+	boolean get_goodguy(){
+		return this.good_guy;
+	}
+	void set_fpcSpillDim(int dim)
+	{
+		this.fpcSpillDim = dim;
+	}
+	int get_fpcSpillDim()
+	{
+		return this.fpcSpillDim;
+	}
+
+	public int[] get_point_Index(){
+		return dim_values;
+	}
+	public void remove_dimension(int d){
+		String funName = "remove_dimension";
+		if(order.isEmpty())
+			System.out.println(funName+": ERROR: all dimensions learnt");
+		if(order.contains(d))
+			order.remove(order.indexOf(d));
+		else 
+			System.out.println(funName+": ERROR: removing a dimension that does not exist");
+
+	}
+	public void reloadOrderList(ArrayList<Integer> remainingDim) {
+
+		order.clear();
+		for(int itr=0;itr<storedOrder.size();itr++){
+			if(remainingDim.contains(storedOrder.get(itr)))
+				order.add(storedOrder.get(itr));
+		}
+	}
+	public int get_no_of_dimension(){
+		return dimension;
+	}
+
+	public ArrayList<Integer> getPredicateOrder(){
+		return storedOrder;
+	}
+
+	public void printPoint(){
+
+		for(int i=0;i<dimension;i++){
+			System.out.print(dim_values[i]+",");
+		}
+		System.out.println("   having cost = "+cost+" and plan "+p_no);
+	}
+
+	public void loadPropertiesFile() {
+
+		Properties prop = new Properties();
+		InputStream input = null;
+
+		try {
+
+			//	input = new FileInputStream("./src/Constants.properties");
+			input = new FileInputStream("./src/Constants.properties");
+			// load a properties file
+			prop.load(input);
+
+			// get the property value and print it out
+			plansPath = prop.getProperty("apktPath");
+			plansPath = plansPath+"predicateOrder/";
+			dimension = Integer.parseInt(prop.getProperty("dimension"));
+		} catch (IOException ex) {
+			ex.printStackTrace();
+		}
+	}
+
+
+	/*
+	 * public void loadPropertiesFile() {
+
+		Properties prop = new Properties();
+		InputStream input = null;
+
+		try {
+
+			input = new FileInputStream("./src/Constants.properties");
+
+			// load a properties file
+			prop.load(input);
+
+			// get the property value and print it out
+			plansPath = prop.getProperty("apktPath");
+			plansPath = plansPath+"predicateOrder/";
+			dimension = Integer.parseInt(prop.getProperty("dimension"));
+		} catch (IOException ex) {
+			ex.printStackTrace();
+		}
+	}
+	 * */
+
+}
+
 
 class PlanBouquetOutputParamStruct {
 	double SO = 0;

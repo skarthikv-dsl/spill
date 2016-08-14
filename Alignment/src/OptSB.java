@@ -57,6 +57,9 @@ import java.util.regex.Pattern;
 
 
 
+
+
+
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -68,12 +71,16 @@ public class OptSB
 	static int UNI = 1;
 	static int EXP = 2;
 
+	static HashMap<Integer,Integer> reducedPlanMap = new HashMap<Integer,Integer>();
+	
 	static double err = 0.0;
 
-	static double AllPlanCosts[][];
+	//static double AllPlanCosts[][];
+	static int AllPlanCosts[][];
 	static int nPlans;
 	static int plans[];
-	static double OptimalCost[];
+	//static double OptimalCost[];
+	static int OptimalCost[];
 	static int totalPlans;
 	static int dimension;
 	static int resolution;
@@ -131,7 +138,7 @@ public class OptSB
 	static boolean singleThread = false;
 	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
-	static boolean Nexus_algo = false;
+	static boolean Nexus_algo = true;
 	static boolean FPC_for_Alignment = true;
 	static int genContourNumber = -1;
 	static boolean AlignmentPenaltyCode = false;
@@ -140,13 +147,13 @@ public class OptSB
 	static boolean DEBUG = false;
 	static boolean spill_opt_for_Alignment = false;
 	static boolean contoursReadFromFile = false;
-	static boolean mod_flag = false;
-	static int mod_value = 2;
-	static int mod_base = 3;
+	static boolean mod_flag = true;
+	static int mod_value = 0;
+	static int mod_base = 5;
 			
 	//---------------------------------------------------------
 	
-	
+	boolean reductionDone = false;
 	
 	//The following parameters has to be set manually for each query
 	double tmax = 0;
@@ -282,12 +289,24 @@ public OptSB(){}
 		//		ADiagramPacket reducedgdp = cg.cgFpc(threshold, gdp,apktPath);
 
 		//Populate the OptimalCost Matrix.
+
+		String pktPath_red = apktPath + qtName +"_Red"+ ".apkt" ;
+		File pkt_red = new File(pktPath_red);
+		
+		if(pkt_red.exists())
+			obj.reductionDone = true;
+		
+		ADiagramPacket reducedgdp = obj.getGDP(new File(pktPath_red));
+		
+		obj.readpkt_red(reducedgdp);
+		obj.loadPropertiesFile();	
+/*		
 		if(FPC_for_Alignment && !Nexus_algo)
 			obj.readpkt(gdp, true);
 		else
 			obj.readpkt(gdp, false);
+*/		
 		
-		obj.loadPropertiesFile();
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 		//	obj.loadPropertiesFile();
@@ -367,7 +386,7 @@ public OptSB(){}
 				i = i+1;
 			
 			}
-			//if(generateSpecificContour)
+			if(generateSpecificContour)
 				obj.writeContourMaptoFile();
 		}
 		
@@ -958,7 +977,8 @@ public OptSB(){}
 
 		try {
 			
-			ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"contours/Contours.map")));
+			//ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"contours/Contours.map")));
+			ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"RedContours/1.map")));
 			ContourLocationsMap obj = (ContourLocationsMap)ip.readObject();
 			ContourPointsMap = obj.getContourMap();
 			Iterator itr = ContourPointsMap.keySet().iterator();
@@ -1031,7 +1051,7 @@ public OptSB(){}
 		{
 
 			p = contour_points.get(i);
-			plan_no = p.get_plan_no();
+			plan_no = p.get_plan_no(reducedPlanMap);
 
 			p.set_badguy();
 
@@ -1185,7 +1205,7 @@ public OptSB(){}
 //			for(l=0;l<cur_contour_points.size();l++)
 //			{
 //				p = cur_contour_points.get(l);
-//				plan_no=p.get_plan_no();
+//				plan_no=p.get_plan_no(reducedPlanMap);
 //				learning_dim=plans_list[plan_no].getcategory(remainingDim);
 //				partition_no=getPartitionNumber(learning_dim);
 //				if(partition_no == -1)
@@ -1556,7 +1576,7 @@ public OptSB(){}
 //	    						System.out.print("interseting");
 //	    					if(FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
 //	    						continue;
-	    					if(plans_list[extreme_pt.get_plan_no()].getcategory(remainingDim)==j)
+	    					if(plans_list[extreme_pt.get_plan_no(reducedPlanMap)].getcategory(remainingDim)==j)
 	    					{
 	    						extreme_pt.set_goodguy();
 	    					//	local_points_max.put(j, extreme_pt);
@@ -1795,11 +1815,11 @@ public OptSB(){}
 
 			if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
 				//Integer learning_dim = new Integer(p.getLearningDimension());
-				ld = plans_list[p.get_plan_no()].getcategory(remainingDim);
+				ld = plans_list[p.get_plan_no(reducedPlanMap)].getcategory(remainingDim);
 				Integer learning_dim = new Integer(ld);
 				if(learning_dim.intValue() != remDim)
 				{
-					writer.println("ld= "+ld+", remDim="+remDim+", opt_plan_no= "+p.get_plan_no());
+					writer.println("ld= "+ld+", remDim="+remDim+", opt_plan_no= "+p.get_plan_no(reducedPlanMap));
 				}
 				assert (learning_dim.intValue() == remDim) : funName+": ERROR plan's learning dimension not matching with remaining dimension";
 				assert (remainingDim.contains(learning_dim)) : funName+": ERROR remaining dimension does not contain the learning dimension";
@@ -1814,7 +1834,7 @@ public OptSB(){}
 						/*
 						 * set it to plan's cost at q_a
 						 */
-						int fpc_plan = p.get_plan_no();
+						int fpc_plan = p.get_plan_no(reducedPlanMap);
 						int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
 						double fpc_cost_generic = Double.MAX_VALUE;
 						if(FPC_for_Alignment){
@@ -2076,7 +2096,7 @@ public OptSB(){}
 //						System.out.print("interseting");
 //					if(FPC_for_Alignment && (t!=0 && (t != max_pts.size()-1) && t != (max_pts.size()-1)/2))
 //						continue;
-					if(plans_list[extreme_pt.get_plan_no()].getcategory(remainingDim)==j)
+					if(plans_list[extreme_pt.get_plan_no(reducedPlanMap)].getcategory(remainingDim)==j)
 					{
 						extreme_pt.set_goodguy();
 					//	local_points_max.put(j, extreme_pt);
@@ -2249,7 +2269,7 @@ public OptSB(){}
 		//			 * update the max and the min cost seen for this contour
 		//			 * also update the unique_plans for the contour
 		//			 */
-		//			unique_plans.add(p.get_plan_no());
+		//			unique_plans.add(p.get_plan_no(reducedPlanMap));
 		//			if(p.get_cost()>max_cost)
 		//				max_cost = p.get_cost();
 		//			if(p.get_cost()<min_cost){
@@ -2300,10 +2320,10 @@ public OptSB(){}
 				point_generic p = new point_generic(arr, getPlanNumber_generic(arr), cost_generic(arr), remainingDim);
 				//ContourPointsMap.get(contour_no).add(p);
 				max_cost = min_cost = p.get_cost();
-				unique_plans.add(p.get_plan_no());
+				unique_plans.add(p.get_plan_no(reducedPlanMap));
 				p.reloadOrderList(remainingDim);
 				//learning_dim = p.getLearningDimension();
-				learning_dim = plans_list[p.get_plan_no()].getcategory(remainingDim);
+				learning_dim = plans_list[p.get_plan_no(reducedPlanMap)].getcategory(remainingDim);
 				sel_max[learning_dim] = selectivity[arr[learning_dim]];
 				p.set_goodguy();
 				points_max.put(new Integer(learning_dim),p );
@@ -2330,7 +2350,7 @@ public OptSB(){}
 				continue;
 			}
 			if(points_max.get(new Integer(d))!=null && points_max.get(new Integer(lastItr))!=null)
-				assert(points_max.get(new Integer(d)).get_plan_no() != points_max.get(new Integer(lastItr)).get_plan_no()) : funName+" the same plan is spilling on different dimensions";			
+				assert(points_max.get(new Integer(d)).get_plan_no(reducedPlanMap) != points_max.get(new Integer(lastItr)).get_plan_no(reducedPlanMap)) : funName+" the same plan is spilling on different dimensions";			
 				lastItr = d;
 		}
 		 */
@@ -2370,22 +2390,22 @@ public OptSB(){}
 			key = (Integer)itr1.next();
 			d = key;
 			point_generic p = points_max.get(key);
-			if(plans_list[p.get_plan_no()].getcategory(remainingDim)==key)
+			if(plans_list[p.get_plan_no(reducedPlanMap)].getcategory(remainingDim)==key)
 				p.set_goodguy();
 			else
 				p.set_badguy();
 			if(p.get_goodguy())
 			{
 				//If it is a good guy
-				assert(plans_list[p.get_plan_no()].getcategory(remainingDim)==key):"Error in assignment of good guy!";
+				assert(plans_list[p.get_plan_no(reducedPlanMap)].getcategory(remainingDim)==key):"Error in assignment of good guy!";
 
 				//learning_dim = p.getLearningDimension();
-				learning_dim = plans_list[p.get_plan_no()].getcategory(remainingDim);
+				learning_dim = plans_list[p.get_plan_no(reducedPlanMap)].getcategory(remainingDim);
 				tolerance = 1;
 			}
 			else
 			{
-				assert(plans_list[p.get_plan_no()].getcategory(remainingDim)!=key):"Error in assignment of good guy!";
+				assert(plans_list[p.get_plan_no(reducedPlanMap)].getcategory(remainingDim)!=key):"Error in assignment of good guy!";
 				fpc_plan = p.getfpc_plan();
 				//assert(fpc_plan != -1): "bad guy doesn't have a fpc plan!!";
 				//learning_dim = plans_list[fpc_plan].getcategory(remainingDim);// should contain the forced dimension
@@ -2419,7 +2439,7 @@ public OptSB(){}
 				 */
 				if(p.get_goodguy()){
 					//if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getopt_plan()))))
-					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.get_plan_no()))))
+					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.get_plan_no(reducedPlanMap)))))
 						
 						continue;
 				}
@@ -2433,7 +2453,7 @@ public OptSB(){}
 				//System.out.println("current contour points is "+currentContourPoints);
 				
 				double temp_learning_cost = learning_cost;
-				sel = getLearntSelectivity(writer,learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no, loop);
+				sel = getLearntSelectivity(writer,learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance*1.05), p, contour_no, loop);
 		//		sel = getLearntSelectivity(learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)), p, contour_no);
 				//					if(sel_max[d]<=sel)
 				d= learning_dim;
@@ -2467,7 +2487,7 @@ public OptSB(){}
 				 */
 				//WRONG: TODO: change this to p.getfpc_plan
 				if(p.get_goodguy())
-					executions.add(new Pair(new Integer(d),new Integer(p.get_plan_no())));
+					executions.add(new Pair(new Integer(d),new Integer(p.get_plan_no(reducedPlanMap))));
 				else
 					executions.add(new Pair(new Integer(d),new Integer(p.getfpc_plan())));
 
@@ -2494,7 +2514,7 @@ public OptSB(){}
 					{
 						if(print_flag)
 						{
-							writer.print("\n Plan "+p.get_plan_no()+" executed at ");
+							writer.print("\n Plan "+p.get_plan_no(reducedPlanMap)+" executed at ");
 							for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
 							writer.println(" and learnt "+d+" dimension completely");
 						}
@@ -2524,7 +2544,7 @@ public OptSB(){}
 				{
 					if(print_flag)
 					{
-						writer.print("\n Plan "+p.get_plan_no()+" executed at ");
+						writer.print("\n Plan "+p.get_plan_no(reducedPlanMap)+" executed at ");
 						for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
 						writer.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
 					}
@@ -2761,7 +2781,7 @@ public OptSB(){}
 //		{
 //			cur=MaxList.get(i);
 //			index=cur.get_point_Index();
-//			OptPlan=cur.get_plan_no();
+//			OptPlan=cur.get_plan_no(reducedPlanMap);
 //
 //			cur_category = plans_list[OptPlan].getcategory(remainingDim);
 //			if(cur_category==dim_index)
@@ -2857,7 +2877,7 @@ public OptSB(){}
 		int category;
 		int loc;
 		double NewFpcCost,CurFpcCost, CurOptCost;
-		int OptPlan = p.get_plan_no();
+		int OptPlan = p.get_plan_no(reducedPlanMap);
 		assert(plans_list[OptPlan].getcategory(remainingDim)!=dim_index):"Trying for fpc for a good guy!!\n";
 		int []index = new int[dimension];
 		//p.putfpc_cost(-1);
@@ -3060,7 +3080,7 @@ public OptSB(){}
 		boolean hashjoinFlag =false;
 		String funName = "getLearntSelectivity";
 		int []q_index = new int[dimension];
-		int plan = p.get_plan_no();
+		int plan = p.get_plan_no(reducedPlanMap);
 		if(remainingDim.size()==1)
 		{
 			assert(false) : funName+" ERROR: entering one dimension condition";
@@ -3076,7 +3096,7 @@ public OptSB(){}
 		if(p.get_goodguy() || !FPC_for_Alignment)
 		{
 			//If it is a good guy
-			plan = p.get_plan_no();
+			plan = p.get_plan_no(reducedPlanMap);
 			q_index = p.get_point_Index();
 		}
 		else if(FPC_for_Alignment)
@@ -3825,7 +3845,7 @@ public OptSB(){}
 		String funName = "planVisited";
 
 		for(point_generic p: all_contour_points){
-			if(p.get_plan_no()== plan_no){
+			if(p.get_plan_no(reducedPlanMap)== plan_no){
 				return p;
 			}
 		}
@@ -3907,10 +3927,16 @@ public OptSB(){}
 		return selectivity[return_index];
 	}
 
-
-	void readpkt(ADiagramPacket gdp, boolean allPlanCost) throws IOException
+	/*-------------------------------------------------------------------------------------------------------------------------
+	 * Populates -->
+	 * 	dimension
+	 * 	resolution
+	 * 	totalPoints
+	 * 	OptimalCost[][]
+	 * 
+	 * */
+	void readpkt_red(ADiagramPacket gdp) throws IOException
 	{
-		String funName="readpkt";
 		//ADiagramPacket gdp = getGDP(new File(pktPath));
 		totalPlans = gdp.getMaxPlanNumber();
 		dimension = gdp.getDimension();
@@ -3918,151 +3944,108 @@ public OptSB(){}
 		data = gdp.getData();
 		totalPoints = (int) Math.pow(resolution, dimension);
 		//System.out.println("\nthe total plans are "+totalPlans+" with dimensions "+dimension+" and resolution "+resolution);
-		int plan_no;
-		this.loadPlans();
-
+		
 		assert (totalPoints==data.length) : "Data length and the resolution didn't match !";
-		this.maxPoints = new point_generic[dimension];
-		this.plans = new int [data.length];
-		this.OptimalCost = new double [data.length]; 
-		//	this.points_list = new point[resolution][resolution];
-		int [] index = new int[dimension];
-
-
-		int[]spillDim_planCnt = new int[dimension];
-		double []spillDim_pointPercent = new double[dimension];
-
-		int cat;
-		for(int l=0;l<dimension;l++)
-		{
-			spillDim_planCnt[l] = 0;
-
-			spillDim_pointPercent[l] = 0.0;
-		}
-
-
-		this.remainingDim = new ArrayList<Integer>();
-		for(int i=0;i<dimension;i++)
-			remainingDim.add(i);
-
-
+		loadPlans();
+		plans = new int [data.length];
+		OptimalCost = new int [data.length]; 
 		for (int i = 0;i < data.length;i++)
 		{
-			index=getCoordinates(dimension,resolution,i);
-			//			points_list[index[0]][index[1]] = new point(index[0],index[1],data[i].getPlanNumber(),remainingDim);
-			//			points_list[index[0]][index[1]].putopt_cost(data[i].getCost());
-			this.OptimalCost[i]= data[i].getCost();
-			this.plans[i] = data[i].getPlanNumber();
-			plan_no = data[i].getPlanNumber();
-			plans_list[plan_no].addPoint(i);
-
-			cat = plans_list[plan_no].getcategory(remainingDim);
-			//			if(cat == 3)
-			//			{
-			//				System.out.println("Here");
-			//			}
-			spillDim_planCnt[cat] = spillDim_planCnt[cat]+1;
+			OptimalCost[i]= (int)data[i].getCost();
+		//	plans[i] = data[i].getPlanNumber();
+		//	plans_list[plans[i]].addPoint(i);
 			//System.out.println("At "+i+" plan is "+plans[i]);
 			//System.out.println("Plan Number ="+plans[i]+"\n");
 			//	System.out.println("\nOptimal_cost:["+i+"] ="+OptimalCost[i]+"\n");
 		}
-		for(int l=0;l<dimension;l++)
-		{
-			spillDim_pointPercent[l] = (double)spillDim_planCnt[l]*100/data.length;
+
+		//TO get the number of points for each plan
+		int  [] plan_count = new int[totalPlans];
+		for(int p=0;p<data.length;p++){
+			plan_count[plans[p]]++;
 		}
-		//	System.out.println("\n SpillDim_pointCount-----");
-		for(int l=0;l<dimension;l++)
-		{
-			System.out.println("Points spilling on dim "+l+" = "+spillDim_pointPercent[l]+"%");
+		//printing the above
+		for(int p=0;p<plan_count.length;p++){
+			System.out.println("Plan "+p+" has "+plan_count[p]+" points");
 		}
 
+		 remainingDim = new ArrayList<Integer>();
+			for(int i=0;i<dimension;i++)
+				remainingDim.add(i);
 
-
-		minIndex = new double[dimension];
-		maxIndex = new double[dimension];
-
-		// ------------------------------------- Read pcst files
-		nPlans = totalPlans;
-		if(allPlanCost){
-			AllPlanCosts = new double[nPlans][totalPoints];
-			//costBouquet = new double[total_points];
+			// ------------------------------------- Read pcst files
 			
-			int x,y;
-			for (int i = 0; i < nPlans; i++) {
+			int nPlans=-1;
+			if(gdp.getMaxReductionPlanNumber()>0){ //this signifies that the apkt is obtained after reduction
+				assert(reductionDone) : " Reduction Done is mismatching to gdp.getMaxReductionPlanNumber()>0";
+				nPlans = gdp.getMaxReductionPlanNumber();
+			}
+			else
+				nPlans = totalPlans;
+			
+			
+			AllPlanCosts = new int[nPlans][totalPoints];
+			
+			//create a mapping for plan numbering from the original diagram
+			// to the corresponding ones in the reduced diagram
+			loadPlans();
+			plans = new int [data.length];
+			//loadPlans();
+			int cnt =0;
+			for(int i=0;i<data.length;i++){
+				
+				
+				if(!reducedPlanMap.containsKey(data[i].getPlanNumber())){
+					reducedPlanMap.put(data[i].getPlanNumber(), cnt);
+					cnt++;
+				}
+				plans[i] = reducedPlanMap.get(data[i].getPlanNumber());
+				plans_list[plans[i]].addPoint(i);
+			}
+			
+			//costBouquet = new double[total_points];
+			for (int i = 0; i < totalPlans; i++) {
 				try {
 
-					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(plansPath + i + ".pcst")));
+					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + i + ".pcst")));
 					double[] cost = (double[]) ip.readObject();
 					for (int j = 0; j < totalPoints; j++)
 					{
-						/*
-							index=getCoordinates(dimension,resolution,j);
-							x=index[0];
-							y=index[1];
-							CurFpcCost=points_list[x][y].getfpc_cost();
-							CurOptCost=points_list[x][y].getopt_cost();
-
-							if(CurFpcCost == -1 || CurFpcCost > cost[j])
-							{
-								points_list[x][y].putfpc_cost(cost[j]);
-								points_list[x][y].putfpc_plan(i);
-								error=((cost[j]-CurOptCost)/CurOptCost)*100;
-								points_list[x][y].putpercent_err(error);
-							}
-						 */
-
-						AllPlanCosts[i][j] = cost[j];
+						if(reductionDone){
+							if(reducedPlanMap.containsKey(i))
+								AllPlanCosts[reducedPlanMap.get(i)][j] = (int)cost[j];
+						}
+						else{
+							AllPlanCosts[i][j] = (int)cost[j];
+						}
 					}
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
 			}
-			
-		
-		/*
-				 for(int i=0;i<resolution;i++)
-				{
-					for(int j=0;j<resolution;j++)
-					{
-						error=points_list[i][j].getpercent_err();
-						if(error>max_err)
-							max_err = error;
-					}
-				}
-				System.out.println("\nMax_error="+max_err+"\n");
-		 */
 
-		//Srinivas's code for checking FPC
-		/*to test the FPC functionality*/
-		int fpc_count=0;
-		//double error;
-		double CurFpcCost,CurOptCost;
-		double error,max_error=-1;
-		for(int i=0;i<data.length;i++){		
-			int p = data[i].getPlanNumber();
-			double c1= data[i].getCost(); //optimal cost at i
-			double c2 = AllPlanCosts[p][i]; //plan p's cost at i from pcst files
-			//if(! (Math.abs(c1 - c2) < 0.05*c1 || Math.abs(c1 - c2) < 0.05*c2) ){
-			if((c2-c1) > 0.05*c1){
-				int [] ind = getCoordinates(dimension, resolution, i);
-				error = (double)Math.abs(c1 - c2)*100/c1;
-				if(error > max_error)
-				{
-					max_error = error;
-				}
-				//			System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d,%3d): , pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, ind[0], ind[1],ind[2],c1, c2, (double)Math.abs(c1 - c2)*100/c1);
-				fpc_count++;
+		//writing the optimal cost matirx
+
+		/*	File file = new File("C:\\Lohit\\data\\plans\\"+i+".txt");
+		    if (!file.exists()) {
+				file.createNewFile();
 			}
 
-			//				else
-			//					System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d): (%6.4f, %6.4f), pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, i, selectivity[i], selectivity[j], c1, c2, (double)Math.abs(c1 - c2)*100/c1);
-		}
-		System.out.println(funName+": FPC ERROR: for 5% deviation is "+fpc_count+" Max Error%="+max_error);
+		    FileWriter writer = new FileWriter(file, false);
 
-		}
+		    PrintWriter pw = new PrintWriter(writer);
 
+		for(int i=0;i<resolution;i++){
+			for(int j=0;j<resolution;j++){
+				int[] indexp = {j,i};
+				pw.format("%f\t", OptimalCost[getIndex(indexp, resolution)]);;
+			}
+			pw.format("\n");
+		}
+		 */
 
 	}
+
 	void loadPlans() throws NumberFormatException, IOException
 	{
 
@@ -4372,6 +4355,7 @@ public OptSB(){}
 	int getPlanNumber_generic(int arr[])
 	{
 		int index = getIndex(arr,resolution);
+	//	return (reducedPlanMap.get(plans[index]));
 		return plans[index];
 	}
 
@@ -5241,7 +5225,9 @@ class point_generic implements Serializable
 	/*
 	 * get the plan number for this point
 	 */
-	public int get_plan_no(){
+	public int get_plan_no(HashMap <Integer, Integer> reducedPlanMap){
+		
+	//	return reducedPlanMap.get(p_no);
 		return p_no;
 
 	}
