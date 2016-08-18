@@ -60,6 +60,7 @@ import java.util.regex.Pattern;
 
 
 
+
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -100,6 +101,7 @@ public class OptSB
 	static String sourcePath = "./src/";
 	static boolean MSOCalculation = true;
 	static boolean randomPredicateOrder = false;
+	static ArrayList<Integer> completed_qas = new ArrayList<Integer>();
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
 	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
@@ -148,9 +150,9 @@ public class OptSB
 	static boolean spill_opt_for_Alignment = false;
 	static boolean contoursReadFromFile = false;
 	static boolean mod_flag = true;
-	static int mod_value = 0;
+	static int mod_value = 4;
 	static int mod_base = 5;
-			
+	
 	//---------------------------------------------------------
 	
 	boolean reductionDone = false;
@@ -273,7 +275,7 @@ public OptSB(){}
 //			cur_partition.put(i, temp_list);
 //			//			temp_list.clear();
 //		}
-
+		
 		OptSB obj = new OptSB();
 		final OptSB global_obj = new OptSB();
 		obj.maxPoints= new point_generic[dimension];
@@ -292,14 +294,15 @@ public OptSB(){}
 
 		String pktPath_red = apktPath + qtName +"_Red"+ ".apkt" ;
 		File pkt_red = new File(pktPath_red);
-		
-		if(pkt_red.exists())
+		//File completed_qa_file = new File(apktPath+"completedQas.log");
+	//	if(pkt_red.exists())
 			obj.reductionDone = true;
 		
 		ADiagramPacket reducedgdp = obj.getGDP(new File(pktPath_red));
 		
 		obj.readpkt_red(reducedgdp);
-		obj.loadPropertiesFile();	
+		obj.loadPropertiesFile();
+		obj.loadCompletedQas(apktPath+"completedQas.log");
 /*		
 		if(FPC_for_Alignment && !Nexus_algo)
 			obj.readpkt(gdp, true);
@@ -386,7 +389,7 @@ public OptSB(){}
 				i = i+1;
 			
 			}
-			if(generateSpecificContour)
+			//if(generateSpecificContour)
 				obj.writeContourMaptoFile();
 		}
 		
@@ -746,7 +749,7 @@ public OptSB(){}
 
 		            	for(int j= min_index;j<=max_index;j++){
 		            		if(mod_flag == true){
-		            			if( (j % mod_base) != mod_value){
+		            			if( (j % mod_base) != mod_value || completed_qas.contains((Integer)j) ){
 		            				continue;
 		            			}
 		            		}
@@ -754,7 +757,9 @@ public OptSB(){}
 		            //		if(j%1000==0){
 		            	//		System.gc();
 		            		//}
-
+		            		if(j==199999){
+		            			System.out.println("In "+j);
+		            		}
 		            		//		            	if( j!=7217){
 		            		//		    				output.flag = false;
 		            		//		        			return output;
@@ -1766,6 +1771,7 @@ public OptSB(){}
 						else{
 							ArrayList<Integer> al = new ArrayList<Integer>();
 							al.add(p);
+							
 							spillDimensionPlanMap.put(value, al);
 						}	
 						break;
@@ -2179,7 +2185,7 @@ public OptSB(){}
 					}
 					else{
 						ld = min_cost_point[m].get_fpcSpillDim();
-						assert(ld!=-1):"Spill Dimension is -1";
+						assert(ld!=-1):"Spill Dimension is -1 and in loop "+loop;
 						min_cost_point[m].set_badguy();
 						cur_tol = 1+ (min_cost_point[m].getpercent_err()/100.0);
 						
@@ -3102,6 +3108,7 @@ public OptSB(){}
 		else if(FPC_for_Alignment)
 		{	
 			plan = p.getfpc_plan();
+			System.out.println("Loop number ="+ loop+ "plan = "+plan);
 			loc = plans_list[plan].getPoints().get(0);
 			q_index=getCoordinates(dimension, resolution, loc);
 		}
@@ -3946,7 +3953,7 @@ public OptSB(){}
 		//System.out.println("\nthe total plans are "+totalPlans+" with dimensions "+dimension+" and resolution "+resolution);
 		
 		assert (totalPoints==data.length) : "Data length and the resolution didn't match !";
-		loadPlans();
+		//loadPlans();
 		plans = new int [data.length];
 		OptimalCost = new int [data.length]; 
 		for (int i = 0;i < data.length;i++)
@@ -3960,14 +3967,14 @@ public OptSB(){}
 		}
 
 		//TO get the number of points for each plan
-		int  [] plan_count = new int[totalPlans];
-		for(int p=0;p<data.length;p++){
-			plan_count[plans[p]]++;
-		}
-		//printing the above
-		for(int p=0;p<plan_count.length;p++){
-			System.out.println("Plan "+p+" has "+plan_count[p]+" points");
-		}
+//		int  [] plan_count = new int[totalPlans];
+//		for(int p=0;p<data.length;p++){
+//			plan_count[plans[p]]++;
+//		}
+//		//printing the above
+//		for(int p=0;p<plan_count.length;p++){
+//			System.out.println("Plan "+p+" has "+plan_count[p]+" points");
+//		}
 
 		 remainingDim = new ArrayList<Integer>();
 			for(int i=0;i<dimension;i++)
@@ -3975,7 +3982,7 @@ public OptSB(){}
 
 			// ------------------------------------- Read pcst files
 			
-			int nPlans=-1;
+			nPlans=-1;
 			if(gdp.getMaxReductionPlanNumber()>0){ //this signifies that the apkt is obtained after reduction
 				assert(reductionDone) : " Reduction Done is mismatching to gdp.getMaxReductionPlanNumber()>0";
 				nPlans = gdp.getMaxReductionPlanNumber();
@@ -3991,18 +3998,44 @@ public OptSB(){}
 			loadPlans();
 			plans = new int [data.length];
 			//loadPlans();
+			/*
+			int null_val = 0;
+			for(int i=0;i<data.length;i++){
+				if(data[i].getPlanNumber() == -1){
+					null_val++;
+				}
+				else{
+			//		System.out.println("Null_val = "+null_val+", The first non -1 point_loc = "+i);
+					//break;
+				}
+			
+			}
+			System.out.println("Null_val = "+null_val);
+			*/
 			int cnt =0;
 			for(int i=0;i<data.length;i++){
 				
-				
-				if(!reducedPlanMap.containsKey(data[i].getPlanNumber())){
+				if(data[i].getPlanNumber() == -1){
+					plans[i] = 1;
+					plans_list[plans[i]].addPoint(i);
+					continue;
+				}
+				//assert(data[i].getPlanNumber() != -1):"Optimal Plan number = -1 for point_loc = +"+i;
+				if(!reducedPlanMap.containsKey(data[i].getPlanNumber()) ){
 					reducedPlanMap.put(data[i].getPlanNumber(), cnt);
 					cnt++;
 				}
 				plans[i] = reducedPlanMap.get(data[i].getPlanNumber());
 				plans_list[plans[i]].addPoint(i);
 			}
-			
+			int  [] plan_count = new int[totalPlans];
+			for(int p=0;p<data.length;p++){
+				plan_count[plans[p]]++;
+			}
+			//printing the above
+			for(int p=0;p<plan_count.length;p++){
+				System.out.println("Plan "+p+" has "+plan_count[p]+" points");
+			}
 			//costBouquet = new double[total_points];
 			for (int i = 0; i < totalPlans; i++) {
 				try {
@@ -4023,7 +4056,7 @@ public OptSB(){}
 					e.printStackTrace();
 				}
 			}
-
+			System.out.println("End : Function readpkt_red");
 		//writing the optimal cost matirx
 
 		/*	File file = new File("C:\\Lohit\\data\\plans\\"+i+".txt");
@@ -4372,7 +4405,32 @@ public OptSB(){}
 		}
 		return flag; 			
 	}
-
+public void loadCompletedQas(String filePath){
+	try{
+		//File fp = new File("/media/ssd256g4/data/DSQT916DR10_E/completedQas.log");
+		FileReader fp = new FileReader(filePath);
+		BufferedReader br = new BufferedReader(fp);
+		String s;
+		
+		while((s = br.readLine()) != null ) {
+			
+			//System.out.println(Integer.parseInt(s));
+			int value = Integer.parseInt(s);
+			if(completed_qas.contains(value)){
+				System.out.println("duplicate value = "+value);
+			}
+			else{
+				completed_qas.add(value);
+			}	
+			//break;
+		}
+		br.close();
+		fp.close();
+	}
+	catch( NumberFormatException | IOException e){
+		e.printStackTrace();
+	}	
+}
 	public void loadPropertiesFile() {
 		/*
 		 * Need dimension.

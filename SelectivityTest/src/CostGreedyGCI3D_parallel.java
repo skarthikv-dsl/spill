@@ -87,7 +87,7 @@ public class CostGreedyGCI3D_parallel
 
 	static double err = 0.03;//no use
 	//Settings
-	static double threshold = 5;
+	static double threshold = 1;
 
 	static int plans[];
 	static int OptimalCost[];
@@ -162,8 +162,8 @@ public class CostGreedyGCI3D_parallel
 		
 		File pkt_red = new File(pktPath_red);
 		
-		if(pkt_red.exists())
-			obj.reductionDone = true;
+	//	if(pkt_red.exists())
+		//	obj.reductionDone = true;
 		
 		if(!obj.reductionDone){
 			ADiagramPacket gdp = obj.getGDP(new File(pktPath));
@@ -529,7 +529,7 @@ public class CostGreedyGCI3D_parallel
 		{
 			//Srinivas: this is were the diagram apkt packets are written to file
 			
-			String fName = apktPath+qtName+"_Red_5pc" + ".apkt";
+			String fName = apktPath+qtName+"_Red" + ".apkt";
 			FileOutputStream fis = new FileOutputStream (fName);
 			ObjectOutputStream ois;				
 			ois = new ObjectOutputStream (fis);			
@@ -2064,15 +2064,20 @@ public void readContourPointsFromFile() throws ClassNotFoundException {
 				double newcost = Double.MAX_VALUE; 
 				for (int xx = 0; xx < n; xx++) {
 					double cst = (double)AllPlanCosts[xx][i];//getCost(xx,i);
-					if (soln.contains(new Integer(xx)) && xx != p && cst <= lt) {
+					if (soln.contains(new Integer(xx)) && xx != p && (cst <= lt || cost <10000)) {
 						// another redundant check for xx != p
 						//if(cst <= newcost) { changed by Srinivas for location cost <10000
-						if(cst <= lt || cost<10000){
+						if(cst <= newcost || cost<10000){
 							newcost = cst;
 							plan = xx;
 						}
 					}
 				}
+				if(plan==-1)
+					System.out.println("plan number is -1");
+
+				assert(plan!=-1) : "plan number is -1 that is assigned";
+				
 				newData[i].setPlanNumber(plan);
 				newData[i].setCost(newcost);
 				//TODO : should we change this?
