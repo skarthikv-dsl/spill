@@ -150,8 +150,8 @@ public class OptSB
 	static boolean spill_opt_for_Alignment = false;
 	static boolean contoursReadFromFile = false;
 	static boolean mod_flag = true;
-	static int mod_value = 4;
-	static int mod_base = 5;
+	static int mod_value = 0;
+	static int mod_base = 4;
 	
 	//---------------------------------------------------------
 	
@@ -302,7 +302,7 @@ public OptSB(){}
 		
 		obj.readpkt_red(reducedgdp);
 		obj.loadPropertiesFile();
-		obj.loadCompletedQas(apktPath+"completedQas.log");
+	//	obj.loadCompletedQas(apktPath+"completedQas.log");
 /*		
 		if(FPC_for_Alignment && !Nexus_algo)
 			obj.readpkt(gdp, true);
