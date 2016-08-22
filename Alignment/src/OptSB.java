@@ -1883,6 +1883,7 @@ public OptSB(){}
 			{
 				writer.println(funName+" learnt "+ remDim+" dimension completely");
 			}
+			
 			remainingDim.remove(remainingDim.indexOf(remDim));
 			remove_from_partition(remDim);
 			
