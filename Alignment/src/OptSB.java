@@ -141,6 +141,7 @@ public class OptSB
 	static boolean DEBUG = false;
 	static boolean spill_opt_for_Alignment = true;
 	static boolean contoursReadFromFile = true;
+	static boolean contourPruning = true;
 	static boolean mod_flag = true;
 	static int mod_value = 2;
 	static int mod_base = 3;
@@ -1082,14 +1083,12 @@ public OptSB(){}
 
 			assert(min_cost<=max_cost) : funName+"min cost is less than or equal to max. cost in the contour";
 
-
+			if(contourPruning && !inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index())))
+				continue;
 			//Settings: for higher just see if you want to comment this
 			//if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
 			if(true){
-//				if(local_partition_flag==true)
-//				{
-//					cur_contour_points.add(p);
-//				}
+
 				currentContourPoints ++;
 				//-- For counting
 				category=plans_list[plan_no].getcategory(remainingDim);
@@ -1611,9 +1610,7 @@ public OptSB(){}
 	    							max_pt = extreme_pt;
 	    						}
 	    						if(max_pt.getfpc_cost() < Double.MAX_VALUE/10){
-	    							if(max_pt.get_fpcSpillDim() != j){
-	    								System.out.println("1734");
-	    							}
+	    							
 	    							assert( max_pt.get_fpcSpillDim() == j): " max_pt fpc_dim is not matching";
 	    						}
 	    						
@@ -1627,8 +1624,8 @@ public OptSB(){}
 	    			//	}
 	    				if(spill_opt_for_Alignment){
 	    					point_generic temp_pt = new point_generic(max_pt);
-	    					double best_fpc_pt_err = getBestSpillingPlan(temp_pt, j);
-	    					if(best_fpc_pt_err > max_pt.getpercent_err())
+	    					double best_spill_fpc_cost = getBestSpillingPlan(temp_pt, j);
+	    					if(best_spill_fpc_cost < max_pt.getfpc_cost())
 	    						max_pt = temp_pt; 
 	    				}
 	    				
@@ -2673,7 +2670,7 @@ public OptSB(){}
 		//assert(p.getfpc_cost()>0) : funName+" fpc_cost is not set by lohit's getBestFPC function";
 			double p_opt_cost = p.get_cost();
 		double error=((execCost-p_opt_cost)/p_opt_cost)*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
-		if(execCost <= p.getfpc_cost()){
+		if(execCost < p.getfpc_cost()){
 			p.putfpc_cost(execCost);
 			p.putpercent_err(error);
 			p.set_fpcSpillDim(dim_index);
