@@ -96,6 +96,7 @@ public class OptSB
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
 	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
+	static ArrayList<Integer> highSOqas = new ArrayList<Integer>();
 	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	//	point[][] points_list;
 	static plan[] plans_list;
@@ -138,9 +139,9 @@ public class OptSB
 	static boolean AlignmentPenaltyCode_generic = false;
 	static int partition_size = 1;
 	static boolean DEBUG = false;
-	static boolean spill_opt_for_Alignment = false;
-	static boolean contoursReadFromFile = false;
-	static boolean mod_flag = false;
+	static boolean spill_opt_for_Alignment = true;
+	static boolean contoursReadFromFile = true;
+	static boolean mod_flag = true;
 	static int mod_value = 2;
 	static int mod_base = 3;
 			
@@ -291,6 +292,7 @@ public OptSB(){}
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 		//	obj.loadPropertiesFile();
+		obj.loadCompletedQas(apktPath);
 		int i;
 		h_cost = obj.getOptimalCost(totalPoints-1);
 		double min_cost = obj.getOptimalCost(0);
@@ -521,7 +523,7 @@ public OptSB(){}
 			{
 				 writer.println("Entering loop "+j);
 			}
-					if(j==50000)
+					if(j==999980)
 						System.out.println("Interesting");
 					else
 						continue;
@@ -731,6 +733,10 @@ public OptSB(){}
 		            				continue;
 		            			}
 		            		}
+		            		
+		            		if(!highSOqas.contains(new Integer(j)))
+		            			continue;
+		            		
 		            		writer.println("Begin execution loop "+ j);
 		            //		if(j%1000==0){
 		            	//		System.gc();
@@ -953,7 +959,8 @@ public OptSB(){}
 		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
 
 	}
-
+	
+	
 	public void readContourPointsFromFile() throws ClassNotFoundException {
 
 		try {
@@ -974,6 +981,33 @@ public OptSB(){}
 			e.printStackTrace();
 		}
 		//System.exit(0);
+	}
+	
+	public void loadCompletedQas(String filePath){
+		try{
+			//File fp = new File("/media/ssd256g4/data/DSQT916DR10_E/completedQas.log");
+			FileReader fp = new FileReader(filePath+"highSOqas");
+			BufferedReader br = new BufferedReader(fp);
+			String s;
+			
+			while((s = br.readLine()) != null ) {
+				
+				//System.out.println(Integer.parseInt(s));
+				int value = Integer.parseInt(s);
+				if(highSOqas.contains(value)){
+					System.out.println("duplicate value = "+value);
+				}
+				else{
+					highSOqas.add(value);
+				}	
+				//break;
+			}
+			br.close();
+			fp.close();
+		}
+		catch( NumberFormatException | IOException e){
+			e.printStackTrace();
+		}	
 	}
 	
 	public void writeContourMaptoFile(){
@@ -1050,8 +1084,8 @@ public OptSB(){}
 
 
 			//Settings: for higher just see if you want to comment this
-			//if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
-			if(true){
+			if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
+			//if(true){
 //				if(local_partition_flag==true)
 //				{
 //					cur_contour_points.add(p);
@@ -1851,12 +1885,18 @@ public OptSB(){}
 			}
 			remainingDim.remove(remainingDim.indexOf(remDim));
 			remove_from_partition(remDim);
+			
+			if(oneDimCost > 1.2*cost_generic(convertSelectivitytoIndex(actual_sel)))
+				oneDimCost = 1.2*cost_generic(convertSelectivitytoIndex(actual_sel));
+
 			if(print_flag)
 			{
 				writer.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
 			}
+			
 			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 			return; //done if the sel_min is greater than actual selectivity
+			
 		}
 
 
@@ -1907,12 +1947,15 @@ public OptSB(){}
 			
 			remainingDim.remove(remainingDim.indexOf(remDim));
 			remove_from_partition(remDim);
+			
+			if(oneDimCost > 1.2*cost_generic(convertSelectivitytoIndex(actual_sel)))
+				oneDimCost = 1.2*cost_generic(convertSelectivitytoIndex(actual_sel));
+			
 			if(print_flag)
 			{
 				writer.println(funName+" Sel_min = "+sel_min+" and cost is "+oneDimCost);
 			}
-			if(oneDimCost>2*cost)
-				oneDimCost = 2*cost-1;
+			
 			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 		}
 
@@ -2045,7 +2088,7 @@ public OptSB(){}
 		cur_val = 0;
 		for(int m =0;m<n_partition;m++)
 		{
-			assert(itr.hasNext()==true):"cur_partition doesn't have enough keySet!!";
+			assert(itr.hasNext()==true):" cur_partition doesn't have enough keySet!!";
 			//-- old
 			m_key = (Integer)itr.next();
 			if(this.partition_info[m_key].getList().isEmpty())
@@ -2097,9 +2140,6 @@ public OptSB(){}
 							max_pt = extreme_pt;
 						}
 						if(max_pt.getfpc_cost() < Double.MAX_VALUE/10){
-							if(max_pt.get_fpcSpillDim() != j){
-								System.out.println("1734");
-							}
 							assert( max_pt.get_fpcSpillDim() == j): "for loop "+loop+" max_pt fpc_dim is not matching";
 						}
 						
@@ -2109,10 +2149,10 @@ public OptSB(){}
 				
 			//	if(max_pt.get_goodguy())
 			//		break;
-				if(spill_opt_for_Alignment){
+				if(spill_opt_for_Alignment && !max_pt.get_goodguy()){
 					point_generic temp_pt = new point_generic(max_pt);
-					double best_fpc_pt_err = getBestSpillingPlan(temp_pt, j);
-					if(best_fpc_pt_err > max_pt.getpercent_err())
+					double spilling_fpc_cost = getBestSpillingPlan(temp_pt, j);
+					if(spilling_fpc_cost < max_pt.getfpc_cost())
 						max_pt = temp_pt; 
 				}
 				
@@ -2632,7 +2672,7 @@ public OptSB(){}
 		//assert(p.getfpc_cost()>0) : funName+" fpc_cost is not set by lohit's getBestFPC function";
 			double p_opt_cost = p.get_cost();
 		double error=((execCost-p_opt_cost)/p_opt_cost)*100; //TODO: p.get_cost can be more than contour cost but its okay since error  
-		if(error <= p.getpercent_err()){
+		if(execCost <= p.getfpc_cost()){
 			p.putfpc_cost(execCost);
 			p.putpercent_err(error);
 			p.set_fpcSpillDim(dim_index);
