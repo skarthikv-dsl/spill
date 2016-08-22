@@ -1084,8 +1084,8 @@ public OptSB(){}
 
 
 			//Settings: for higher just see if you want to comment this
-			if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
-			//if(true){
+			//if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
+			if(true){
 //				if(local_partition_flag==true)
 //				{
 //					cur_contour_points.add(p);
