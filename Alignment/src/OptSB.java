@@ -97,6 +97,7 @@ public class OptSB
 	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
 	static ArrayList<Integer> highSOqas = new ArrayList<Integer>();
+	static ArrayList<Integer> completedQas = new ArrayList<Integer>();
 	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	//	point[][] points_list;
 	static plan[] plans_list;
@@ -141,10 +142,12 @@ public class OptSB
 	static boolean DEBUG = false;
 	static boolean spill_opt_for_Alignment = true;
 	static boolean contoursReadFromFile = true;
-	static boolean contourPruning = true;
+	static boolean contourPruning = false;
+	static boolean useCompletedQas = true;
 	static boolean mod_flag = true;
-	static int mod_value = 2;
+	static int mod_value = 1;
 	static int mod_base = 3;
+	
 			
 	//---------------------------------------------------------
 	
@@ -293,7 +296,10 @@ public OptSB(){}
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 		//	obj.loadPropertiesFile();
-		obj.loadCompletedQas(apktPath);
+		obj.highSOQas(apktPath);
+		
+		if(useCompletedQas)
+			obj.CompletedQas(apktPath);
 		int i;
 		h_cost = obj.getOptimalCost(totalPoints-1);
 		double min_cost = obj.getOptimalCost(0);
@@ -524,7 +530,7 @@ public OptSB(){}
 			{
 				 writer.println("Entering loop "+j);
 			}
-					if(j==999980)
+					if(highSOqas.contains(new Integer(j)))
 						System.out.println("Interesting");
 					else
 						continue;
@@ -735,7 +741,7 @@ public OptSB(){}
 		            			}
 		            		}
 		            		
-		            		if(!highSOqas.contains(new Integer(j)))
+		            		if(!highSOqas.contains(new Integer(j)) || completedQas.contains(new Integer(j)))
 		            			continue;
 		            		
 		            		writer.println("Begin execution loop "+ j);
@@ -984,7 +990,7 @@ public OptSB(){}
 		//System.exit(0);
 	}
 	
-	public void loadCompletedQas(String filePath){
+	public void highSOQas(String filePath){
 		try{
 			//File fp = new File("/media/ssd256g4/data/DSQT916DR10_E/completedQas.log");
 			FileReader fp = new FileReader(filePath+"highSOqas");
@@ -1000,6 +1006,33 @@ public OptSB(){}
 				}
 				else{
 					highSOqas.add(value);
+				}	
+				//break;
+			}
+			br.close();
+			fp.close();
+		}
+		catch( NumberFormatException | IOException e){
+			e.printStackTrace();
+		}	
+	}
+	
+	public void CompletedQas(String filePath){
+		try{
+			//File fp = new File("/media/ssd256g4/data/DSQT916DR10_E/completedQas.log");
+			FileReader fp = new FileReader(filePath+"completedQas");
+			BufferedReader br = new BufferedReader(fp);
+			String s;
+			
+			while((s = br.readLine()) != null ) {
+				
+				//System.out.println(Integer.parseInt(s));
+				int value = Integer.parseInt(s);
+				if(completedQas.contains(value)){
+					System.out.println("duplicate value = "+value);
+				}
+				else{
+					completedQas.add(value);
 				}	
 				//break;
 			}
@@ -3502,7 +3535,7 @@ public OptSB(){}
 			//sel_for_point.put(new Index(p,contour_no,dim), m);
 		}
 		catch ( Exception e ) {
-			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
+			writer.println("In loop "+loop+ e.getClass().getName()+": "+ e.getMessage() );
 			e.printStackTrace();
 			System.exit(1);
 
