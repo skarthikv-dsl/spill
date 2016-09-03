@@ -101,6 +101,7 @@ public class OptSB
 	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	//	point[][] points_list;
 	static plan[] plans_list;
+	static double max_sum_t=0;
 	//Settings: 
 	static int sel_distribution; 
 	static boolean FROM_CLAUSE;
@@ -140,11 +141,11 @@ public class OptSB
 	static boolean AlignmentPenaltyCode_generic = false;
 	static int partition_size = 1;
 	static boolean DEBUG = false;
-	static boolean spill_opt_for_Alignment = true;
-	static boolean contoursReadFromFile = true;
+	static boolean spill_opt_for_Alignment = false;
+	static boolean contoursReadFromFile = false;
 	static boolean contourPruning = false;
-	static boolean useCompletedQas = true;
-	static boolean mod_flag = true;
+	static boolean useCompletedQas = false;
+	static boolean mod_flag = false;
 	static int mod_value = 1;
 	static int mod_base = 3;
 	
@@ -156,7 +157,9 @@ public class OptSB
 	//The following parameters has to be set manually for each query
 	double tmax = 0;
 	double pmax = 0;
-
+	double p_t_max =0;
+	double p_t_max_part = 0;
+	double p_t_max_tol = 0;
 
 	double  minIndex [];
 	double  maxIndex [];
@@ -296,7 +299,7 @@ public OptSB(){}
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 		//	obj.loadPropertiesFile();
-		obj.highSOQas(apktPath);
+	//	obj.highSOQas(apktPath);
 		
 		if(useCompletedQas)
 			obj.CompletedQas(apktPath);
@@ -377,7 +380,7 @@ public OptSB(){}
 			
 			}
 			//if(generateSpecificContour)
-				obj.writeContourMaptoFile();
+				//obj.writeContourMaptoFile();
 		}
 		
 //System.exit(1);
@@ -478,6 +481,9 @@ public OptSB(){}
 
 		double MSO =0, ASO = 0,anshASO = 0,SO=0,MaxHarm=-1*Double.MAX_VALUE,Harm=Double.MIN_VALUE;
 		double pmax_final=0, tmax_final=0;
+		double p_t_max_final =0;
+		double p_t_max_part_final =0;
+		double p_t_max_tol_final =0;
 		int ASO_points=0;
 		obj.getPlanCountArray();
 		//int max_point = 0; /*not to execute the spillBound algorithm*/
@@ -741,7 +747,8 @@ public OptSB(){}
 		            			}
 		            		}
 		            		
-		            		if(!highSOqas.contains(new Integer(j)) || completedQas.contains(new Integer(j)))
+		            	//	if(!highSOqas.contains(new Integer(j)) || completedQas.contains(new Integer(j)))
+		                	if(completedQas.contains(new Integer(j)))
 		            			continue;
 		            		
 		            		writer.println("Begin execution loop "+ j);
@@ -881,6 +888,12 @@ public OptSB(){}
 
 		            		if(obj.tmax > output.tmax)
 		            			output.tmax = obj.tmax;
+		            		
+		            		if(obj.p_t_max > output.p_t_max){
+		            			output.p_t_max = obj.p_t_max;
+		            			output.p_t_max_part = obj.p_t_max_part;
+		            			output.p_t_max_tol = obj.p_t_max_tol;
+		            		}
 		            		//obj.ContourPointsMap.clear();
 		            		if(print_flag)
 		            		{
@@ -920,6 +933,9 @@ public OptSB(){}
 			ASO_points=0;
 			pmax_final = 0;
 			tmax_final = 0;
+			p_t_max_final =0;
+			p_t_max_part_final =0;
+			p_t_max_tol_final =0;
 			int j=0;
 		    for (Future<OptSBOutputParamStruct> future : futures) {
 		    	OptSBOutputParamStruct output = future.get();
@@ -931,6 +947,12 @@ public OptSB(){}
 		    		if(output.tmax > tmax_final){
 		    			tmax_final = output.tmax;
 		    		}
+		    		if(output.p_t_max >p_t_max_final){
+		    			p_t_max_final = output.p_t_max;
+		    			p_t_max_part_final =  output.p_t_max_part;
+		    			p_t_max_tol_final =  output.p_t_max_tol;
+		    		}
+		    			
 		    		//subOpt[j] = output.SO;
 		    		if(output.MSO>MSO)
 		    			MSO = output.MSO;
@@ -949,6 +971,7 @@ public OptSB(){}
 		//conn.close();
 		System.out.println("max no of partitions = "+ pmax_final);
 		System.out.println("maximum Tolerance(actual_fraction) = "+tmax_final+" (should be ideally < 1)");
+		System.out.println("Best (tol,part) value is "+p_t_max_final + " Tol = "+p_t_max_tol_final+"partitions = "+p_t_max_part_final);
 //		File SubOptfile = new File(apktPath+"subOpt.txt");
 //	    if (!SubOptfile.exists()) {
 //	    	SubOptfile.createNewFile();
@@ -2290,7 +2313,7 @@ public OptSB(){}
 		{
 			this.tmax = temp_tol;
 		}
-		print_points_max(points_max,writer);
+		//print_points_max(points_max,writer);
 		print_partition(best_partitioning,writer);
 		if(n_partition > this.pmax)
 		{
@@ -2435,6 +2458,9 @@ public OptSB(){}
 		Iterator itr1 = points_max.keySet().iterator();
 		int d;
 		//for(int y=0;y<n_partition;y++){
+		double sum_t = 0.0;
+	//	if(points_max.size() > 1)
+		//	System.out.println("We have more than one points_max");
 		while(itr1.hasNext()){
 			
 			//assert(itr.hasNext()==true):"Points_max doesnt have enough points as the number of partitions";
@@ -2453,6 +2479,7 @@ public OptSB(){}
 				//learning_dim = p.getLearningDimension();
 				learning_dim = plans_list[p.get_plan_no()].getcategory(remainingDim);
 				tolerance = 1;
+				
 			}
 			else
 			{
@@ -2470,7 +2497,7 @@ public OptSB(){}
 					writer.println("\nTolerance = "+tolerance);
 				}
 			}
-			
+			sum_t = sum_t + tolerance;
 			assert(tolerance<=(tmax)): funName+" the tolerance is beyond the max. tolerance during execution";
 			assert(points_max.containsKey(learning_dim )): funName+" not learning a leader dimension";
 			
@@ -2611,8 +2638,12 @@ public OptSB(){}
 				}
 				//assert()
 			}
+			//Lohit
+			
 		}
-
+		if ( sum_t > this.p_t_max){
+			this.p_t_max = sum_t;
+		}
 
 		//	}
 
@@ -2722,10 +2753,27 @@ public OptSB(){}
 	{
 		Iterator itr = points_max.keySet().iterator();
 		Integer key;
+		double temp_tol_max = 0;
+		double sum_t = 0;
 		while(itr.hasNext())
 		{
 			key = (Integer)itr.next();
 			writer.println("Max "+key+" = "+points_max.get(key).get_dimension(key));
+			double t = 1+ points_max.get(key).getpercent_err()/100;
+			sum_t = sum_t + t;
+			
+			if(t>temp_tol_max){
+				temp_tol_max = t;
+			}
+		}
+		writer.println(" tolerance = "+temp_tol_max+" partitions = "+n_partition);
+		if(sum_t > this.p_t_max){
+			this.p_t_max = sum_t;
+		}
+		if((temp_tol_max*n_partition) > this.p_t_max){
+			//p_t_max = temp_tol_max*n_partition;
+			this.p_t_max_part = n_partition;
+			this.p_t_max_tol = temp_tol_max; 
 		}
 	}
 	void print_partition(List<List<Integer>> best_partitioning, PrintWriter writer){
@@ -5146,6 +5194,9 @@ public OptSB(){}
 class OptSBOutputParamStruct {
 	double pmax = 0;
 	double tmax = 0;
+	double p_t_max =0;
+	double p_t_max_part = 0;
+	double p_t_max_tol =0;
 	double MSO = 0;
 	int sumSo = 0;
 	double Harm = 0;
