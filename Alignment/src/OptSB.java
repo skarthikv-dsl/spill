@@ -526,20 +526,22 @@ public OptSB(){}
 	if(singleThread)
 		
 	{	
-//		min_point = 0;
-//		max_point = 1000;
+		min_point = 0;
+		max_point = 160000;
 		PrintWriter writer = new PrintWriter(apktPath+"logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
 		{
+			if(j !=100004)
+				continue;
 			if(print_flag || print_loop_flag)
 			{
 				 writer.println("Entering loop "+j);
 			}
-					if(highSOqas.contains(new Integer(j)))
-						System.out.println("Interesting");
-					else
-						continue;
+			//		if(highSOqas.contains(new Integer(j)))
+			//			System.out.println("Interesting");
+			//		else
+			//			continue;
 			//initiliazation for every loop
 			//	int j=totalPoints -1;
 
@@ -2497,6 +2499,9 @@ public OptSB(){}
 					writer.println("\nTolerance = "+tolerance);
 				}
 			}
+	//		if(tolerance > 2){
+		//		System.out.println("Interesting");
+		//	}
 			sum_t = sum_t + tolerance;
 			assert(tolerance<=(tmax)): funName+" the tolerance is beyond the max. tolerance during execution";
 			assert(points_max.containsKey(learning_dim )): funName+" not learning a leader dimension";
@@ -2588,6 +2593,9 @@ public OptSB(){}
 
 
 				if(sel_max[d]>=actual_sel[d]){
+					if ( sum_t > this.p_t_max){
+						this.p_t_max = sum_t;
+					}
 					if(p.get_goodguy()==true)
 					{
 						if(print_flag)
