@@ -185,7 +185,7 @@ public class GCI3D
 		final GCI3D global_obj = new GCI3D();
 		
 		obj.loadPropertiesFile();
-		String pktPath = apktPath + qtName + ".apkt" ;
+		String pktPath = apktPath + qtName + "_new9.4.apkt" ;
 		System.out.println("Query Template: "+qtName);
 		int threads = Runtime.getRuntime().availableProcessors();
 
@@ -197,7 +197,7 @@ public class GCI3D
 
 		//Populate the OptimalCost Matrix.
 		obj.readpkt(gdp, true);
-
+		System.exit(1);
 		//Populate the selectivity Matrix.
 		obj.loadSelectivity();
 		//obj.loadPropertiesFile();
@@ -2010,7 +2010,7 @@ public class GCI3D
 			for (int i = 0; i < nPlans; i++) {
 				try {
 
-					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + i + ".pcst")));
+					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + "pcstFiles/"+ i + ".pcst")));
 					double[] cost = (double[]) ip.readObject();
 					for (int j = 0; j < totalPoints; j++)
 					{					
@@ -2021,7 +2021,20 @@ public class GCI3D
 				}
 			}
 		}
-
+		int cnt=0;
+		double cur_cost=0.0;
+		for(int i=0;i<totalPoints;i++){
+			for (int j=0;j<2;j++){
+				if(j==0){
+					cur_cost = AllPlanCosts[j][i];
+					continue;
+				}
+				System.out.println("P0 : "+ cur_cost + ", P1 : "+AllPlanCosts[j][i]);
+				if(cur_cost == AllPlanCosts[j][i])
+					cnt++;
+			}
+		}
+		System.out.println("Count of duplicates = "+cnt);
 		remainingDim = new ArrayList<Integer>();
 		for(int i=0;i<dimension;i++)
 			remainingDim.add(i);

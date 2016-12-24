@@ -2093,12 +2093,15 @@ public OptSB(){}
 		int cnt =0;
 		List<List<List<Integer>>> part = new ArrayList<>();
 		for(int i=1; i<=remainingDim.size(); i++) {
+			i=remainingDim.size();
             List<List<List<Integer>>> ret = helper(remainingDim, i);
             //Iterate over ret and add to part
             for (int w =0;w<ret.size();w++){
             	part.add(ret.get(w));
             }
+            
             cnt += ret.size();
+            break;
           //  writer.println(cnt);
             
         }

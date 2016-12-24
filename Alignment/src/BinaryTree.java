@@ -5,6 +5,7 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 //import java.lang.ProcessBuilder.Redirect;
 import java.util.ArrayList;
@@ -681,6 +682,7 @@ public class BinaryTree {
 		
 		File f_iisc = new File("/home/dsladmin/Srinivas/data/settings/settings.conf");
 		File f_ibm = new File("/home/ijcai/spillBound/data/settings/settings.conf");
+		File f_tkde1 = new File("/home/lohitkrishnan/ssd256g/data/settings/settings.conf");
 		if(f_iisc.exists()){
 			//Load the properties file.
 			prop.load(new FileInputStream(f_iisc));
@@ -688,17 +690,28 @@ public class BinaryTree {
 		else if(f_ibm.exists()){
 			prop.load(new FileInputStream(f_ibm));
 		}
+		else if(f_tkde1.exists()){
+			prop.load(new FileInputStream(f_tkde1));
+		}
 		else{
 			System.out.println("Properties file not found");
 			System.exit(0);
 		}
+		InputStream input = null;
+		input = new FileInputStream("./src/Constants.properties");
+		// load a properties file
+		prop.load(input);
+		String apktPath = prop.getProperty("apktPath");
+		String QTName = prop.getProperty("qtName");
 		benchmark = prop.getProperty("Benchmark");
-		String BaseLocation = prop.getProperty("BaseLocation");
-		String QTName = prop.getProperty("QTName");
-		path = BaseLocation+QTName+"/";
-		numplans=new File(path+"planStructure").listFiles().length;
+		//String BaseLocation = prop.getProperty("BaseLocation");
+		//String QTName = prop.getProperty("QTName");
+		//path = BaseLocation+QTName+"/";
+		path = apktPath;
+		numplans=new File(path+"planStructure_new").listFiles().length ;
+		numplans = numplans-1;
 		System.out.println("NUMPLANS ="+numplans+"\n");
-
+		
 		tree.initialize(QTName);
 		for(int i=0;i<numplans;i++){
 			//reading the plan
@@ -710,7 +723,7 @@ public class BinaryTree {
 			//File file = new File("/home/srinivas/Srinivas/data/HQT83D-OC-PL-SL_EXP2/planStructure/"+numPlans+".txt");
 			//File file = new File("/home/dsladmin/Srinivas/data/writingPlans/"+"test.txt");
 	
-			File file = new File(path+"planStructure/"+i+".txt");
+			File file = new File(path+"planStructure_new/"+i+".txt");
 			FileReader fr = new FileReader(file);
 			BufferedReader br = new BufferedReader(fr); 
 			String s;

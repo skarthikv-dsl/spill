@@ -127,20 +127,21 @@ public class CostGreedyGCI3D
 	{
 		CostGreedyGCI3D obj = new CostGreedyGCI3D();
 		obj.loadPropertiesFile();
-		String pktPath = apktPath + qtName + ".apkt" ;
+		String pktPath = apktPath + qtName + "_new9.4.apkt" ;
 		System.out.println("Query Template: "+qtName);
 		
 		
 		ADiagramPacket gdp = obj.getGDP(new File(pktPath));
 		
 		
-//		cg.run(threshold, gdp,apktPath);
-//		ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
+
+		//ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
 
 		//Settings
 		//Populate the OptimalCost Matrix.
+		//obj.loadSelectivity();
 		obj.readpkt(gdp);
-//		obj.readpkt(reducedgdp);
+		//obj.readpkt(reducedgdp);
 
 		//obj.replaceUnWantedPlans();
 		//Populate the selectivity Matrix.
@@ -187,7 +188,7 @@ public class CostGreedyGCI3D
 				learntDimIndices.clear();
 				obj.getContourPoints(order,cost,i);
 			}
-			writeContourPointstoFile(i);
+			//writeContourPointstoFile(i);
 			int size_of_contour = all_contour_points.size();
 			ContourPointsMap.put(i, new ArrayList<point_generic>(all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
@@ -1189,7 +1190,7 @@ public void initialize(int location) {
 				for (int i = 0; i < nPlans; i++) {
 					try {
 
-						ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + i + ".pcst")));
+						ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"pcstFiles/"+ i + ".pcst")));
 						double[] cost = (double[]) ip.readObject();
 						for (int j = 0; j < totalPoints; j++)
 						{
@@ -1201,6 +1202,7 @@ public void initialize(int location) {
 					}
 				}
 
+				
 			//writing the optimal cost matirx
 
 			/*	File file = new File("C:\\Lohit\\data\\plans\\"+i+".txt");
@@ -1219,8 +1221,52 @@ public void initialize(int location) {
 				}
 				pw.format("\n");
 			}
-			 */	
+			 */
+				double tol = 0.001;
+				int pen_cnt =0;
+				for(int p=0;p<data.length;p++){
+					double cst = getOptimalCost(p);
+					double all_cst = AllPlanCosts[plans[p]][p];
+					double max,min; 
+					if(cst > all_cst){
+						max = cst;
+						min = all_cst;
+					}
+					else
+					{
+						max = all_cst;
+						min = cst;
+					}
+					
+					double th = (max-min)/min*(100.0);
+					if(th>(100.0*tol)){
+						//System.out.println("problem at "+p);
+						int [] ind = getCoordinates(dimension, resolution, p);
+						System.out.print("\nThe location is "+p+" optimal plan is "+plans[p]+ " opt cost = "+getOptimalCost(p)+" and allplancost="+AllPlanCosts[plans[p]][p]);
+						System.out.print(" the coordinates are ");
+						for(int k=0;k<dimension;k++)
+						System.out.print(ind[k]+"\t");
+						pen_cnt ++;
+					}
+				}
 
+				System.out.println("FPC ERROR "+pen_cnt);
+				int fpc_count=0;
+				for(int i=0;i<data.length;i++){		
+					int p = data[i].getPlanNumber();
+					double c1= data[i].getCost(); //optimal cost at i
+					double c2 = AllPlanCosts[p][i]; //plan p's cost at i from pcst files
+					if(! (Math.abs(c1 - c2) < tol*c1 || Math.abs(c1 - c2) < tol*c2) ){
+					//if((c2-c1) > 1*c1){
+						//int [] ind = getCoordinates(dimension, resolution, i);
+						//System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d,%3d): , pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, ind[0], ind[1],ind[2],c1, c2, (double)Math.abs(c1 - c2)*100/c1);
+						fpc_count++;
+					}
+						
+					//				else
+					//					System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d): (%6.4f, %6.4f), pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, i, selectivity[i], selectivity[j], c1, c2, (double)Math.abs(c1 - c2)*100/c1);
+				}
+				System.out.println("ReadApkt"+": FPC ERROR: for "+(tol*100) +" deviation is "+fpc_count);
 		}
 
 	
@@ -1618,9 +1664,9 @@ public void initialize(int location) {
 			int p = data[i].getPlanNumber();
 			double c1= data[i].getCost(); //optimal cost at i
 			double c2 = AllPlanCosts[p][i]; //plan p's cost at i from pcst files
-			//if(! (Math.abs(c1 - c2) < 0.05*c1 || Math.abs(c1 - c2) < 0.05*c2) ){
-			if((c2-c1) > 1*c1){
-				int [] ind = getCoordinates(dimension, resolution, i);
+			if(! (Math.abs(c1 - c2) < 0.05*c1 || Math.abs(c1 - c2) < 0.05*c2) ){
+			//if((c2-c1) > 1*c1){
+				//int [] ind = getCoordinates(dimension, resolution, i);
 				//System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d,%3d): , pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, ind[0], ind[1],ind[2],c1, c2, (double)Math.abs(c1 - c2)*100/c1);
 				fpc_count++;
 			}
@@ -1814,4 +1860,8 @@ public void initialize(int location) {
  
 }
 
+class Set {
+	// HashSet<Integer> elements = new HashSet<Integer>();
+	HashSet elements = new HashSet();
+}
 
