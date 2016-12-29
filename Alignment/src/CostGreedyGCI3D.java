@@ -128,6 +128,7 @@ public class CostGreedyGCI3D
 		CostGreedyGCI3D obj = new CostGreedyGCI3D();
 		obj.loadPropertiesFile();
 		String pktPath = apktPath + qtName + "_new9.4.apkt" ;
+		//String pktPath = apktPath + qtName + ".apkt" ;
 		System.out.println("Query Template: "+qtName);
 		
 		
@@ -135,13 +136,13 @@ public class CostGreedyGCI3D
 		
 		
 
-		//ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
+		ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
 
 		//Settings
 		//Populate the OptimalCost Matrix.
-		//obj.loadSelectivity();
-		obj.readpkt(gdp);
-		//obj.readpkt(reducedgdp);
+		
+		//obj.readpkt(gdp);
+		obj.readpkt(reducedgdp);
 
 		//obj.replaceUnWantedPlans();
 		//Populate the selectivity Matrix.
@@ -1222,7 +1223,7 @@ public void initialize(int location) {
 				pw.format("\n");
 			}
 			 */
-				double tol = 0.001;
+				double tol = 0.8;
 				int pen_cnt =0;
 				for(int p=0;p<data.length;p++){
 					double cst = getOptimalCost(p);
@@ -1249,24 +1250,26 @@ public void initialize(int location) {
 						pen_cnt ++;
 					}
 				}
-
-				System.out.println("FPC ERROR "+pen_cnt);
-				int fpc_count=0;
-				for(int i=0;i<data.length;i++){		
-					int p = data[i].getPlanNumber();
-					double c1= data[i].getCost(); //optimal cost at i
-					double c2 = AllPlanCosts[p][i]; //plan p's cost at i from pcst files
-					if(! (Math.abs(c1 - c2) < tol*c1 || Math.abs(c1 - c2) < tol*c2) ){
-					//if((c2-c1) > 1*c1){
-						//int [] ind = getCoordinates(dimension, resolution, i);
-						//System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d,%3d): , pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, ind[0], ind[1],ind[2],c1, c2, (double)Math.abs(c1 - c2)*100/c1);
-						fpc_count++;
-					}
-						
-					//				else
-					//					System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d): (%6.4f, %6.4f), pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, i, selectivity[i], selectivity[j], c1, c2, (double)Math.abs(c1 - c2)*100/c1);
-				}
-				System.out.println("ReadApkt"+": FPC ERROR: for "+(tol*100) +" deviation is "+fpc_count);
+				
+				System.out.println("\nFPC ERROR "+pen_cnt); 
+				
+//				int fpc_count=0;
+//				for(int i=0;i<data.length;i++){		
+//					int p = data[i].getPlanNumber();
+//					double c1= data[i].getCost(); //optimal cost at i
+//					double c2 = AllPlanCosts[p][i]; //plan p's cost at i from pcst files
+//					if(! (Math.abs(c1 - c2) < tol*c1 || Math.abs(c1 - c2) < tol*c2) ){
+//					//if((c2-c1) > 1*c1){
+//						//int [] ind = getCoordinates(dimension, resolution, i);
+//						//System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d,%3d): , pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, ind[0], ind[1],ind[2],c1, c2, (double)Math.abs(c1 - c2)*100/c1);
+//						fpc_count++;
+//					}
+//						
+//					//				else
+//					//					System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d): (%6.4f, %6.4f), pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, i, selectivity[i], selectivity[j], c1, c2, (double)Math.abs(c1 - c2)*100/c1);
+//				}
+//				System.out.println("ReadApkt"+": FPC ERROR: for "+(tol*100) +" deviation is "+fpc_count);
+				//System.exit(0);
 		}
 
 	

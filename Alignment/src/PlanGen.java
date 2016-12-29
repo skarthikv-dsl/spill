@@ -578,7 +578,8 @@ public Plan getNativePlan_84(int loc) throws SQLException {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} 
-		
+//		if(loc==17478)
+//			System.out.println("interesting");
 File plansFile = new File(apktPath+"planStructure_new");
 		
 		String[] myFiles;  

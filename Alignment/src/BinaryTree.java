@@ -540,8 +540,8 @@ public class BinaryTree {
 		}
 		
 		else if(qtName.contains("DSQT153DR")){
-			predicates = new String[]{"(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)","(customer.c_customer_sk = catalog_sales.cs_bill_customer_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
-		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)","(catalog_sales.cs_bill_customer_sk = customer.c_customer_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)"};
+			predicates = new String[]{"(customer.c_customer_sk = catalog_sales.cs_bill_customer_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)"};
+		    predicatesRev = new String[]{"(catalog_sales.cs_bill_customer_sk = customer.c_customer_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)"};
 		    relations = new String[]{"cs","c","ca","d"};
 		} 
 		

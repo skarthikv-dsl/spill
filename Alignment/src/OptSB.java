@@ -57,6 +57,8 @@ import java.util.regex.Pattern;
 
 
 
+
+
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -88,6 +90,8 @@ public class OptSB
 	static String query;
 	static String query_opt_spill;
 	static String cardinalityPath;
+	static String select_query;
+	static String predicates;
 	static String QTName = "HQT75DR10_E";
 	static String plansPath = "/media/dsladmin/dslssd512gb/Lohit/QT_April_idea/HQT75DR10_E/";
 	static String sourcePath = "./src/";
@@ -148,6 +152,7 @@ public class OptSB
 	static boolean mod_flag = false;
 	static int mod_value = 1;
 	static int mod_base = 3;
+	static boolean spillBound = false;
 	
 			
 	//---------------------------------------------------------
@@ -279,7 +284,7 @@ public OptSB(){}
 		final OptSB global_obj = new OptSB();
 		obj.maxPoints= new point_generic[dimension];
 
-		String pktPath = apktPath + qtName + ".apkt" ;
+		String pktPath = apktPath + qtName + "_new9.4.apkt" ;
 		System.out.println("Query Template: "+QTName);
 
 
@@ -396,11 +401,11 @@ public OptSB(){}
 			File f_multani = new File("/home/dsluser/Srinivas/data/settings/settings.conf");
 			File f_pahadi = new File("/home/dsladmin/Srinivas/data/settings/settings.conf");
 			File f_ibm84 = new File("/data/spillBound/data/settings/settings.conf");
-			File f_tkde2 = new File("/media/ssd256gg/data/settings/settings.conf");
-			File f_tkde1 = new File("/media/ssd256g/data/settings/settings.conf");
-			File f_tkde3 = new File("/media/ssd256ggg/data/settings/settings.conf");
-			File f_tkde4 = new File("/media/ssd256g4/data/settings/settings.conf");
-			File f_tkde5 = new File("/media/ssd256g5/data/settings/settings.conf");
+			File f_tkde2 = new File("/home/lohitkrishnan/ssd256gg/data/settings/settings.conf");
+			File f_tkde1 = new File("/home/lohitkrishnan/ssd256g/data/settings/settings.conf");
+			File f_tkde3 = new File("/home/lohitkrishnan/ssd256ggg/data/settings/settings.conf");
+			File f_tkde4 = new File("/home/lohitkrishnan/ssd256g4/data/settings/settings.conf");
+			File f_tkde5 = new File("/home/lohitkrishnan/ssd256g5/data/settings/settings.conf");
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
@@ -431,24 +436,24 @@ public OptSB(){}
 					source.setDatabaseName("tpcdscodd");
 					}
 				else if(f_tkde2.exists()){
-					source.setServerName("localhost:5431");
-					source.setDatabaseName("tpcdscodd");
+					source.setServerName("localhost:5432");
+					source.setDatabaseName("tpcds-ai");
 					}
 				else if(f_tkde3.exists()){
-					source.setServerName("localhost:5431");
-					source.setDatabaseName("tpcdscodd");
+					source.setServerName("localhost:5432");
+					source.setDatabaseName("tpcds-ai");
 					}
 				else if(f_tkde4.exists()){
-					source.setServerName("localhost:5431");
-					source.setDatabaseName("tpcdscodd");
+					source.setServerName("localhost:5432");
+					source.setDatabaseName("tpcds-ai");
 					}
 				else if(f_tkde5.exists()){
-					source.setServerName("localhost:5431");
-					source.setDatabaseName("tpcdscodd");
+					source.setServerName("localhost:5432");
+					source.setDatabaseName("tpcds-ai");
 					}
 				else if(f_tkde1.exists()){
-					source.setServerName("localhost:5431");
-					source.setDatabaseName("tpcdscodd");
+					source.setServerName("localhost:5432");
+					source.setDatabaseName("tpcds-ai");
 					}
 //				conn = DriverManager
 //						.getConnection("jdbc:postgresql://localhost:5432/tpcds",
@@ -527,13 +532,13 @@ public OptSB(){}
 		
 	{	
 		min_point = 0;
-		max_point = 160000;
+		max_point = 100;
 		PrintWriter writer = new PrintWriter(apktPath+"logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
 		{
-			if(j !=100004)
-				continue;
+//			if(j !=100004)
+//				continue;
 			if(print_flag || print_loop_flag)
 			{
 				 writer.println("Entering loop "+j);
@@ -1912,7 +1917,7 @@ public OptSB(){}
 						else{
 							try {
 
-								ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + fpc_plan + ".pcst")));
+								ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"pcstFiles/"+ fpc_plan + ".pcst")));
 								double[] fpc_cost_array = (double[]) ip.readObject();
 								fpc_cost_generic = fpc_cost_array[getIndex(int_actual_sel, resolution)];
 							} catch (Exception e) {
@@ -1988,8 +1993,8 @@ public OptSB(){}
 			}
 			else{
 				try {
-
-					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + fpc_plan + ".pcst")));
+					
+					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"pcstFiles/"+ fpc_plan + ".pcst")));
 					double[] fpc_cost_array = (double[]) ip.readObject();
 					fpc_cost_generic = fpc_cost_array[getIndex(int_actual_sel, resolution)];
 				} catch (Exception e) {
@@ -2093,7 +2098,11 @@ public OptSB(){}
 		int cnt =0;
 		List<List<List<Integer>>> part = new ArrayList<>();
 		for(int i=1; i<=remainingDim.size(); i++) {
-			i=remainingDim.size();
+			if(spillBound){
+				part = helper(remainingDim, remainingDim.size());
+				break;
+			}
+			else{
             List<List<List<Integer>>> ret = helper(remainingDim, i);
             //Iterate over ret and add to part
             for (int w =0;w<ret.size();w++){
@@ -2101,9 +2110,9 @@ public OptSB(){}
             }
             
             cnt += ret.size();
-            break;
+            //break;
           //  writer.println(cnt);
-            
+			}
         }
 		int part_idx = 0;
 		while(part_idx < part.size())
@@ -3317,7 +3326,7 @@ public OptSB(){}
 			while((temp_actual_index[dim] <= actual_sel_index[dim]) || (execCost<=budget))
 			{	
 				minus_flag = false;
-				stmt.execute("set spill_node = 999");
+				//stmt.execute("set spill_node = 999");
 
 				stmt.execute("set work_mem = '100MB'");
 				//NOTE,Settings: 4GB for DS and 1GB for H
@@ -3334,11 +3343,11 @@ public OptSB(){}
 				stmt.execute("set cpu_operator_cost=0.0025");
 				stmt.execute("set cpu_index_tuple_cost=0.005");
 				stmt.execute("set cpu_tuple_cost=0.01");	
-				stmt.execute("set full_robustness = on");
-				stmt.execute("set oneFPCfull_robustness = on");
-				if(FPC_for_Alignment)
-					stmt.execute("set spill_optimization = off");
-				else if (spill_opt_for_Alignment){
+//				stmt.execute("set full_robustness = on");
+//				stmt.execute("set oneFPCfull_robustness = on");
+//				if(FPC_for_Alignment)
+//					stmt.execute("set spill_optimization = off");
+				 if (spill_opt_for_Alignment){
 					stmt.execute("set spill_optimization = on");
 					String selectedEPP=null, nonSelectedEPP=null;
 					for(int i=0;i<varyingJoins.length();i+=2){
@@ -3358,18 +3367,23 @@ public OptSB(){}
 					stmt.execute("set nonSelectedEPP = "+nonSelectedEPP);
 					
 				}
-				stmt.execute("set varyingJoins = "+varyingJoins);
-
-				for(int d=0;d<dimension;d++){
-					stmt.execute("set JS_multiplier"+(d+1)+ "= "+ JS_multiplier[d]);
-					stmt.execute("set robust_eqjoin_selec"+(d+1)+ "= "+ selectivity[q_index[d]]);
-					stmt.execute("set FPC_JS_multiplier"+(d+1)+ "= "+ JS_multiplier[d]);
-					stmt.execute("set FPCrobust_eqjoin_selec"+(d+1)+ "= "+ selectivity[temp_actual_index[d]]);
-					// essentially forcing the  plan optimal at (x,y) location to the query having (x_a,y_a) 
-					// as selectivities been injected 
+				String exp_query = new String("Selectivity ( "+predicates+ ") (");
+				for(int i=0;i<dimension;i++){
+					if(i !=dimension-1){
+						exp_query = exp_query + (selectivity[temp_actual_index[i]])+ ", ";
+					}
+					else{
+						exp_query = exp_query + (selectivity[temp_actual_index[i]]) + " )";
+					}
 				}
-
-				ResultSet rs = stmt.executeQuery(query);
+				//this is for selectivity injection plus fpc
+				exp_query = exp_query + select_query;
+				
+				//this is for pure fpc
+				//exp_query = select_query;
+				
+				exp_query = "explain " + exp_query + " fpc "+apktPath+"planStructureXML/"+plan+".xml";
+				ResultSet rs = stmt.executeQuery(exp_query);
 				//   if(spill_node == 543){
 				// 	System.out.println("We are at node 23");
 				// }
@@ -4121,7 +4135,7 @@ public OptSB(){}
 			for (int i = 0; i < nPlans; i++) {
 				try {
 
-					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(plansPath + i + ".pcst")));
+					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"pcstFiles/"+ i + ".pcst")));
 					double[] cost = (double[]) ip.readObject();
 					for (int j = 0; j < totalPoints; j++)
 					{
@@ -4558,6 +4572,9 @@ public OptSB(){}
 			if(spill_opt_for_Alignment == true){
 				query_opt_spill = prop.getProperty("query_opt_spill");
 			}
+			
+			select_query = prop.getProperty("select_query");
+			predicates= prop.getProperty("predicates");
 			
 			cardinalityPath = prop.getProperty("cardinalityPath");
 

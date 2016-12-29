@@ -154,8 +154,8 @@ public class genPCST_parallel {
 			{
 				Process p;
 				Runtime r = Runtime.getRuntime();
-//				p = r.exec(start);
-//				p.waitFor();
+				p = r.exec(start);
+				p.waitFor();
 
 
 				for(int k=0;k<= (totalPlans/threads);k++){
@@ -176,7 +176,10 @@ public class genPCST_parallel {
 					System.out.println("TotalPlans = "+totalPlans);
 
 					System.out.println("Available Cores " + threads);
-					if(single_thread)
+					
+					if(totalPlans < threads)
+						single_thread = true;
+					if(single_thread )
 						threads = 1;
 					ExecutorService service = Executors.newFixedThreadPool(threads);
 					List<Future<outputParamStruct>> futures = new ArrayList<Future<outputParamStruct>>();
