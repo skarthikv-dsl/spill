@@ -125,10 +125,11 @@ public class Node implements Serializable {
 			hash +=	name.hashCode();
 		if(planDiffLevel.equals(PicassoConstants.SUBOPERATORLEVEL)){
 			ListIterator it = argValue.listIterator();
+			
 			while(it.hasNext())
 				hash += i++ * ((String)it.next()).hashCode();
 		}
-		hash = id*parentId*hash;
+		hash = id*(parentId+1)*hash;
 		return hash;
 	}
 	/*
