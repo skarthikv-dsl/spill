@@ -52,6 +52,8 @@ public class dimensionReduction {
 	static String predicates;
 	static double slope[][];
 	static boolean DEBUG = false;
+	static boolean READSLOPE = true;
+	static boolean WRITESLOPE = true;
 	public static void main(String[] args) throws IOException, SQLException {
 	
 		dimensionReduction obj = new dimensionReduction();  
@@ -111,46 +113,68 @@ public class dimensionReduction {
 		double delta = 0.1, tolerance =200;
 		
 		double slope[][] = new double[dimension][totalPoints];
-		for(int loc=0; loc < data.length; loc++){
-			System.out.println("loc = "+loc);
-			int plan = plans[loc];
-			int arr [] = getCoordinates(dimension, resolution, loc);
-			double base_cost ;
-			
-			if(optimalPlan)
-				base_cost = getOptimalCost(loc);
-			else
-				base_cost = fpc_cost_generic(arr, plan);
-			
-			for(int dim =0; dim < dimension; dim++){
-				
-				if(useFPC && arr[dim]<resolution-1){
-					
-					double sel[] = new double[dimension];
-					
-					for(int d=0; d<dimension;d++)
-						sel[d] = selectivity[arr[d]];
-					
-					sel[dim] = sel[dim]*(1+delta);
-					double fpc_cost = getFPCCost(sel, plan);
-					slope[dim][loc] = (fpc_cost - base_cost)/(delta*sel[dim]);															
-				}				
-				else if(arr[dim]<resolution-1 ){
-					arr[dim]++;
-					if(loc ==9300 && dim==1 && DEBUG)
-						System.out.println("interesting");
-					double fpc_cost =  fpc_cost_generic(arr, plan);
-					slope[dim][loc] = (fpc_cost - base_cost)/(selectivity[arr[dim]]- selectivity[arr[dim]-1]);
-					if(slope[dim][loc] > (double)1 && DEBUG)
-					{
-						System.out.println("loc ="+loc+" fpc = "+(fpc_cost_generic(arr, plan))+" base cost = "+base_cost+" neighbour location = "+selectivity[arr[dim]]+" base location = "+selectivity[arr[dim]-1]);
+		File f_slope = new File(apktPath+"slope.dat");
+		
+		
+		if(f_slope.exists() && READSLOPE){
+
+			try {
+				FileInputStream fis = new FileInputStream(f_slope);
+				ObjectInputStream iis = new ObjectInputStream(fis);
+				slope = (double[][]) iis.readObject();
+
+			} catch (Exception e) {
+
+			}
+
+		}
+		else{
+
+			for(int loc=0; loc < data.length; loc++){
+				System.out.println("loc = "+loc);
+				int plan = plans[loc];
+				int arr [] = getCoordinates(dimension, resolution, loc);
+				double base_cost ;
+
+				if(optimalPlan)
+					base_cost = getOptimalCost(loc);
+				else
+					base_cost = fpc_cost_generic(arr, plan);
+
+
+				for(int dim =0; dim < dimension; dim++){
+
+					if(useFPC && arr[dim]<resolution-1){
+
+						double sel[] = new double[dimension];
+
+						for(int d=0; d<dimension;d++)
+							sel[d] = selectivity[arr[d]];
+
+						sel[dim] = sel[dim]*(1+delta);
+						double fpc_cost = getFPCCost(sel, plan);
+						slope[dim][loc] = (fpc_cost - base_cost)/(delta*sel[dim]);															
+					}				
+					else if(arr[dim]<resolution-1 ){
+						arr[dim]++;
+						if(loc ==9300 && dim==1 && DEBUG)
+							System.out.println("interesting");
+						double fpc_cost =  fpc_cost_generic(arr, plan);
+						slope[dim][loc] = (fpc_cost - base_cost)/(selectivity[arr[dim]]- selectivity[arr[dim]-1]);
+						if(slope[dim][loc] > (double)1 && DEBUG)
+						{
+							System.out.println("loc ="+loc+" fpc = "+(fpc_cost_generic(arr, plan))+" base cost = "+base_cost+" neighbour location = "+selectivity[arr[dim]]+" base location = "+selectivity[arr[dim]-1]);
+						}
+						arr[dim]--;
 					}
-					arr[dim]--;
 				}
 			}
+
+			if(!f_slope.exists() && WRITESLOPE)
+				writeSlopeObject(slope);
+
+
 		}
-		
-		writeSlopeObject(slope);
 		//checking violation
 		int violation5 =0, violation20 =0, violation50 =0, totalCount = 0;
 		for(int loc =0; loc < data.length; loc++){
