@@ -51,7 +51,7 @@ public class dimensionReduction {
 	static String select_query;
 	static String predicates;
 	static double slope[][];
-	static boolean DEBUG = false;
+	static boolean DEBUG = true;
 	static boolean READSLOPE = false;
 	static boolean WRITESLOPE = false;
 	public static void main(String[] args) throws IOException, SQLException {
@@ -132,8 +132,8 @@ public class dimensionReduction {
 
 			for(int loc=0; loc < data.length; loc++){
 				System.out.println("loc = "+loc);
-				if(loc < 1854)
-					continue;
+//				if(loc < 2135)
+//					continue;
 				int plan = plans[loc];
 				int arr [] = getCoordinates(dimension, resolution, loc);
 				double base_cost ;
@@ -157,8 +157,13 @@ public class dimensionReduction {
 							sel[dim] = sel[dim]*(1+del);
 							double fpc_cost = getFPCCost(sel, plan);
 							sum_slope += (fpc_cost - base_cost)/(del*(sel[dim]/((1+del))));
+							if(slope[dim][loc] > (double)1 && DEBUG)
+							{
+								System.out.println("Dim = "+dim+" loc ="+loc+" fpc = "+(fpc_cost)+" base cost = "+base_cost+" neighbour location = "+sel[dim]+" base location = "+sel[dim]/(1+del));
+							}
 						}
 						slope[dim][loc] = sum_slope/3;
+						
 					}				
 					else if(arr[dim]<resolution-1 ){
 						arr[dim]++;
