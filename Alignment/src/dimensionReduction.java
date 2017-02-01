@@ -102,10 +102,13 @@ public class dimensionReduction {
 	        try { conn.close(); } catch (SQLException e) {}
 	    }
 		
+		
 		//obj.maxPenalty();
 
 	}
 	
+	
+
 	public void concavityValidation(boolean useFPC, boolean optimalPlan) throws SQLException{
 		String funName = "concavityValidation";
 		System.out.println(funName+" enterring");
@@ -221,13 +224,33 @@ public class dimensionReduction {
 		}
 		System.out.println("total count = "+totalCount+" with violation50 = "+violation50+" violation20 = "+violation20+" violation5 ="+violation5);
 		
+		checkJumpAssumption(slope);
 //		viewslope(slope, 0);
 //		viewslope(slope, 1);
 
 		System.exit(0);
 	}
 	
-	
+	public void checkJumpAssumption(double[][] slope2) {
+		System.out.println("Entering checkJumpAssumption");
+		double violation =0, totalcount =0;
+		for(int dim=0; dim<dimension; dim++){
+			for(int loc =0; loc < data.length; loc++){
+				int arr[] = getCoordinates(dimension, resolution, loc);
+				if(arr[dim]==0 && slope2[dim][loc] > 0){
+					double ratio = getOptimalCost(loc)/slope2[dim][loc];
+					
+					//System.out.println("Jump ratio = "+ratio+" and minimum selectivity is "+selectivity[arr[dim]]);
+					if(ratio < selectivity[arr[dim]]){
+						System.out.println("violation of jump assumption");
+						violation++;
+					}
+					totalcount++;
+				}
+			}
+		}
+		System.out.println("checkJumpAssumption: "+"total count = "+totalcount+" with violation = "+violation);
+	}
 	private void writeSlopeObject(double[][] slope2) {
 		
 		try {
