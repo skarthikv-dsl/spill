@@ -52,8 +52,8 @@ public class dimensionReduction {
 	static String predicates;
 	static double slope[][];
 	static boolean DEBUG = false;
-	static boolean READSLOPE = true;
-	static boolean WRITESLOPE = true;
+	static boolean READSLOPE = false;
+	static boolean WRITESLOPE = false;
 	public static void main(String[] args) throws IOException, SQLException {
 	
 		dimensionReduction obj = new dimensionReduction();  
@@ -110,7 +110,7 @@ public class dimensionReduction {
 		String funName = "concavityValidation";
 		System.out.println(funName+" enterring");
 		
-		double delta = 0.1, tolerance =200;
+		double delta[] = {0.1,0.2,0.3}, tolerance =200;
 		
 		double slope[][] = new double[dimension][totalPoints];
 		File f_slope = new File(apktPath+"slope.dat");
@@ -132,6 +132,8 @@ public class dimensionReduction {
 
 			for(int loc=0; loc < data.length; loc++){
 				System.out.println("loc = "+loc);
+				if(loc < 1854)
+					continue;
 				int plan = plans[loc];
 				int arr [] = getCoordinates(dimension, resolution, loc);
 				double base_cost ;
@@ -145,15 +147,18 @@ public class dimensionReduction {
 				for(int dim =0; dim < dimension; dim++){
 
 					if(useFPC && arr[dim]<resolution-1){
+						double sum_slope = 0;
+						for(double del: delta){
+							double sel[] = new double[dimension];
 
-						double sel[] = new double[dimension];
+							for(int d=0; d<dimension;d++)
+								sel[d] = selectivity[arr[d]];
 
-						for(int d=0; d<dimension;d++)
-							sel[d] = selectivity[arr[d]];
-
-						sel[dim] = sel[dim]*(1+delta);
-						double fpc_cost = getFPCCost(sel, plan);
-						slope[dim][loc] = (fpc_cost - base_cost)/(delta*sel[dim]);															
+							sel[dim] = sel[dim]*(1+del);
+							double fpc_cost = getFPCCost(sel, plan);
+							sum_slope += (fpc_cost - base_cost)/(del*(sel[dim]/((1+del))));
+						}
+						slope[dim][loc] = sum_slope/3;
 					}				
 					else if(arr[dim]<resolution-1 ){
 						arr[dim]++;
@@ -184,7 +189,7 @@ public class dimensionReduction {
 					arr[dim]++;
 					int locN = getIndex(arr, resolution);
 					if(slope[dim][loc]>0) {
-						if ((slope[dim][loc]*1.5) < (slope[dim][locN])){
+						if ((slope[dim][loc]*10) < (slope[dim][locN])){
 							violation50++;
 							violation20++;
 							violation5++;
