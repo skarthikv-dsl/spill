@@ -52,8 +52,9 @@ public class dimensionReduction {
 	static String predicates;
 	static double slope[][];
 	static boolean DEBUG = true;
-	static boolean READSLOPE = true;
-	static boolean WRITESLOPE = true;
+	static boolean READSLOPE = false;
+	static boolean WRITESLOPE = false;
+	static boolean CheckAllPlan = true;
 	public static void main(String[] args) throws IOException, SQLException {
 	
 		dimensionReduction obj = new dimensionReduction();  
@@ -68,6 +69,7 @@ public class dimensionReduction {
 		resolution = gdp.getMaxResolution();
 		totalPoints = (int) Math.pow(resolution, dimension);
 		slope = new double [dimension][totalPoints];
+		
 		obj.readpkt(gdp, true);
 		obj.loadPropertiesFile();
 		obj.loadSelectivity();
@@ -96,7 +98,14 @@ public class dimensionReduction {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 		
-		obj.concavityValidation(true,true);
+		if(!CheckAllPlan)
+			obj.concavityValidation(true,true,-1);
+		else{
+			for(int plan=0; plan < totalPlans; plan++){
+				System.out.println("checking for plan:"+plan);
+				obj.concavityValidation(true,false, plan);
+			}
+		}
 		
 		if (conn != null) {
 	        try { conn.close(); } catch (SQLException e) {}
@@ -109,7 +118,7 @@ public class dimensionReduction {
 	
 	
 
-	public void concavityValidation(boolean useFPC, boolean optimalPlan) throws SQLException{
+	public void concavityValidation(boolean useFPC, boolean optimalPlan, int fpc_plan) throws SQLException{
 		String funName = "concavityValidation";
 		System.out.println(funName+" enterring");
 		
@@ -139,12 +148,14 @@ public class dimensionReduction {
 //					continue;
 				int plan = plans[loc];
 				int arr [] = getCoordinates(dimension, resolution, loc);
-				double base_cost ;
+				double base_cost =0;
 
 				if(optimalPlan)
 					base_cost = getOptimalCost(loc);
+				else if(fpc_plan > 0)
+					base_cost = fpc_cost_generic(arr, fpc_plan);
 				else
-					base_cost = fpc_cost_generic(arr, plan);
+					assert(true) : "this should not come here"; 
 
 
 				for(int dim =0; dim < dimension; dim++){
@@ -158,7 +169,12 @@ public class dimensionReduction {
 								sel[d] = selectivity[arr[d]];
 
 							sel[dim] = sel[dim]*(1+del);
-							double fpc_cost = getFPCCost(sel, plan);
+							double fpc_cost = 0;
+							if(optimalPlan)
+								fpc_cost = getFPCCost(sel, plan);
+							else 
+								fpc_cost = getFPCCost(sel, fpc_plan);
+							
 							sum_slope += (fpc_cost - base_cost)/(del*(sel[dim]/((1+del))));
 							if(slope[dim][loc] > (double)1 && DEBUG)
 							{
@@ -175,11 +191,18 @@ public class dimensionReduction {
 						arr[dim]++;
 						if(loc ==9300 && dim==1 && DEBUG)
 							System.out.println("interesting");
-						double fpc_cost =  fpc_cost_generic(arr, plan);
+						double fpc_cost = 0;
+						if(optimalPlan)
+							fpc_cost = fpc_cost_generic(arr, plan);
+						else
+							fpc_cost = fpc_cost_generic(arr, fpc_plan);
+						
 						slope[dim][loc] = (fpc_cost - base_cost)/(selectivity[arr[dim]]- selectivity[arr[dim]-1]);
 						if(slope[dim][loc] > (double)1 && DEBUG)
-						{
+						{  if(optimalPlan)
 							System.out.println("loc ="+loc+" fpc = "+(fpc_cost_generic(arr, plan))+" base cost = "+base_cost+" neighbour location = "+selectivity[arr[dim]]+" base location = "+selectivity[arr[dim]-1]);
+						else
+							System.out.println("loc ="+loc+" fpc = "+(fpc_cost_generic(arr, fpc_plan))+" base cost = "+base_cost+" neighbour location = "+selectivity[arr[dim]]+" base location = "+selectivity[arr[dim]-1]);
 						}
 						
 						arr[dim]--;
