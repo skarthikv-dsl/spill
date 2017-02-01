@@ -52,8 +52,8 @@ public class dimensionReduction {
 	static String predicates;
 	static double slope[][];
 	static boolean DEBUG = true;
-	static boolean READSLOPE = false;
-	static boolean WRITESLOPE = false;
+	static boolean READSLOPE = true;
+	static boolean WRITESLOPE = true;
 	public static void main(String[] args) throws IOException, SQLException {
 	
 		dimensionReduction obj = new dimensionReduction();  
@@ -147,7 +147,7 @@ public class dimensionReduction {
 				for(int dim =0; dim < dimension; dim++){
 
 					if(useFPC && arr[dim]<resolution-1){
-						double sum_slope = 0;
+						double sum_slope = 0, divFactor =0;
 						for(double del: delta){
 							double sel[] = new double[dimension];
 
@@ -161,8 +161,11 @@ public class dimensionReduction {
 							{
 								System.out.println("Dim = "+dim+" loc ="+loc+" fpc = "+(fpc_cost)+" base cost = "+base_cost+" neighbour location = "+sel[dim]+" base location = "+sel[dim]/(1+del));
 							}
+							if(fpc_cost != base_cost)
+								divFactor ++;
 						}
-						slope[dim][loc] = sum_slope/3;
+						if(divFactor >0 )
+							slope[dim][loc] = sum_slope/divFactor;
 						
 					}				
 					else if(arr[dim]<resolution-1 ){
@@ -175,6 +178,7 @@ public class dimensionReduction {
 						{
 							System.out.println("loc ="+loc+" fpc = "+(fpc_cost_generic(arr, plan))+" base cost = "+base_cost+" neighbour location = "+selectivity[arr[dim]]+" base location = "+selectivity[arr[dim]-1]);
 						}
+						
 						arr[dim]--;
 					}
 				}
@@ -194,7 +198,7 @@ public class dimensionReduction {
 					arr[dim]++;
 					int locN = getIndex(arr, resolution);
 					if(slope[dim][loc]>0) {
-						if ((slope[dim][loc]*10) < (slope[dim][locN])){
+						if ((slope[dim][loc]*1.5) < (slope[dim][locN])){
 							violation50++;
 							violation20++;
 							violation5++;
