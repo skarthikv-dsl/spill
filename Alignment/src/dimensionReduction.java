@@ -1,14 +1,23 @@
 import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
+import iisc.dsl.picasso.server.network.ServerMessageUtil;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
@@ -42,7 +51,8 @@ public class dimensionReduction {
 	static String select_query;
 	static String predicates;
 	static double slope[][];
-	public static void main(String[] args) throws IOException {
+	static boolean DEBUG = false;
+	public static void main(String[] args) throws IOException, SQLException {
 	
 		dimensionReduction obj = new dimensionReduction();  
 		obj.loadPropertiesFile();
@@ -56,25 +66,275 @@ public class dimensionReduction {
 		resolution = gdp.getMaxResolution();
 		totalPoints = (int) Math.pow(resolution, dimension);
 		slope = new double [dimension][totalPoints];
-		obj.readpkt(gdp, false);
+		obj.readpkt(gdp, true);
 		obj.loadPropertiesFile();
 		obj.loadSelectivity();
-		obj.maxPenalty();
+		
+		try{
+			System.out.println("entered DB conn1");
+			Class.forName("org.postgresql.Driver");
+
+			//Settings
+			//System.out.println("entered DB conn2");
+			if(database_conn==0){
+				conn = DriverManager
+						.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+								"sa", "database");
+			}
+			else{
+				System.out.println("entered DB tpcds");
+				conn = DriverManager
+						.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+								"sa", "database");
+			}
+			System.out.println("Opened database successfully");
+		}
+		catch ( Exception e ) {
+			System.out.println("entered DB err");
+			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
+		}
+		
+		obj.concavityValidation(true,true);
+		
+		if (conn != null) {
+	        try { conn.close(); } catch (SQLException e) {}
+	    }
+		
+		//obj.maxPenalty();
 
 	}
 	
-	public double  slope(int dim, int loc){
-
-		int plan = plans[loc];
-		double slope;
-		int [] arr = getCoordinates(dimension, resolution, loc);
-		if(arr[dim] < resolution-1){
+	public void concavityValidation(boolean useFPC, boolean optimalPlan) throws SQLException{
+		String funName = "concavityValidation";
+		System.out.println(funName+" enterring");
+		
+		double delta = 0.1, tolerance =200;
+		
+		double slope[][] = new double[dimension][totalPoints];
+		for(int loc=0; loc < data.length; loc++){
+			System.out.println("loc = "+loc);
+			int plan = plans[loc];
+			int arr [] = getCoordinates(dimension, resolution, loc);
+			double base_cost ;
 			
+			if(optimalPlan)
+				base_cost = getOptimalCost(loc);
+			else
+				base_cost = fpc_cost_generic(arr, plan);
+			
+			for(int dim =0; dim < dimension; dim++){
+				
+				if(useFPC && arr[dim]<resolution-1){
+					
+					double sel[] = new double[dimension];
+					
+					for(int d=0; d<dimension;d++)
+						sel[d] = selectivity[arr[d]];
+					
+					sel[dim] = sel[dim]*(1+delta);
+					double fpc_cost = getFPCCost(sel, plan);
+					slope[dim][loc] = (fpc_cost - base_cost)/(delta*sel[dim]);															
+				}				
+				else if(arr[dim]<resolution-1 ){
+					arr[dim]++;
+					if(loc ==9300 && dim==1 && DEBUG)
+						System.out.println("interesting");
+					double fpc_cost =  fpc_cost_generic(arr, plan);
+					slope[dim][loc] = (fpc_cost - base_cost)/(selectivity[arr[dim]]- selectivity[arr[dim]-1]);
+					if(slope[dim][loc] > (double)1 && DEBUG)
+					{
+						System.out.println("loc ="+loc+" fpc = "+(fpc_cost_generic(arr, plan))+" base cost = "+base_cost+" neighbour location = "+selectivity[arr[dim]]+" base location = "+selectivity[arr[dim]-1]);
+					}
+					arr[dim]--;
+				}
+			}
 		}
-			
-		slope
-		return 0;
+		
+		writeSlopeObject(slope);
+		//checking violation
+		int violation5 =0, violation20 =0, violation50 =0, totalCount = 0;
+		for(int loc =0; loc < data.length; loc++){
+			int arr [] = getCoordinates(dimension, resolution, loc);
+			for(int dim =0; dim < dimension; dim++){
+				if(arr[dim]<resolution-1 && selectivity[arr[dim]] > (double)0.00001){
+					arr[dim]++;
+					int locN = getIndex(arr, resolution);
+					if(slope[dim][loc]>0) {
+						if ((slope[dim][loc]*1.5) < (slope[dim][locN])){
+							violation50++;
+							violation20++;
+							violation5++;
+							System.out.println("Dim = "+dim+" loc = "+loc+" slope = "+(slope[dim][loc]*1)+" locN ="+locN+" slope = "+slope[dim][locN]);
+						}
+						else if((slope[dim][loc]*1.2) < (slope[dim][locN])){
+							violation20++;
+							violation5++;
+						}
+						else if((slope[dim][loc]*1.05) < (slope[dim][locN])){
+							violation5++;
+						}
+						
+						
+					}
+					totalCount ++;
+					arr[dim]--;
+				}	
+			}
+		}
+		System.out.println("total count = "+totalCount+" with violation50 = "+violation50+" violation20 = "+violation20+" violation5 ="+violation5);
+		
+//		viewslope(slope, 0);
+//		viewslope(slope, 1);
+
+		System.exit(0);
 	}
+	
+	
+	private void writeSlopeObject(double[][] slope2) {
+		
+		try {
+	        FileOutputStream fos = new FileOutputStream(apktPath+"slope.dat");
+	        ObjectOutputStream oos = new ObjectOutputStream(fos);
+	        oos.writeObject(slope2);
+
+
+	    } catch (Exception e) {
+
+	    }
+
+		
+	}
+
+	public void viewslope(double[][] slope2, int dim) {
+		
+		int curr_arr [], prev_arr[], base_arr[];
+		prev_arr = getCoordinates(dimension, resolution, 0);
+		//base_arr = getCoordinates(dimension, resolution, 0);
+		for(int loc=0;loc<totalPoints;loc++){
+				curr_arr = getCoordinates(dimension, resolution, loc);
+				if(curr_arr[dim]==0 || (curr_arr[dim]==prev_arr[dim]+1)){
+					if(curr_arr[dim]==0){
+						System.out.print("\n dim"+dim+" : ");
+						prev_arr = getCoordinates(dimension, resolution, loc);
+					}
+					System.out.print("\t"+slope2[dim][loc]);
+					System.arraycopy(curr_arr,0 , prev_arr, 0, dimension);
+				}	
+			}
+	}
+
+	
+//	public void viewslope2d(double[][] slope2, int dim) {
+//		
+//		for(int i=0;i<resolution;i++){
+//			System.out.print("dim1 = "+i+" : ");
+//			for(int j=0;j<resolution;j++){
+//					int arr [] = new int[dimension];
+//					arr[0] = i; arr[1] = j; 
+//					int idx = getIndex(arr, resolution);
+//					System.out.print("\t"+slope2[dim][idx]);
+//			}
+//			System.out.println();
+//		}
+//		
+//	}
+
+	double fpc_cost_generic(int arr[], int plan)
+	{
+
+		int index = getIndex(arr,resolution);
+
+
+		return AllPlanCosts[plan][index];
+	}
+
+	
+	public double getFPCCost(double selectivity[], int p_no) throws SQLException{
+		//Get the path to p_no.xml
+		
+		
+		String xml_path = apktPath+"planStructureXML/"+p_no+".xml";
+		String pcst_path = apktPath+"pcstFiles/"+p_no+".pcst";
+		 String regx;
+	     Pattern pattern;
+	     Matcher matcher;
+	     double execCost=-1;
+	     
+		//create the FPC query : 
+	     Statement stmt;
+	     //conn = source.getConnection();
+	     //System.out.println("Plan No = "+p_no);
+			try{      	
+				
+				
+				 stmt = conn.createStatement();
+				String exp_query = new String("Selectivity ( "+predicates+ ") (");
+				for(int i=0;i<dimension;i++){
+					if(i !=dimension-1){
+						exp_query = exp_query + (selectivity[i])+ ", ";
+					}
+					else{
+						exp_query = exp_query + (selectivity[i]) + " )";
+					}
+				}
+				//this is for selectivity injection plus fpc
+				exp_query = exp_query + select_query;
+				
+				//this is for pure fpc
+				//exp_query = select_query;
+				
+				exp_query = "explain " + exp_query + " fpc "+xml_path;
+				//exp_query = new String("explain Selectivity ( customer_demographics.cd_demo_sk = catalog_sales.cs_bill_cdemo_sk and date_dim.d_date_sk = catalog_sales.cs_sold_date_sk  and item.i_item_sk = catalog_sales.cs_item_sk and promotion.p_promo_sk = catalog_sales.cs_promo_sk) (0.005, 0.99, 0.001, 0.00005 ) select i_item_id,  avg(cs_quantity) , avg(cs_list_price) ,  avg(cs_coupon_amt) ,  avg(cs_sales_price)  from catalog_sales, customer_demographics, date_dim, item, promotion where cs_sold_date_sk = d_date_sk and cs_item_sk = i_item_sk and   cs_bill_cdemo_sk = cd_demo_sk and   cs_promo_sk = p_promo_sk and cd_gender = 'F' and  cd_marital_status = 'U' and  cd_education_status = 'Unknown' and  (p_channel_email = 'N' or p_channel_event = 'N') and  d_year = 2002 and i_current_price <= 100 group by i_item_id order by i_item_id  fpc /home/lohitkrishnan/ssd256g/data/DSQT264DR20_E/planStructureXML/3.xml");
+				//System.out.println(exp_query);
+				//System.exit(1);
+				//String exp_query = new String(query_opt_spill);
+				stmt.execute("set work_mem = '100MB'");
+				//NOTE,Settings: 4GB for DS and 1GB for H
+				if(database_conn==0){
+					stmt.execute("set effective_cache_size='1GB'");
+				}
+				else{
+					stmt.execute("set effective_cache_size='4GB'");
+				}
+
+				//NOTE,Settings: need not set the page cost's
+				stmt.execute("set  seq_page_cost = 1");
+				stmt.execute("set  random_page_cost=4");
+				stmt.execute("set cpu_operator_cost=0.0025");
+				stmt.execute("set cpu_index_tuple_cost=0.005");
+				stmt.execute("set cpu_tuple_cost=0.01");
+				
+				ResultSet rs = stmt.executeQuery(exp_query);
+				rs.next();
+				String str1 = rs.getString(1);
+				//System.out.println(str1);
+				
+				//System.out.println(str1);
+				//Do the pattern match to get the cost here
+				regx = Pattern.quote("..") + "(.*?)" + Pattern.quote("rows=");
+				
+				pattern = Pattern.compile(regx);
+				matcher = pattern.matcher(str1);
+				while(matcher.find()){
+					execCost = Double.parseDouble(matcher.group(1));
+				//	System.out.println("execCost = "+execCost);
+				}
+				rs.close();
+				stmt.close();	
+				
+			}
+			catch(Exception e){
+				e.printStackTrace();
+				ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+				
+			}
+
+	
+			assert (execCost > 1 ): "execCost is less than 1";
+			return execCost; 
+		
+	}
+
 	public void maxPenalty(){
 		//lets see the penalty increase for removing a dimension
 		
@@ -341,7 +601,7 @@ public class dimensionReduction {
 			for (int i = 0; i < nPlans; i++) {
 				try {
 
-					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + i + ".pcst")));
+					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + "pcstFiles/"+i + ".pcst")));
 					double[] cost = (double[]) ip.readObject();
 					for (int j = 0; j < totalPoints; j++)
 					{
