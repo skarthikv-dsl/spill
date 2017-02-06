@@ -136,13 +136,14 @@ public class CostGreedyGCI3D
 		
 		
 
-		ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
+		//ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
 
 		//Settings
 		//Populate the OptimalCost Matrix.
 		
-		//obj.readpkt(gdp);
-		obj.readpkt(reducedgdp);
+		obj.readpkt(gdp);
+		
+		//obj.readpkt(reducedgdp);
 
 		//obj.replaceUnWantedPlans();
 		//Populate the selectivity Matrix.
@@ -1730,7 +1731,7 @@ public void initialize(int location) {
 		int location=0;
 		for(int loc=0; loc < totalPoints; loc++)
 		{
-			a = AllPlanCosts[worstPlan[loc]][loc]/Math.max(1, AllPlanCosts[newOptimalPlan[loc]][loc]);
+			a = AllPlanCosts[worstPlan[loc]][loc]/Math.max(1, getOptimalCost(loc));
 			/*
 			 * TODO: Have used a sanity constant as 1 in the earlier line. 
 			 * Assuming none of the plan cost less than 1
@@ -1781,8 +1782,9 @@ public void initialize(int location) {
 			*/
 		}
 		System.out.println("\n Sumit MSO = "+MSO);
+		printLocation(location);
 		System.out.println("\n loc:"+location+"\n Worst Value="+AllPlanCosts[worstPlan[location]][location]);
-		System.out.println("\nOptimal_cost :"+AllPlanCosts[newOptimalPlan[location]][location]+"\n");
+		System.out.println("\nOptimal_cost :"+getOptimalCost(location)+"with least cost = "+getOptimalCost(0)+"\n");
 //		System.out.println("\nHistogram of suboptimality distribution :\n");
 //		System.out.println("\nLow Cost Count is :\t"+low_cost_count);
 //		for(int i=0;i<6;i++){
@@ -1790,9 +1792,18 @@ public void initialize(int location) {
 //			System.out.print("\tAvg Cost is :\t"+avg_cost[i]/count[i]);
 //			System.out.print("\tAvg SubOpt is :\t"+avg_sub_opt[i]/count[i]);
 //		}
+		System.exit(0);
 		
 	}
   
+	private void printLocation(int location) {
+		int [] arr = getCoordinates(dimension, resolution, location);
+		for(int d=0; d<dimension; d++){
+			System.out.print(arr[d]+"\t");
+		}
+		
+	}
+
 	/*
 	 * for each location get the cheapest plan using the pcst files. 
 	 * This may be different from the optimizers choice due to imperfect
