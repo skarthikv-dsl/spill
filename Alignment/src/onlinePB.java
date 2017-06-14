@@ -2,14 +2,19 @@ import iisc.dsl.picasso.common.ds.DataValues;
 import iisc.dsl.picasso.server.ADiagramPacket;
 import iisc.dsl.picasso.server.PicassoException;
 import iisc.dsl.picasso.server.network.ServerMessageUtil;
+import iisc.dsl.picasso.server.plan.Node;
+import iisc.dsl.picasso.server.plan.Plan;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.sql.Connection;
@@ -18,7 +23,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Properties;
+import java.util.StringTokenizer;
+import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -104,10 +112,6 @@ public class onlinePB {
 		}
 		
 		
-		if (conn != null) {
-	        try { conn.close(); } catch (SQLException e) {}
-	    }
-		
 		//generating the contours contourwise
 		
 		int i;
@@ -131,14 +135,21 @@ public class onlinePB {
 			if(cost>h_cost)
 				cost = h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
-			System.out.println("Contour "+i+" cost : "+cost+"\n");
+			System.out.println("Contour "+i+" cost : "+cost);
 			
 			obj.generateCoveringContours(order,cost);
+			System.out.println("The running optimization calls are "+opt_call);
 			
 			cost *=2;
+			i++;
 
 		}
 		System.out.println("the number of optimization calls are "+opt_call);
+		
+
+		if (conn != null) {
+	        try { conn.close(); } catch (SQLException e) {}
+	    }
 
 	}
 	
@@ -225,11 +236,21 @@ public class onlinePB {
 						// the argument for calculate jump size is the dimension along which we need to traverse				
 						double reverse_jump = calculateJumpSize(last_dim2,optimization_cost);
 
+						double old_sel = qrun_sel[last_dim2];
 						if(DEBUG_LEVEL_2)
 							System.out.println("The reverse jump size is "+(beta -1)/beta*reverse_jump+" from selectivity "+qrun_sel[last_dim2]);
 
 						qrun_sel[last_dim2] -= (beta -1)/beta*reverse_jump; //check this again!
+					
 						
+						if(qrun_sel[last_dim2] <= minimum_selectivity)
+							qrun_sel[last_dim2] = minimum_selectivity;
+						
+						if(old_sel/(qrun_sel[last_dim2]*beta) < 1.0)
+							qrun_sel[last_dim2] = old_sel/beta;
+						
+						if(DEBUG_LEVEL_2)
+						System.out.println("Selectivity learnt "+old_sel/(qrun_sel[last_dim2]*beta));
 						optimization_cost = getFPCCost(qrun_sel, -1);
 						//counting the optimization calls
 						opt_call++;
@@ -239,10 +260,9 @@ public class onlinePB {
 						optimization_cost =  Math.pow(beta, dimension-1)*cost;
 					
 					//if we hit the boundary then we are done
-					if(qrun_sel[last_dim2] <= minimum_selectivity){
-						qrun_sel[last_dim2] = minimum_selectivity;
+					if(qrun_sel[last_dim2] <= minimum_selectivity)
 						break;
-					}
+					
 
 					//we are forward jumping along last_dim1 dimension
 					qrun_sel[last_dim1] = minimum_selectivity;
@@ -256,8 +276,18 @@ public class onlinePB {
 
 						if(DEBUG_LEVEL_2)
 							System.out.println("The forward jump size is "+(beta -1)*forward_jump+" from selectivity "+qrun_sel[last_dim1]);
-
-						qrun_sel[last_dim2] += (beta -1)*forward_jump; //check this again!
+						double old_sel = qrun_sel[last_dim1]; 
+						qrun_sel[last_dim1] += (beta -1)*forward_jump; //check this again!
+						
+						if(qrun_sel[last_dim1] >= 1.0){
+							qrun_sel[last_dim1] = 1.0;
+						}
+						
+						if(DEBUG_LEVEL_2)
+						System.out.println("Selectivity learnt "+qrun_sel[last_dim1]/(old_sel*beta));
+						
+						if(qrun_sel[last_dim1]/(old_sel*beta) < 1.0)
+							qrun_sel[last_dim1] = old_sel*beta;
 						
 						optimization_cost = getFPCCost(qrun_sel, -1);
 						//counting the optimization calls
@@ -271,10 +301,6 @@ public class onlinePB {
 					
 					//if we hit the boundary then we are done
 					if(qrun_sel[last_dim1] >= 1.0){
-						qrun_sel[last_dim1] = 1.0;
-						
-						//counting the optimization calls
-						opt_call++;
 						break;
 					}
 				}
@@ -485,13 +511,13 @@ public class onlinePB {
 	     double execCost=-1;
 	     
 		//create the FPC query : 
-	     Statement stmt;
+	     //Statement stmt = null;
 	     //conn = source.getConnection();
 	     //System.out.println("Plan No = "+p_no);
 			try{      	
 				
 				
-				 stmt = conn.createStatement();
+				Statement stmt = conn.createStatement();
 				String exp_query = new String("Selectivity ( "+predicates+ ") (");
 				for(int i=0;i<dimension;i++){
 					if(i !=dimension-1){
@@ -522,7 +548,7 @@ public class onlinePB {
 				//System.exit(1);
 				//String exp_query = new String(query_opt_spill);
 				
-				
+				stmt.execute("set work_mem = '100MB'");
 				//NOTE,Settings: 4GB for DS and 1GB for H
 				if(database_conn==0){
 					stmt.execute("set effective_cache_size='1GB'");
@@ -532,7 +558,6 @@ public class onlinePB {
 				}
 
 				//NOTE,Settings: need not set the page cost's
-				stmt.execute("set work_mem = '100MB'");
 				stmt.execute("set  seq_page_cost = 1");
 				stmt.execute("set  random_page_cost=4");
 				stmt.execute("set cpu_operator_cost=0.0025");
