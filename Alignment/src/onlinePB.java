@@ -57,8 +57,8 @@ public class onlinePB {
 	static double minimum_selectivity = 0.001;
 	static double alpha = 2;
 	static double beta;
-	static boolean DEBUG_LEVEL_2 = false;
-	static boolean DEBUG_LEVEL_1 = false;
+	static boolean DEBUG_LEVEL_2 = true;
+	static boolean DEBUG_LEVEL_1 = true;
 	static int opt_call = 0;
 	static String XMLPath = null; 
 	public static void main(String[] args) throws IOException, SQLException {
@@ -116,12 +116,18 @@ public class onlinePB {
 		
 		int i;
 		h_cost = obj.getOptimalCost(obj.totalPoints-1);
-		double min_cost = obj.getOptimalCost(0);
-		double cost = obj.getOptimalCost(0);
+		for(int d=0;d<dimension;d++)
+			qrun_sel[d] = minimum_selectivity;
+		double min_cost = obj.getFPCCost(qrun_sel, -1);
+		double cost = min_cost;
 		double ratio = h_cost/min_cost;
 		assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
 		System.out.println("the ratio of C_max/c_min is "+ratio);
 
+		//reset the values to -1 for the rest of the code 
+		for(int d=0;d<dimension;d++)
+			qrun_sel[d] = -1.0;
+		
 		i = 1;
 		
 		ArrayList<Integer> order = new ArrayList<Integer>();
@@ -153,6 +159,16 @@ public class onlinePB {
 
 	}
 	
+	private void printSelectivityCost(double  sel_array[], double cost){
+		
+		System.out.println();
+		for(int i=0;i<dimension;i++)
+			System.out.print("\t"+sel_array[i]);
+		
+		System.out.println("\t has cost = "+cost);
+		
+	}
+	
 	public void generateCoveringContours(ArrayList<Integer> order,double cost) throws IOException, SQLException
 	{
 		String funName = "generateCoveringContours";
@@ -165,6 +181,7 @@ public class onlinePB {
 			if(learntDim.contains(order.get(i))!=true)
 			{
 				remainingDimList.add(order.get(i));
+				qrun_sel[order.get(i)] = -1.0;
 			}			
 		}
 
@@ -212,6 +229,7 @@ public class onlinePB {
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = 1.0;
 			double optimization_cost_high = getFPCCost(qrun_sel, -1);
 			
+			assert(optimization_cost_low <= optimization_cost_high): "violation of PCM";
 			//check if the origin of this 2D slice is greater cost
 			//OR
 			//check if the terminal of this 2D slice has lesser cost
@@ -226,38 +244,47 @@ public class onlinePB {
 			//now we need to explore the 2D surface
 			else{
 				
+				//just the initialize the last two dimensions;
+				qrun_sel[last_dim2] = 1.0;
+				qrun_sel[last_dim1] = minimum_selectivity;
+				
 				double optimization_cost = getFPCCost(qrun_sel, -1);
 				opt_call++;
+				
+				if(DEBUG_LEVEL_2)
+					printSelectivityCost(qrun_sel, optimization_cost);
+				
 				//we are reverse jumping along last_dim2 dimension
 				for(;;){
-					qrun_sel[last_dim2] = 1.0;
-					while(qrun_sel[last_dim2] > minimum_selectivity || (Math.pow(beta, dimension-2)*cost <= optimization_cost))
-					{
-						// the argument for calculate jump size is the dimension along which we need to traverse				
-						double reverse_jump = calculateJumpSize(last_dim2,optimization_cost);
-
-						double old_sel = qrun_sel[last_dim2];
-						if(DEBUG_LEVEL_2)
-							System.out.println("The reverse jump size is "+(beta -1)/beta*reverse_jump+" from selectivity "+qrun_sel[last_dim2]);
-
-						qrun_sel[last_dim2] -= (beta -1)/beta*reverse_jump; //check this again!
 					
+					double target_cost1_dim2 = Math.pow(beta, dimension-2)*cost;
+					while(qrun_sel[last_dim2] > minimum_selectivity || (target_cost1_dim2 <= optimization_cost))
+					{
+
+						double target_cost2_dim2 = Math.pow(beta, dimension-1)*cost;
+						if (optimization_cost <=  target_cost2_dim2)
+							break;
+						
+						double old_sel = qrun_sel[last_dim2];
+						
+						qrun_sel[last_dim2] = old_sel/beta;
+
 						
 						if(qrun_sel[last_dim2] <= minimum_selectivity)
 							qrun_sel[last_dim2] = minimum_selectivity;
 						
-						if(old_sel/(qrun_sel[last_dim2]*beta) < 1.0)
-							qrun_sel[last_dim2] = old_sel/beta;
-						
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+old_sel/(qrun_sel[last_dim2]*beta));
 						optimization_cost = getFPCCost(qrun_sel, -1);
+						
+						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
+						if(DEBUG_LEVEL_2)
+							printSelectivityCost(qrun_sel, optimization_cost);
+						
 						//counting the optimization calls
 						opt_call++;
 					}
 
-					if (optimization_cost >  Math.pow(beta, dimension-1)*cost)
-						optimization_cost =  Math.pow(beta, dimension-1)*cost;
 					
 					//if we hit the boundary then we are done
 					if(qrun_sel[last_dim2] <= minimum_selectivity)
@@ -265,19 +292,32 @@ public class onlinePB {
 					
 
 					//we are forward jumping along last_dim1 dimension
-					qrun_sel[last_dim1] = minimum_selectivity;
+					//qrun_sel[last_dim1] = minimum_selectivity;
 					optimization_cost = getFPCCost(qrun_sel, -1);
+					
 					opt_call++;
 					
-					while(qrun_sel[last_dim1] < 1.0 || (Math.pow(beta, dimension-1)*cost <= optimization_cost))
+					double target_cost1_dim1 = Math.pow(beta, dimension)*cost;
+					while(qrun_sel[last_dim1] < 1.0 || (optimization_cost <= target_cost1_dim1))
 					{
+
+						double target_cost2_dim1 = Math.pow(beta, dimension-1)*cost;
+						if (optimization_cost >=  target_cost2_dim1)
+							break;
+						
+						
 						// the argument for calculate jump size is the dimension along which we need to traverse				
 						double forward_jump = calculateJumpSize(last_dim1,optimization_cost);
 
 						if(DEBUG_LEVEL_2)
 							System.out.println("The forward jump size is "+(beta -1)*forward_jump+" from selectivity "+qrun_sel[last_dim1]);
+						
 						double old_sel = qrun_sel[last_dim1]; 
 						qrun_sel[last_dim1] += (beta -1)*forward_jump; //check this again!
+						
+						if(qrun_sel[last_dim1]/(old_sel*beta) < 1.0)
+							qrun_sel[last_dim1] = old_sel*beta;
+						
 						
 						if(qrun_sel[last_dim1] >= 1.0){
 							qrun_sel[last_dim1] = 1.0;
@@ -286,10 +326,12 @@ public class onlinePB {
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+qrun_sel[last_dim1]/(old_sel*beta));
 						
-						if(qrun_sel[last_dim1]/(old_sel*beta) < 1.0)
-							qrun_sel[last_dim1] = old_sel*beta;
 						
 						optimization_cost = getFPCCost(qrun_sel, -1);
+						
+						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
+						if(DEBUG_LEVEL_2)
+							printSelectivityCost(qrun_sel, optimization_cost);
 						//counting the optimization calls
 						opt_call++;
 					}
@@ -313,7 +355,9 @@ public class onlinePB {
 		Integer curDim = remainingDimList.get(0); 
 
 		for(qrun_sel[curDim] = minimum_selectivity; qrun_sel[curDim] <= 1.0; qrun_sel[curDim] *= beta)
-		{
+		{	
+//			if(qrun_sel[0] == minimum_selectivity)
+//				continue;
 			learntDim.add(curDim);
 			generateCoveringContours(order, cost);
 			learntDim.remove(learntDim.indexOf(curDim));
@@ -613,6 +657,7 @@ public class onlinePB {
 				
 			}
 
+			
 	
 			assert (execCost > 1 ): "execCost is less than 1";
 			return execCost; 
