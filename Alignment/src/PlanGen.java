@@ -69,6 +69,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 	static double h_cost;
 	static int leafid=0;
 	static plan[] plans_list;
+	static boolean planstructure_format = true;
 	//static DataValues [] data = new DataValues[totalPoints];
 	
 	public static void main(String[] args) throws IOException, PicassoException, SQLException {
@@ -994,7 +995,7 @@ File plansFile = new File(apktPath+"planStructure_new");
 			//Store the result in path
 			
 			
-		
+		if(planstructure_format){
 		path = apktPath+"planStructure_new/"+plan.getPlanNo()+".txt";
 		fnative=new File(path);
 		try {
@@ -1015,7 +1016,7 @@ File plansFile = new File(apktPath+"planStructure_new");
 			e.printStackTrace();
 		} 
 		}
-	
+		}
 	
 
 		return plan;

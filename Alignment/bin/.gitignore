@@ -33,3 +33,6 @@
 /point_generic.class
 /Operators.class
 /Constants.properties
+/location.class
+/OfflinePB.class
+/locationComparator.class

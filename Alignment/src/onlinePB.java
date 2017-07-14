@@ -17,6 +17,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -258,7 +259,7 @@ public class onlinePB {
 				for(;;){
 					
 					double target_cost1_dim2 = Math.pow(beta, dimension-2)*cost;
-					while(qrun_sel[last_dim2] > minimum_selectivity || (target_cost1_dim2 <= optimization_cost))
+					while((qrun_sel[last_dim2] > minimum_selectivity) && (target_cost1_dim2 <= optimization_cost))
 					{
 
 						double target_cost2_dim2 = Math.pow(beta, dimension-1)*cost;
@@ -298,7 +299,7 @@ public class onlinePB {
 					opt_call++;
 					
 					double target_cost1_dim1 = Math.pow(beta, dimension)*cost;
-					while(qrun_sel[last_dim1] < 1.0 || (optimization_cost <= target_cost1_dim1))
+					while((qrun_sel[last_dim1] < 1.0) && (optimization_cost <= target_cost1_dim1))
 					{
 
 						double target_cost2_dim1 = Math.pow(beta, dimension-1)*cost;
@@ -644,7 +645,7 @@ public class onlinePB {
 				pattern = Pattern.compile(regx);
 				matcher = pattern.matcher(str1);
 				while(matcher.find()){
-					execCost = Double.parseDouble(matcher.group(1));
+					execCost = Float.parseFloat(matcher.group(1));
 				//	System.out.println("execCost = "+execCost);
 				}
 				rs.close();
@@ -671,7 +672,7 @@ public class onlinePB {
 		return this.OptimalCost[index];
 	}
 
-	
+
 	public void loadPropertiesFile() {
 		/*
 		 * Need dimension.
@@ -786,4 +787,410 @@ public class onlinePB {
 	}
 
 
+}
+
+class location implements Serializable
+{
+	private static final long serialVersionUID = 223L;
+	int dimension;
+	int database_conn;
+	String predicates;
+	Connection conn;
+	String select_query;
+	int fpc_plan=-1;
+	double fpc_cost = Double.MAX_VALUE;
+	int opt_plan_no;
+	double opt_cost;
+	static String apktPath;
+	int idx;
+	static int leafid=0;
+	float [] dim_values;
+	static Vector<Plan> plans_vector = new Vector<Plan>();
+
+	
+	
+	location(location loc) {
+	
+		this.apktPath = loc.apktPath;
+		this.dimension = loc.dimension;
+		this.fpc_plan = loc.fpc_plan;
+		this.fpc_cost = loc.fpc_cost;
+		this.opt_plan_no = loc.opt_plan_no;
+		this.opt_cost = loc.opt_cost;
+
+		this.dim_values = new float[dimension];
+		//System.arraycopy(pg.dim_values, 0, dim_values, 0, dimension);
+		for(int it=0;it<dimension;it++)
+			this.dim_values[it] = loc.dim_values[it];
+
+	}
+	
+	location(float arr[], onlinePB obj) throws  IOException, PicassoException{
+		
+		this.dimension = obj.dimension;
+		this.conn = obj.conn;
+		this.select_query = new String(obj.select_query);
+		this.predicates  = new String(obj.predicates);
+		this.database_conn = obj.database_conn;
+		this.apktPath = obj.apktPath;
+		dim_values = new float[dimension];
+		for(int i=0;i<dimension;i++){
+			dim_values[i] = arr[i];
+			//		System.out.print(arr[i]+",");
+		}
+		
+		getPlan();
+		
+	}
+	
+	location(float arr[], OfflinePB obj) throws  IOException, PicassoException{
+		
+		this.dimension = obj.dimension;
+		this.conn = obj.conn;
+		this.select_query = new String(obj.select_query);
+		this.predicates  = new String(obj.predicates);
+		this.database_conn = obj.database_conn;
+		this.apktPath = obj.apktPath;
+		dim_values = new float[dimension];
+		for(int i=0;i<dimension;i++){
+			dim_values[i] = arr[i];
+			//		System.out.print(arr[i]+",");
+		}
+		
+		getPlan();
+	}
+	
+	/*
+	 * get the selectivity of the dimension
+	 */
+	public float get_dimension(int d){
+		return dim_values[d];
+	}
+
+	/*
+	 * get the plan number for this point
+	 */
+	public int get_plan_no(){
+		return opt_plan_no;
+
+	}
+
+	public double get_cost(){
+		return opt_cost;
+	}
+	
+	int getfpc_plan(){
+		return this.fpc_plan;
+	}
+	
+	void putfpc_plan(int p_no){
+		this.fpc_plan=p_no;
+	}
+
+	double getfpc_cost(){
+		return this.fpc_cost;
+	}
+	
+	void putfpc_cost(double cost){
+		this.fpc_cost=cost;
+	}
+
+	public int get_no_of_dimension(){
+		return dimension;
+	}
+
+	public void printLocation(){
+
+		for(int i=0;i<dimension;i++){
+			System.out.print(dim_values[i]+",");
+		}
+		System.out.println("   having cost = "+opt_cost+" and plan "+opt_plan_no);
+	}
+
+	public void getPlan() throws PicassoException, IOException {
+
+		Vector textualPlan = new Vector();
+		StringBuilder XML_Plan = new StringBuilder();
+		Plan plan = new Plan();
+		String xml_query = null;
+		String cost_str = null;
+		try{      	
+			Statement stmt = conn.createStatement();
+			String exp_query = new String("Selectivity ( "+predicates+ ") ( ");
+			for(int i=0;i<dimension;i++){
+				if(i !=dimension-1){
+					exp_query = exp_query + dim_values[i]+ ", ";
+				}
+				else{
+					exp_query = exp_query + dim_values[i] + " ) ";
+				}
+			}
+			exp_query = exp_query + select_query;
+			xml_query = "explain (format xml) "+ exp_query ;
+			exp_query = "explain " + exp_query ;
+			//String exp_query = new String(query_opt_spill);
+			//System.out.println(exp_query);
+			stmt.execute("set work_mem = '100MB'");
+			//NOTE,Settings: 4GB for DS and 1GB for H
+			if(database_conn==0){
+				stmt.execute("set effective_cache_size='1GB'");
+			}
+			else{
+				stmt.execute("set effective_cache_size='4GB'");
+			}
+
+			stmt.execute("set  seq_page_cost = 1");
+			stmt.execute("set  random_page_cost=4");
+			stmt.execute("set cpu_operator_cost=0.0025");
+			stmt.execute("set cpu_index_tuple_cost=0.005");
+			stmt.execute("set cpu_tuple_cost=0.01");
+			
+			ResultSet rs = stmt.executeQuery(exp_query);
+			//System.out.println("coming here");
+			while(rs.next())  {
+				textualPlan.add(rs.getString(1)); 
+			}
+			
+			cost_str = textualPlan.get(0).toString();
+			String regx;
+		     Pattern pattern;
+		     Matcher matcher;
+		     double execCost=-1;
+			regx = Pattern.quote("..") + "(.*?)" + Pattern.quote("rows=");
+			assert(textualPlan.get(0).toString().contains("rows")): "this string does not rows! should be a mistake";
+			pattern = Pattern.compile(regx);
+			matcher = pattern.matcher(cost_str);
+			while(matcher.find()){
+				execCost = Float.parseFloat(matcher.group(1));
+			//	System.out.println("execCost = "+execCost);
+			}
+			
+			assert(execCost>0): "execution cost is less than or equal to zero";
+			
+			this.opt_cost = execCost;
+			assert(textualPlan.size()>=0): "Empty plan from the optimizer call";
+				
+			
+			ResultSet rs_xml = stmt.executeQuery(xml_query);
+			
+			while(rs_xml.next())  {
+				XML_Plan.append(rs_xml.getString(1)); 
+			}			
+			
+			rs.close();
+			rs_xml.close();
+			stmt.close();
+			
+			
+		}
+		catch(Exception e){
+			e.printStackTrace();
+			ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+			throw new PicassoException("Error getting plan: "+e);
+		}
+
+		String str = (String)textualPlan.remove(0);
+		CreateNode(plan, str, 0, -1);
+		//plan.isOptimal = true;
+		FindChilds(plan, 0, 1, textualPlan, 2);
+		//if(PicassoConstants.saveExtraPlans == false ||  PicassoConstants.topkquery == false)
+		SwapSORTChilds(plan);
+		 
+		
+		int planNumber = -1;
+		//plan = database.getPlan(newQuery,query);
+		String planDiffLevel = "SUB-OPERATOR";
+			plan.computeHash(planDiffLevel);
+			planNumber = plan.getIndexInVector(plans_vector);                  // see if the plan is new or already seen
+		
+			
+		plan.setPlanNo(planNumber);
+		if(planNumber == -1) {
+			plans_vector.add(plan);
+			planNumber=plans_vector.size() - 1;
+			plan.setPlanNo(planNumber);
+			//Dump xml plan
+			String xml_path = apktPath+"offlinePB/"+"planStructureXML/"+plan.getPlanNo()+".xml";
+			File xml_file =new File(xml_path);
+			//Execute the xml query
+			
+			try{
+				FileWriter fw_xml = new FileWriter(xml_file, false); 
+				fw_xml.write(XML_Plan.toString());
+				fw_xml.close();
+			}
+			catch(Exception e){
+				e.printStackTrace();
+				ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+				throw new PicassoException("Error getting plan: "+e);
+			}
+ 
+		}
+		
+		//set the optimal plan and cost here
+		this.opt_plan_no = planNumber;
+		
+	}
+	
+	int CreateNode(Plan plan, String str, int id, int parentid) {
+
+		int id1; //by Srinivas
+		if(id==1)
+			leafid=-1;
+		Node node = new Node();
+
+		if(str.indexOf("->")>=0)
+			str=str.substring(str.indexOf("->")+2).trim();
+		String cost = str.substring(str.indexOf("..") + 2, str.indexOf("rows") - 1);
+		String card = str.substring(str.indexOf("rows") + 5, str.indexOf("width")-1);
+		//by Srinivas
+		//-------------------------------------------------------------------
+		//	        String actual_substring = str.substring(str.indexOf("actual") + 2);
+		//	        String actual_cost = actual_substring.substring(str.indexOf("..") + 2, str.indexOf("rows") - 1);
+		//	        String actual_card = actual_substring.substring(str.indexOf("rows") + 5, str.indexOf("width")-1);
+
+		//-------------------------------------------------------------------
+
+		if(str.indexOf(" on ") != -1 ||str.startsWith("Subquery Scan")) {
+			node.setId(id++);
+			node.setParentId(parentid);
+			node.setCost(Double.parseDouble(cost));
+			node.setCard(Double.parseDouble(card));
+			//By Srinivas
+			//------------------------------------------------------
+			id1 = id-1;
+			node.setCost(Double.parseDouble(cost));
+			node.setCard(Double.parseDouble(card));
+			//-------------------------------------------------------
+			if(str.startsWith("Index Scan")){
+				node.setName("Index Scan");
+			}
+			else if(str.startsWith("Subquery Scan")){
+				node.setName("Subquery Scan");
+			}
+			else{
+				node.setName(str.substring(0,str.indexOf(" on ")).trim());
+			}
+			plan.setNode(node,plan.getSize());
+			node = new Node();
+			node.setId(leafid--);
+			node.setParentId(id-1);
+			node.setCost(0.0);
+			node.setCard(0.0);
+			if(str.startsWith("Subquery Scan"))
+				node.setName(str.trim().substring("Subquery Scan".length(),str.indexOf("(")).trim());
+			else
+				node.setName(str.substring(str.indexOf(" on ")+3,str.indexOf("(")).trim());
+			plan.setNode(node,plan.getSize());
+		} else {
+			node.setId(id++);
+			node.setParentId(parentid);
+			node.setCost(Double.parseDouble(cost));
+			node.setCard(Double.parseDouble(card));
+			if(!str.substring(str.indexOf("("),str.indexOf(")")+1).trim().contains("cost"))
+				node.setPredicate(str.substring(str.indexOf("("),str.indexOf(")")+1).trim());
+			node.setName(str.substring(0,str.indexOf("(")).trim());
+			//node.setName(str.substring(0,str.indexOf(")")).trim()); //changed by Srinivas
+			//id1 = id -1;
+			//node.setName(str.substring(0,str.indexOf("(")).trim()+id1); //changed by Srinivas
+			plan.setNode(node,plan.getSize());
+		}
+
+		return id;
+	}
+
+
+	boolean optFlag;
+	int FindChilds(Plan plan, int parentid, int id, Vector text, int childindex) {
+		String str ="";
+		int oldchildindex=-5;
+		while(text.size()>0) {
+			int stindex;            
+			str = (String)text.remove(0);
+
+
+			//  System.out.println("findling_childs");
+
+
+
+
+			if (str.indexOf("Plan Type: STABLE")>=0)
+				optFlag = false;
+			if(str.trim().startsWith("InitPlan"))
+				stindex=str.indexOf("InitPlan");
+			else if(str.trim().startsWith("SubPlan"))
+				stindex=str.indexOf("SubPlan");
+			else
+				stindex=str.indexOf("->");
+
+
+			if(stindex==-1)
+				continue;
+			if(stindex==oldchildindex) {
+				childindex=oldchildindex;
+				oldchildindex=-5;
+			}
+			if(stindex < childindex) {
+				text.add(0,str);
+				break;
+			}
+
+
+			if(stindex>childindex) {
+				if(str.trim().startsWith("InitPlan")||str.trim().startsWith("SubPlan")) {
+					str = (String)text.remove(0);
+					stindex=str.indexOf("->");
+					oldchildindex=childindex;
+					childindex=str.indexOf("->");
+				}
+				text.add(0,str);
+				id = FindChilds(plan, id-1, id, text, stindex);
+				continue;
+			}
+
+			if(str.trim().startsWith("InitPlan")||str.trim().startsWith("SubPlan")) {
+				str = (String)text.remove(0);
+				stindex=str.indexOf("->");
+				oldchildindex=childindex;
+				childindex=str.indexOf("->");
+			}
+
+
+
+			if(stindex==childindex)
+				id = CreateNode(plan,str, id, parentid);
+		}
+		return id;
+	}
+
+	void SwapSORTChilds(Plan plan) {
+		for(int i =0;i<plan.getSize();i++) {
+			Node node = plan.getNode(i);
+			if(node.getName().equals("Sort")) {
+				int k=0;
+				Node[] chnodes = new Node[2];
+				for(int j=0;j<plan.getSize();j++) {
+					if(plan.getNode(j).getParentId() == node.getId()) {
+						if(k==0)chnodes[0]=plan.getNode(j);
+						else chnodes[1]=plan.getNode(j);
+						k++;
+					}
+				}
+				if(k>=2) {
+					k=chnodes[0].getId();
+					chnodes[0].setId(chnodes[1].getId());
+					chnodes[1].setId(k);
+
+					for(int j=0;j<plan.getSize();j++) {
+						if(plan.getNode(j).getParentId() == chnodes[0].getId())
+							plan.getNode(j).setParentId(chnodes[1].getId());
+						else if(plan.getNode(j).getParentId() == chnodes[1].getId())
+							plan.getNode(j).setParentId(chnodes[0].getId());
+					}
+				}
+			}
+		}
+	}
+
+	
 }
