@@ -17,6 +17,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.PrintWriter;
 import java.io.Serializable;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -25,6 +26,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.Vector;
@@ -43,7 +45,7 @@ public class onlinePB {
 	static int resolution;
 	static int totalPoints;
 	static DataValues[] data;
-	static double selectivity[];
+	static float selectivity[];
 	static String apktPath;
 	static String qtName ;
 	//static Jdbc3PoolingDataSource source;
@@ -54,15 +56,19 @@ public class onlinePB {
 	static String select_query;
 	static String predicates;
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
-	static double qrun_sel[];
-	static double minimum_selectivity = 0.001;
-	static double alpha = 2;
-	static double beta;
+	static float qrun_sel[];
+	static float minimum_selectivity = 6E-5f;
+	static float alpha = 2;
+	static float beta;
 	static boolean DEBUG_LEVEL_2 = true;
 	static boolean DEBUG_LEVEL_1 = true;
 	static int opt_call = 0;
+	static boolean visualisation_2D = true;
 	static String XMLPath = null; 
-	public static void main(String[] args) throws IOException, SQLException {
+	static HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
+	static ArrayList<location> all_contour_points = new ArrayList<location>();
+	
+	public static void main(String[] args) throws IOException, SQLException, PicassoException {
 	
 		onlinePB obj = new onlinePB();  
 		obj.loadPropertiesFile();
@@ -80,10 +86,10 @@ public class onlinePB {
 		obj.readpkt(gdp, true);
 		obj.loadPropertiesFile();
 		
-		beta = Math.pow(alpha,(1.0 / dimension*1.0));
-		qrun_sel = new double[dimension];
+		beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
+		qrun_sel = new float[dimension];
 		for(int d=0;d<dimension;d++)
-			qrun_sel[d] = -1.0;
+			qrun_sel[d] = -1.0f;
 		
 		XMLPath = new String(apktPath+"onlinePB.xml");
 		
@@ -120,6 +126,18 @@ public class onlinePB {
 		for(int d=0;d<dimension;d++)
 			qrun_sel[d] = minimum_selectivity;
 		double min_cost = obj.getFPCCost(qrun_sel, -1);
+		
+		if(visualisation_2D){
+			obj.dimension = 2;
+			float [] h_loc_arr = {1.0f,1.0f};
+			location h_loc = new location(h_loc_arr,obj);
+			h_cost = h_loc.get_cost();
+			
+			float [] l_loc_arr = {minimum_selectivity,minimum_selectivity};
+			location l_loc = new location(l_loc_arr,obj);
+			min_cost = l_loc.get_cost();
+		}
+		
 		double cost = min_cost;
 		double ratio = h_cost/min_cost;
 		assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
@@ -127,7 +145,7 @@ public class onlinePB {
 
 		//reset the values to -1 for the rest of the code 
 		for(int d=0;d<dimension;d++)
-			qrun_sel[d] = -1.0;
+			qrun_sel[d] = -1.0f;
 		
 		i = 1;
 		
@@ -143,10 +161,15 @@ public class onlinePB {
 				cost = h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
 			System.out.println("Contour "+i+" cost : "+cost);
-			
+			all_contour_points.clear();			
 			obj.generateCoveringContours(order,cost);
-			System.out.println("The running optimization calls are "+opt_call);
 			
+			writeContourPointstoFile(i);
+			System.out.println("The running optimization calls are "+opt_call);
+			int size_of_contour = all_contour_points.size();
+			ContourPointsMap.put(i, new ArrayList<location>(all_contour_points)); //storing the contour points
+			System.out.println("Size of contour"+size_of_contour );
+
 			cost *=2;
 			i++;
 
@@ -160,7 +183,7 @@ public class onlinePB {
 
 	}
 	
-	private void printSelectivityCost(double  sel_array[], double cost){
+	private void printSelectivityCost(float  sel_array[], double cost){
 		
 		System.out.println();
 		for(int i=0;i<dimension;i++)
@@ -170,7 +193,42 @@ public class onlinePB {
 		
 	}
 	
-	public void generateCoveringContours(ArrayList<Integer> order,double cost) throws IOException, SQLException
+	
+	private static void writeContourPointstoFile(int contour_no) {
+
+		try {
+	    
+//	    String content = "This is the content to write into file";
+
+
+         File file = new File("/home/srinivas/spillBound/data/others/covering_contours/"+qtName+contour_no+".txt"); 
+           
+	    // if file doesn't exists, then create it
+	    if (!file.exists()) {
+	        file.createNewFile();
+	    }
+	    
+
+	    FileWriter writer = new FileWriter(file, false);
+
+	    
+	    PrintWriter pw = new PrintWriter(writer);
+	    //Take iterator over the list
+	    for(location p : all_contour_points) {		 
+	   	 pw.print(p.get_dimension(0) + "\t"+p.get_dimension(1)+"\n");
+	    }
+	    pw.close();
+//	    pwaz.close();
+	    writer.close();
+	    
+		} catch (IOException e) {
+	    e.printStackTrace();
+	}
+		
+	}
+
+	
+	public void generateCoveringContours(ArrayList<Integer> order,double cost) throws IOException, SQLException, PicassoException
 	{
 		String funName = "generateCoveringContours";
 		//learntDim contains the dimensions already learnt (which is null initially)
@@ -182,7 +240,7 @@ public class onlinePB {
 			if(learntDim.contains(order.get(i))!=true)
 			{
 				remainingDimList.add(order.get(i));
-				qrun_sel[order.get(i)] = -1.0;
+				qrun_sel[order.get(i)] = -1.0f;
 			}			
 		}
 
@@ -212,7 +270,7 @@ public class onlinePB {
 					last_dim1 = i;
 				}
 				else 
-				{ 	
+				{ 	 
 					assert(last_dim1 != -1) : last_dim1+" dimension should be set at this point of time";
 					assert(qrun_sel[i] == -1.0) : "the selectivity values are not yet assigned";
 					last_dim2 = i;
@@ -227,7 +285,7 @@ public class onlinePB {
 			
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = minimum_selectivity;
 			double optimization_cost_low = getFPCCost(qrun_sel, -1);
-			qrun_sel[last_dim1] = qrun_sel[last_dim2] = 1.0;
+			qrun_sel[last_dim1] = qrun_sel[last_dim2] = 1.0f;
 			double optimization_cost_high = getFPCCost(qrun_sel, -1);
 			
 			assert(optimization_cost_low <= optimization_cost_high): "violation of PCM";
@@ -246,10 +304,11 @@ public class onlinePB {
 			else{
 				
 				//just the initialize the last two dimensions;
-				qrun_sel[last_dim2] = 1.0;
+				qrun_sel[last_dim2] = 1.0f;
 				qrun_sel[last_dim1] = minimum_selectivity;
 				
-				double optimization_cost = getFPCCost(qrun_sel, -1);
+				location loc = new location(qrun_sel, this);
+				double optimization_cost = loc.get_cost(); 
 				opt_call++;
 				
 				if(DEBUG_LEVEL_2)
@@ -266,7 +325,7 @@ public class onlinePB {
 						if (optimization_cost <=  target_cost2_dim2)
 							break;
 						
-						double old_sel = qrun_sel[last_dim2];
+						float old_sel = qrun_sel[last_dim2];
 						
 						qrun_sel[last_dim2] = old_sel/beta;
 
@@ -276,7 +335,8 @@ public class onlinePB {
 						
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+old_sel/(qrun_sel[last_dim2]*beta));
-						optimization_cost = getFPCCost(qrun_sel, -1);
+						loc = new location(qrun_sel, this);
+						optimization_cost = loc.get_cost();
 						
 						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
 						if(DEBUG_LEVEL_2)
@@ -294,8 +354,9 @@ public class onlinePB {
 
 					//we are forward jumping along last_dim1 dimension
 					//qrun_sel[last_dim1] = minimum_selectivity;
-					optimization_cost = getFPCCost(qrun_sel, -1);
-					
+					loc = new location(qrun_sel, this);
+					optimization_cost = loc.get_cost();
+					all_contour_points.add(loc);
 					opt_call++;
 					
 					double target_cost1_dim1 = Math.pow(beta, dimension)*cost;
@@ -313,7 +374,7 @@ public class onlinePB {
 						if(DEBUG_LEVEL_2)
 							System.out.println("The forward jump size is "+(beta -1)*forward_jump+" from selectivity "+qrun_sel[last_dim1]);
 						
-						double old_sel = qrun_sel[last_dim1]; 
+						float old_sel = qrun_sel[last_dim1]; 
 						qrun_sel[last_dim1] += (beta -1)*forward_jump; //check this again!
 						
 						if(qrun_sel[last_dim1]/(old_sel*beta) < 1.0)
@@ -321,14 +382,15 @@ public class onlinePB {
 						
 						
 						if(qrun_sel[last_dim1] >= 1.0){
-							qrun_sel[last_dim1] = 1.0;
+							qrun_sel[last_dim1] = 1.0f;
 						}
 						
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+qrun_sel[last_dim1]/(old_sel*beta));
 						
-						
-						optimization_cost = getFPCCost(qrun_sel, -1);
+						loc = new location(qrun_sel, this);
+						optimization_cost = loc.get_cost();
+						all_contour_points.add(loc);
 						
 						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
 						if(DEBUG_LEVEL_2)
@@ -370,10 +432,10 @@ public class onlinePB {
 	private double calculateJumpSize( int dim, double base_cost) throws SQLException {
 
 		
-		double delta[] = {0.1,0.2,0.3};
-			double sum_slope = 0, divFactor =0;
-			for(double del: delta){
-				double sel[] = new double[dimension];
+		float delta[] = {0.1f,0.2f,0.3f};
+			float sum_slope = 0, divFactor =0;
+			for(float del: delta){
+				float sel[] = new float[dimension];
 
 				for(int d=0; d<dimension;d++)
 					sel[d] = qrun_sel[d];
@@ -544,7 +606,7 @@ public class onlinePB {
 //
 
 	
-	public double getFPCCost(double selectivity[], int p_no) throws SQLException{
+	public double getFPCCost(float selectivity[], int p_no) throws SQLException{
 		//Get the path to p_no.xml
 		
 		
@@ -951,7 +1013,7 @@ class location implements Serializable
 				textualPlan.add(rs.getString(1)); 
 			}
 			
-			cost_str = textualPlan.get(0).toString();
+			cost_str = new String(textualPlan.get(0).toString());
 			String regx;
 		     Pattern pattern;
 		     Matcher matcher;

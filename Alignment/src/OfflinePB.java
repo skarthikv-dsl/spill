@@ -128,7 +128,7 @@ public class OfflinePB
 	 static HashMap<Integer,Double> minContourCostMap = new HashMap<Integer,Double>();
 	 static double learning_cost = 0;
 	 static boolean done = false;
-	 
+	 static boolean visualisation_2D = true;
 	 float[] actual_sel;
 	 
 	 //for ASO calculation 
@@ -166,21 +166,9 @@ public class OfflinePB
 		//Calculate Native MSO
 		//obj.findingNativeMSO();
 		
-		int i;
-		double h_cost = obj.getOptimalCost(totalPoints-1);
-		double min_cost = obj.getOptimalCost(0);
-		double ratio = h_cost/min_cost;
-	//	System.out.println("-------------------------  ------\n"+qtName+"    alpha="+alpha+"\n-------------------------  ------"+"\n"+"Highest Cost ="+h_cost+", \nRatio of highest cost to lowest cost ="+ratio);
-		System.out.println("the ratio of C_max/c_min is "+ratio);
-		
-		i = 1;
-		
-		double cost = obj.getOptimalCost(0);
-		//cost*=2;
-		
-		//reload the properties file for the new resolution and total points
 		obj.loadPropertiesFile();
 		obj.loadSelectivity();
+
 		
 		try{
 			System.out.println("entered DB conn1");
@@ -206,6 +194,34 @@ public class OfflinePB
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 
+		int i;
+		double h_cost = obj.getOptimalCost(totalPoints-1);
+		double min_cost = obj.getOptimalCost(0);
+		
+		if(visualisation_2D){
+			obj.dimension = 2;
+			int [] h_loc_arr = {resolution-1,resolution-1};
+			location h_loc = new location(obj.convertIndextoSelectivity(h_loc_arr),obj);
+			h_cost = h_loc.get_cost();
+			
+			int [] l_loc_arr = {0,0};
+			location l_loc = new location(obj.convertIndextoSelectivity(l_loc_arr),obj);
+			min_cost = l_loc.get_cost();
+		}
+		
+		double ratio = h_cost/min_cost;
+	//	System.out.println("-------------------------  ------\n"+qtName+"    alpha="+alpha+"\n-------------------------  ------"+"\n"+"Highest Cost ="+h_cost+", \nRatio of highest cost to lowest cost ="+ratio);
+		System.out.println("the ratio of C_max/c_min is "+ratio);
+		
+		i = 1;
+		
+		double cost = min_cost;
+		//cost*=2;
+		
+		//reload the properties file for the new resolution and total points
+		
+		
+
 		
 		while(cost < 2*h_cost)
 		{
@@ -219,8 +235,7 @@ public class OfflinePB
 			
 			obj.nexusAlgoContour(cost); 
 
-			
-			//writeContourPointstoFile(i);
+			writeContourPointstoFile(i);
 			int size_of_contour = all_contour_points.size();
 			ContourPointsMap.put(i, new ArrayList<location>(all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
@@ -1105,42 +1120,25 @@ public void initialize(int location) {
 //	    String content = "This is the content to write into file";
 
 
-         File filex = new File("/home/dsladmin/Srinivas/data/others/contours/"+"x"+contour_no+".txt"); 
-         File filey = new File("/home/dsladmin/Srinivas/data/others/contours/"+"y"+contour_no+".txt"); 
-         //File filez = new File("/home/dsladmin/Srinivas/data/others/contours/"+"z"+contour_no+".txt"); 
+         File file = new File("/home/srinivas/spillBound/data/others/contours/"+qtName+contour_no+".txt"); 
+           
 	    // if file doesn't exists, then create it
-	    if (!filex.exists()) {
-	        filex.createNewFile();
+	    if (!file.exists()) {
+	        file.createNewFile();
 	    }
-	    if (!filey.exists()) {
-	        filey.createNewFile();
-	    }
-//	    if (!filez.exists()) {
-//	        filez.createNewFile();
-//	    }
+	    
 
-	    FileWriter writerax = new FileWriter(filex, false);
-//	    FileWriter writeraz = new FileWriter(filez, false);
-	    FileWriter writeray = new FileWriter(filey, false);
+	    FileWriter writer = new FileWriter(file, false);
 
 	    
-	    PrintWriter pwax = new PrintWriter(writerax);
-	    PrintWriter pway = new PrintWriter(writeray);
-//	    PrintWriter pwaz = new PrintWriter(writeraz);
+	    PrintWriter pw = new PrintWriter(writer);
 	    //Take iterator over the list
-	    for(location p : all_contour_points) {
-		    //        System.out.println(p.getX()+":"+p.getY()+": Plan ="+p.p_no);
-	   	 pwax.print((int)p.get_dimension(0) + "\t");
-	   	 pway.print((int)p.get_dimension(1)+ "\t");
-//	   	pwaz.print((int)p.get_dimension(2)+ "\t");
-	   	 
+	    for(location p : all_contour_points) {		 
+	   	 pw.print(p.get_dimension(0) + "\t"+p.get_dimension(1)+"\n");
 	    }
-	    pwax.close();
-	    pway.close();
+	    pw.close();
 //	    pwaz.close();
-	    writerax.close();
-	    writeray.close();
-//	    writeraz.close();
+	    writer.close();
 	    
 		} catch (IOException e) {
 	    e.printStackTrace();

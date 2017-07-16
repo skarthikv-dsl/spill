@@ -237,7 +237,7 @@ public class GCI3D
 //			for(ArrayList<Integer> order:allPermutations){
 //				System.out.println("Entering the order"+order);
 //				learntDim.clear();
-//				learntDimIndices.clear();
+//			 	learntDimIndices.clear();
 //				obj.getContourPoints(order,cost);
 //			}
 
