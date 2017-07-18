@@ -19,6 +19,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -57,16 +58,23 @@ public class onlinePB {
 	static String predicates;
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
 	static float qrun_sel[];
-	static float minimum_selectivity = 6E-5f;
-	static float alpha = 2;
 	static float beta;
-	static boolean DEBUG_LEVEL_2 = true;
-	static boolean DEBUG_LEVEL_1 = true;
 	static int opt_call = 0;
-	static boolean visualisation_2D = true;
-	static String XMLPath = null; 
 	static HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
-	static ArrayList<location> all_contour_points = new ArrayList<location>();
+	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
+	static ArrayList<location> contour_points = new ArrayList<location>();
+	static ArrayList<location> non_contour_points = new ArrayList<location>();
+	
+	//parameters to set
+	static float minimum_selectivity = 1E-3f;
+	static float alpha = 2;
+	static int decimalPrecision = -1;
+	static boolean DEBUG_LEVEL_2 = false;
+	static boolean DEBUG_LEVEL_1 = false;
+	static boolean visualisation_2D = true;
+	static boolean memoization = false;
+	static String XMLPath = null; 
+
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException {
 	
@@ -161,13 +169,15 @@ public class onlinePB {
 				cost = h_cost;
 			System.out.println("---------------------------------------------------------------------------------------------\n");
 			System.out.println("Contour "+i+" cost : "+cost);
-			all_contour_points.clear();			
+			contour_points.clear();			
+			non_contour_points.clear();
 			obj.generateCoveringContours(order,cost);
 			
 			writeContourPointstoFile(i);
 			System.out.println("The running optimization calls are "+opt_call);
-			int size_of_contour = all_contour_points.size();
-			ContourPointsMap.put(i, new ArrayList<location>(all_contour_points)); //storing the contour points
+			int size_of_contour = contour_points.size();
+			ContourPointsMap.put(i, new ArrayList<location>(contour_points)); //storing the contour points
+			non_ContourPointsMap.put(i, new ArrayList<location>(non_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
 
 			cost *=2;
@@ -214,7 +224,7 @@ public class onlinePB {
 	    
 	    PrintWriter pw = new PrintWriter(writer);
 	    //Take iterator over the list
-	    for(location p : all_contour_points) {		 
+	    for(location p : contour_points) {		 
 	   	 pw.print(p.get_dimension(0) + "\t"+p.get_dimension(1)+"\n");
 	    }
 	    pw.close();
@@ -282,11 +292,30 @@ public class onlinePB {
 			assert (remainingDimList.size() + learntDim.size() == dimension) : funName+" : learnt dimension data structures size not matching";
 
 			//for the last two dimensions last_dim1 and last_dim2
+			location loc1, loc2;
+			
 			
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = minimum_selectivity;
-			double optimization_cost_low = getFPCCost(qrun_sel, -1);
+			if((loc1 =locationAlreadyExist(qrun_sel)) ==null){
+				loc1 = new location(qrun_sel,this);
+				non_contour_points.add(loc1);
+				opt_call++;
+			}
+			
+			assert(loc1 != null): "loc1 is null";
+			double optimization_cost_low = loc1.get_cost();
+			
+			
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = 1.0f;
-			double optimization_cost_high = getFPCCost(qrun_sel, -1);
+			if((loc2 = locationAlreadyExist(qrun_sel)) == null){
+				loc2 = new location(qrun_sel,this);
+				non_contour_points.add(loc2);
+				opt_call++;
+			}
+			
+			assert(loc2 !=null): "loc2 is null";
+			double optimization_cost_high = loc2.get_cost();
+			non_contour_points.add(loc2);
 			
 			assert(optimization_cost_low <= optimization_cost_high): "violation of PCM";
 			//check if the origin of this 2D slice is greater cost
@@ -295,7 +324,7 @@ public class onlinePB {
 			
 			if(optimization_cost_low > cost || optimization_cost_high < cost){
 				//do not process the 2D plane
-				opt_call++;
+				
 				return;
 			}
 			
@@ -306,10 +335,16 @@ public class onlinePB {
 				//just the initialize the last two dimensions;
 				qrun_sel[last_dim2] = 1.0f;
 				qrun_sel[last_dim1] = minimum_selectivity;
+				location loc;
 				
-				location loc = new location(qrun_sel, this);
+				if((loc = locationAlreadyExist(qrun_sel)) == null){
+					loc = new location(qrun_sel, this);
+					non_contour_points.add(loc);
+					opt_call++;
+				}
+				assert(loc != null): "location is null";
 				double optimization_cost = loc.get_cost(); 
-				opt_call++;
+				
 				
 				if(DEBUG_LEVEL_2)
 					printSelectivityCost(qrun_sel, optimization_cost);
@@ -335,15 +370,20 @@ public class onlinePB {
 						
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+old_sel/(qrun_sel[last_dim2]*beta));
-						loc = new location(qrun_sel, this);
+						if((loc = locationAlreadyExist(qrun_sel)) == null){
+							loc = new location(qrun_sel, this);
+							non_contour_points.add(loc);
+							//counting the optimization calls
+							opt_call++;
+						}
+						assert(loc != null) : "location is null";
 						optimization_cost = loc.get_cost();
 						
 						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
 						if(DEBUG_LEVEL_2)
 							printSelectivityCost(qrun_sel, optimization_cost);
 						
-						//counting the optimization calls
-						opt_call++;
+						
 					}
 
 					
@@ -354,10 +394,14 @@ public class onlinePB {
 
 					//we are forward jumping along last_dim1 dimension
 					//qrun_sel[last_dim1] = minimum_selectivity;
-					loc = new location(qrun_sel, this);
+					if((loc = locationAlreadyExist(qrun_sel)) == null){
+						loc = new location(qrun_sel, this);
+						contour_points.add(loc);
+						opt_call++;
+					}
+					assert(loc != null) : "location is null";
 					optimization_cost = loc.get_cost();
-					all_contour_points.add(loc);
-					opt_call++;
+					
 					
 					double target_cost1_dim1 = Math.pow(beta, dimension)*cost;
 					while((qrun_sel[last_dim1] < 1.0) && (optimization_cost <= target_cost1_dim1))
@@ -388,15 +432,20 @@ public class onlinePB {
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+qrun_sel[last_dim1]/(old_sel*beta));
 						
-						loc = new location(qrun_sel, this);
+						if((loc = locationAlreadyExist(qrun_sel)) == null){
+							loc = new location(qrun_sel, this);
+							contour_points.add(loc);
+							//counting the optimization calls
+							opt_call++;
+						}
+						assert(loc != null) : "location is null";
 						optimization_cost = loc.get_cost();
-						all_contour_points.add(loc);
+						
 						
 						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
 						if(DEBUG_LEVEL_2)
 							printSelectivityCost(qrun_sel, optimization_cost);
-						//counting the optimization calls
-						opt_call++;
+						
 					}
 					
 					
@@ -428,7 +477,42 @@ public class onlinePB {
 	}
 	
 	
+	private location locationAlreadyExist(float[] arr) {
+		
+		if(!memoization)
+			return null;
+		boolean flag = false;
+		assert(ContourPointsMap.keySet().size() == non_ContourPointsMap.keySet().size()) : "sizes mismatch for the contour and non_contoumaps";
+		for(int c : ContourPointsMap.keySet()){
+			for(location loc: ContourPointsMap.get(c)){
+				flag = true;
+				for(int i=0;i<dimension;i++){
+					if(loc.get_dimension(i)!= arr[i]){
+						flag = false;
+						break;
+					}
+				}
+				if(flag==true)
+					return loc;
+			}
+			
+			for(location loc: non_ContourPointsMap.get(c)){
+				flag = true;
+				for(int i=0;i<dimension;i++){
+					if(loc.get_dimension(i)!= arr[i]){
+						flag = false;
+						break;
+					}
+				}
+				if(flag==true)
+					return loc;
+			}
+		}
+		return null;
+	}
 
+	
+	
 	private double calculateJumpSize( int dim, double base_cost) throws SQLException {
 
 		
@@ -854,11 +938,11 @@ public class onlinePB {
 class location implements Serializable
 {
 	private static final long serialVersionUID = 223L;
-	int dimension;
-	int database_conn;
-	String predicates;
-	Connection conn;
-	String select_query;
+	static int dimension;
+	static int database_conn;
+	static String predicates;
+	static Connection conn;
+	static String select_query;
 	int fpc_plan=-1;
 	double fpc_cost = Double.MAX_VALUE;
 	int opt_plan_no;
@@ -868,6 +952,7 @@ class location implements Serializable
 	static int leafid=0;
 	float [] dim_values;
 	static Vector<Plan> plans_vector = new Vector<Plan>();
+	static int decimalPrecision;
 
 	
 	
@@ -879,7 +964,7 @@ class location implements Serializable
 		this.fpc_cost = loc.fpc_cost;
 		this.opt_plan_no = loc.opt_plan_no;
 		this.opt_cost = loc.opt_cost;
-
+		this.decimalPrecision = loc.decimalPrecision;
 		this.dim_values = new float[dimension];
 		//System.arraycopy(pg.dim_values, 0, dim_values, 0, dimension);
 		for(int it=0;it<dimension;it++)
@@ -895,9 +980,10 @@ class location implements Serializable
 		this.predicates  = new String(obj.predicates);
 		this.database_conn = obj.database_conn;
 		this.apktPath = obj.apktPath;
+		this.decimalPrecision = obj.decimalPrecision;
 		dim_values = new float[dimension];
 		for(int i=0;i<dimension;i++){
-			dim_values[i] = arr[i];
+			dim_values[i] = roundToDouble(arr[i]);
 			//		System.out.print(arr[i]+",");
 		}
 		
@@ -913,9 +999,10 @@ class location implements Serializable
 		this.predicates  = new String(obj.predicates);
 		this.database_conn = obj.database_conn;
 		this.apktPath = obj.apktPath;
+		this.decimalPrecision = obj.decimalPrecision;
 		dim_values = new float[dimension];
 		for(int i=0;i<dimension;i++){
-			dim_values[i] = arr[i];
+			dim_values[i] = (arr[i]);
 			//		System.out.print(arr[i]+",");
 		}
 		
@@ -969,6 +1056,12 @@ class location implements Serializable
 		System.out.println("   having cost = "+opt_cost+" and plan "+opt_plan_no);
 	}
 
+	public  float roundToDouble(float d) {
+        BigDecimal bd = new BigDecimal(Float.toString(d));
+        bd = bd.setScale(decimalPrecision, BigDecimal.ROUND_HALF_UP);
+        return bd.floatValue();
+    }
+	
 	public void getPlan() throws PicassoException, IOException {
 
 		Vector textualPlan = new Vector();

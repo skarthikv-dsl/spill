@@ -105,7 +105,7 @@ public class OfflinePB
 	static String select_query;
 	static String predicates;
 	static int database_conn=1;
-	
+	static int decimalPrecision = 4;
 	static Vector<Plan> plans_vector = new Vector<Plan>();
 	
 	//The following parameters has to be set manually for each query
@@ -195,8 +195,7 @@ public class OfflinePB
 		}
 
 		int i;
-		double h_cost = obj.getOptimalCost(totalPoints-1);
-		double min_cost = obj.getOptimalCost(0);
+		double h_cost, min_cost; 
 		
 		if(visualisation_2D){
 			obj.dimension = 2;
@@ -208,7 +207,12 @@ public class OfflinePB
 			location l_loc = new location(obj.convertIndextoSelectivity(l_loc_arr),obj);
 			min_cost = l_loc.get_cost();
 		}
-		
+		else{
+			h_cost = obj.getOptimalCost(totalPoints-1);
+			min_cost = obj.getOptimalCost(0);
+
+		}
+			
 		double ratio = h_cost/min_cost;
 	//	System.out.println("-------------------------  ------\n"+qtName+"    alpha="+alpha+"\n-------------------------  ------"+"\n"+"Highest Cost ="+h_cost+", \nRatio of highest cost to lowest cost ="+ratio);
 		System.out.println("the ratio of C_max/c_min is "+ratio);
@@ -440,9 +444,10 @@ public class OfflinePB
 		int[] seed_coords;
 		int[] candidate1_coords;
 		int[] candidate2_coords;
-
+		int iteration_no=0;
 		while(cur_seed >= 0 && focus_dim > 0) 
 		{	
+			System.out.println("Iteration number is "+iteration_no++);
 			seed_coords = getCoordinates(dimension, resolution, cur_seed);
 
 			candidate1_coords = nextLocDim(seed_coords, swap_dim); // find next location by increasing value along swapDim
@@ -1185,11 +1190,11 @@ public void initialize(int location) {
 	
 	// Function which does binary search to find the actual point !!
 // Return the index near to the selecitivity=mid;
-	public int findNearestPoint(double mid)
+	public int findNearestPoint(float mid)
 	{
 		int i;
 		int return_index = 0;
-		double diff;
+		float diff;
 		if(mid >= selectivity[resolution-1])
 			return resolution-1;
 		for(i=0;i<resolution;i++)
