@@ -66,13 +66,13 @@ public class onlinePB {
 	static ArrayList<location> non_contour_points = new ArrayList<location>();
 	
 	//parameters to set
-	static float minimum_selectivity = 1E-3f;
+	static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
-	static int decimalPrecision = -1;
+	static int decimalPrecision = 5;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
-	static boolean visualisation_2D = true;
-	static boolean memoization = false;
+	static boolean visualisation_2D = false;
+	static boolean memoization = true;
 	static String XMLPath = null; 
 
 	
@@ -83,7 +83,7 @@ public class onlinePB {
 		String pktPath = apktPath + qtName + ".apkt" ;
 		String pktPath_new = apktPath + qtName + "_new9.4.apkt";
 		System.out.println("Query Template is "+qtName);
-
+		minimum_selectivity = obj.roundToDouble(minimum_selectivity);
 		
 		ADiagramPacket gdp = obj.getGDP(new File(pktPath_new));
 		dimension = gdp.getDimension();
@@ -94,12 +94,8 @@ public class onlinePB {
 		obj.readpkt(gdp, true);
 		obj.loadPropertiesFile();
 		
-		beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
-		qrun_sel = new float[dimension];
-		for(int d=0;d<dimension;d++)
-			qrun_sel[d] = -1.0f;
 		
-		XMLPath = new String(apktPath+"onlinePB.xml");
+
 		
 		try{
 			System.out.println("entered DB conn1");
@@ -129,11 +125,8 @@ public class onlinePB {
 		
 		//generating the contours contourwise
 		
-		int i;
-		h_cost = obj.getOptimalCost(obj.totalPoints-1);
-		for(int d=0;d<dimension;d++)
-			qrun_sel[d] = minimum_selectivity;
-		double min_cost = obj.getFPCCost(qrun_sel, -1);
+		int i;double min_cost;
+
 		
 		if(visualisation_2D){
 			obj.dimension = 2;
@@ -145,7 +138,22 @@ public class onlinePB {
 			location l_loc = new location(l_loc_arr,obj);
 			min_cost = l_loc.get_cost();
 		}
+		else{
+			h_cost = obj.getOptimalCost(obj.totalPoints-1);
+			qrun_sel = new float[dimension];
+			for(int d=0;d<dimension;d++)
+				qrun_sel[d] = minimum_selectivity;
+			min_cost = obj.getFPCCost(qrun_sel, -1);
+
+		}
 		
+		
+		qrun_sel = new float[dimension];
+		for(int d=0;d<dimension;d++)
+			qrun_sel[d] = -1.0f;
+		
+		XMLPath = new String(apktPath+"onlinePB.xml");
+		beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
 		double cost = min_cost;
 		double ratio = h_cost/min_cost;
 		assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
@@ -171,6 +179,8 @@ public class onlinePB {
 			System.out.println("Contour "+i+" cost : "+cost);
 			contour_points.clear();			
 			non_contour_points.clear();
+			if(i==5)
+				System.out.println("Interesting");
 			obj.generateCoveringContours(order,cost);
 			
 			writeContourPointstoFile(i);
@@ -227,6 +237,9 @@ public class onlinePB {
 	    for(location p : contour_points) {		 
 	   	 pw.print(p.get_dimension(0) + "\t"+p.get_dimension(1)+"\n");
 	    }
+	    for(location p : non_contour_points) {		 
+		   	 pw.print(p.get_dimension(0) + "\t"+p.get_dimension(1)+"\n");
+		 }
 	    pw.close();
 //	    pwaz.close();
 	    writer.close();
@@ -243,7 +256,7 @@ public class onlinePB {
 		String funName = "generateCoveringContours";
 		//learntDim contains the dimensions already learnt (which is null initially)
 		//learntDimIndices contains the exact point in the space for the learnt dimensions
-
+		
 		ArrayList<Integer> remainingDimList = new ArrayList<Integer>();
 		for(int i=0;i<order.size();i++)
 		{
@@ -362,7 +375,7 @@ public class onlinePB {
 						
 						float old_sel = qrun_sel[last_dim2];
 						
-						qrun_sel[last_dim2] = old_sel/beta;
+						qrun_sel[last_dim2] = roundToDouble(old_sel/beta);
 
 						
 						if(qrun_sel[last_dim2] <= minimum_selectivity)
@@ -421,9 +434,12 @@ public class onlinePB {
 						float old_sel = qrun_sel[last_dim1]; 
 						qrun_sel[last_dim1] += (beta -1)*forward_jump; //check this again!
 						
+						
 						if(qrun_sel[last_dim1]/(old_sel*beta) < 1.0)
 							qrun_sel[last_dim1] = old_sel*beta;
 						
+						//just rounding up the float value
+						qrun_sel[last_dim1] = roundToDouble(qrun_sel[last_dim1]); 
 						
 						if(qrun_sel[last_dim1] >= 1.0){
 							qrun_sel[last_dim1] = 1.0f;
@@ -483,7 +499,7 @@ public class onlinePB {
 			return null;
 		boolean flag = false;
 		assert(ContourPointsMap.keySet().size() == non_ContourPointsMap.keySet().size()) : "sizes mismatch for the contour and non_contoumaps";
-		for(int c : ContourPointsMap.keySet()){
+		for(int c = 1; c<=ContourPointsMap.keySet().size(); c++){
 			for(location loc: ContourPointsMap.get(c)){
 				flag = true;
 				for(int i=0;i<dimension;i++){
@@ -760,6 +776,7 @@ public class onlinePB {
 				String str1 = rs.getString(1);
 				
 				
+				if(false){
 				if(p_no == -1 && xml_query!=null){
 					ResultSet rs_xml = stmt.executeQuery(xml_query);
 					StringBuilder xplan = new StringBuilder();
@@ -781,7 +798,7 @@ public class onlinePB {
 						}
 					}
 				}
-				
+				}
 				//System.out.println(str1);
 				
 				//System.out.println(str1);
@@ -811,7 +828,11 @@ public class onlinePB {
 		
 	}
 
-	
+	public  float roundToDouble(float d) {
+        BigDecimal bd = new BigDecimal(Float.toString(d));
+        bd = bd.setScale(decimalPrecision, BigDecimal.ROUND_HALF_UP);
+        return bd.floatValue();
+    }
 	
 	double getOptimalCost(int index)
 	{

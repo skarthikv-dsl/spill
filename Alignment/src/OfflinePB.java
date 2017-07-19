@@ -1200,7 +1200,7 @@ public void initialize(int location) {
 		for(i=0;i<resolution;i++)
 		{
 			diff = mid - selectivity[i];
-			if(diff <= 0)
+			if(diff <= 0f)
 			{
 				return_index = i;
 				break;
