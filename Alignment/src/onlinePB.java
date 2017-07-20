@@ -544,7 +544,12 @@ public class onlinePB {
 				double fpc_cost = 0;
 				fpc_cost = getFPCCost(sel, -2);
 				
-				sum_slope += (fpc_cost - base_cost)/(del*(sel[dim]/((1+del))));
+				//to remove the effects of jumps but this satisfies the concavity assumption
+				if(fpc_cost >=  (1+del)*base_cost)
+					fpc_cost = (1+del)*base_cost;
+				
+				float sel_diff = del*(sel[dim]/(1+del));
+				sum_slope += (fpc_cost - base_cost)/(sel_diff);
 				if(DEBUG_LEVEL_2)
 				{
 					System.out.println("Dim = "+dim+" fpc = "+(fpc_cost)+" base cost = "+base_cost+" neighbour location = "+sel[dim]+" base location = "+sel[dim]/(1+del));
