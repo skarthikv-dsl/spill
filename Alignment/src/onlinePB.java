@@ -60,12 +60,14 @@ public class onlinePB {
 	static float qrun_sel[];
 	static float beta;
 	static int opt_call = 0;
+	static int fpc_call = 0;
 	static HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
 	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
 	static ArrayList<location> contour_points = new ArrayList<location>();
 	static ArrayList<location> non_contour_points = new ArrayList<location>();
 	
 	//parameters to set
+	//static float minimum_selectivity = 0.000064f;
 	static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
 	static int decimalPrecision = 5;
@@ -78,6 +80,7 @@ public class onlinePB {
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException {
 	
+		long startTime = System.nanoTime();
 		onlinePB obj = new onlinePB();  
 		obj.loadPropertiesFile();
 		String pktPath = apktPath + qtName + ".apkt" ;
@@ -179,12 +182,14 @@ public class onlinePB {
 			System.out.println("Contour "+i+" cost : "+cost);
 			contour_points.clear();			
 			non_contour_points.clear();
-			if(i==5)
+			if(i==4)
 				System.out.println("Interesting");
 			obj.generateCoveringContours(order,cost);
-			
-			writeContourPointstoFile(i);
+
+			if(visualisation_2D)
+				writeContourPointstoFile(i);
 			System.out.println("The running optimization calls are "+opt_call);
+			System.out.println("The running FPC calls are "+fpc_call);
 			int size_of_contour = contour_points.size();
 			ContourPointsMap.put(i, new ArrayList<location>(contour_points)); //storing the contour points
 			non_ContourPointsMap.put(i, new ArrayList<location>(non_contour_points)); //storing the contour points
@@ -195,11 +200,16 @@ public class onlinePB {
 
 		}
 		System.out.println("the number of optimization calls are "+opt_call);
+		System.out.println("the number of FPC calls are "+fpc_call);
+		
 		
 
 		if (conn != null) {
 	        try { conn.close(); } catch (SQLException e) {}
 	    }
+		
+		long endTime = System.nanoTime();
+		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
 
 	}
 	
@@ -309,7 +319,7 @@ public class onlinePB {
 			
 			
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = minimum_selectivity;
-			if((loc1 =locationAlreadyExist(qrun_sel)) ==null){
+			if((loc1 =locationAlreadyExist(qrun_sel)) == null){
 				loc1 = new location(qrun_sel,this);
 				non_contour_points.add(loc1);
 				opt_call++;
@@ -362,14 +372,19 @@ public class onlinePB {
 				if(DEBUG_LEVEL_2)
 					printSelectivityCost(qrun_sel, optimization_cost);
 				
+				
 				//we are reverse jumping along last_dim2 dimension
 				for(;;){
 					
+					
+					boolean came_inside_dim2_loop = false;
 					double target_cost1_dim2 = Math.pow(beta, dimension-2)*cost;
+					double target_cost2_dim2 = Math.pow(beta, dimension-1)*cost;
 					while((qrun_sel[last_dim2] > minimum_selectivity) && (target_cost1_dim2 <= optimization_cost))
 					{
 
-						double target_cost2_dim2 = Math.pow(beta, dimension-1)*cost;
+						came_inside_dim2_loop = true;
+						
 						if (optimization_cost <=  target_cost2_dim2)
 							break;
 						
@@ -381,6 +396,7 @@ public class onlinePB {
 						if(qrun_sel[last_dim2] <= minimum_selectivity)
 							qrun_sel[last_dim2] = minimum_selectivity;
 						
+						assert(qrun_sel[last_dim2] <= old_sel) : "selectivity not decreasing, even if it has to";
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+old_sel/(qrun_sel[last_dim2]*beta));
 						if((loc = locationAlreadyExist(qrun_sel)) == null){
@@ -392,37 +408,53 @@ public class onlinePB {
 						assert(loc != null) : "location is null";
 						optimization_cost = loc.get_cost();
 						
+						if(qrun_sel[last_dim1] > minimum_selectivity)
+							assert (optimization_cost >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+optimization_cost+" and contour cost = "+cost;
 						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
 						if(DEBUG_LEVEL_2)
 							printSelectivityCost(qrun_sel, optimization_cost);
 						
 						
 					}
-
 					
 					//if we hit the boundary then we are done
-					if(qrun_sel[last_dim2] <= minimum_selectivity)
+					if(qrun_sel[last_dim2] <= minimum_selectivity){
+						qrun_sel[last_dim2] = minimum_selectivity;
+						if(!ContourLocationAlreadyExist(loc.dim_values))
+							contour_points.add(loc);
 						break;
+					}
 					
+					
+					if(came_inside_dim2_loop)
+						assert(optimization_cost <= target_cost2_dim2 && optimization_cost >=target_cost1_dim2) : "not in the valid cost range for dim2";
+					
+
 
 					//we are forward jumping along last_dim1 dimension
 					//qrun_sel[last_dim1] = minimum_selectivity;
-					if((loc = locationAlreadyExist(qrun_sel)) == null){
-						loc = new location(qrun_sel, this);
-						contour_points.add(loc);
-						opt_call++;
-					}
-					assert(loc != null) : "location is null";
-					optimization_cost = loc.get_cost();
+//					if((loc = locationAlreadyExist(qrun_sel)) == null){
+//						loc = new location(qrun_sel, this);
+//						contour_points.add(loc);
+//						opt_call++;
+//					}
+//					assert(loc != null) : "location is null";
+//					optimization_cost = loc.get_cost();
 					
-					
+					boolean came_inside_dim1_loop = false;
 					double target_cost1_dim1 = Math.pow(beta, dimension)*cost;
-					while((qrun_sel[last_dim1] < 1.0) && (optimization_cost <= target_cost1_dim1))
+					double target_cost2_dim1 = Math.pow(beta, dimension-1)*cost;
+					while((qrun_sel[last_dim1] < 1.0f) && (optimization_cost <= target_cost1_dim1))
 					{
 
-						double target_cost2_dim1 = Math.pow(beta, dimension-1)*cost;
-						if (optimization_cost >=  target_cost2_dim1)
+						came_inside_dim1_loop = true;
+						
+						if (optimization_cost >=  target_cost2_dim1){
+							
+							if(!ContourLocationAlreadyExist(loc.dim_values))
+								contour_points.add(loc);//check this again!
 							break;
+						}
 						
 						
 						// the argument for calculate jump size is the dimension along which we need to traverse				
@@ -434,14 +466,20 @@ public class onlinePB {
 						float old_sel = qrun_sel[last_dim1]; 
 						qrun_sel[last_dim1] += (beta -1)*forward_jump; //check this again!
 						
+						assert((beta -1)*forward_jump > 0.0f) : "jump in the negative direction";
 						
-						if(qrun_sel[last_dim1]/(old_sel*beta) < 1.0)
+						if(qrun_sel[last_dim1]/(old_sel*beta) < 1.0f)
 							qrun_sel[last_dim1] = old_sel*beta;
 						
 						//just rounding up the float value
 						qrun_sel[last_dim1] = roundToDouble(qrun_sel[last_dim1]); 
 						
-						if(qrun_sel[last_dim1] >= 1.0){
+						assert(qrun_sel[last_dim1] >= old_sel) : "selectivity not increasing, even if it has to";
+						
+						if(qrun_sel[last_dim1] >= 1.0f){
+
+							if(!ContourLocationAlreadyExist(loc.dim_values))
+								contour_points.add(loc);//check this again!
 							qrun_sel[last_dim1] = 1.0f;
 						}
 						
@@ -450,29 +488,38 @@ public class onlinePB {
 						
 						if((loc = locationAlreadyExist(qrun_sel)) == null){
 							loc = new location(qrun_sel, this);
-							contour_points.add(loc);
+							non_contour_points.add(loc);
 							//counting the optimization calls
 							opt_call++;
 						}
 						assert(loc != null) : "location is null";
 						optimization_cost = loc.get_cost();
 						
-						
-						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
+						if(qrun_sel[last_dim2] < 1.0)
+							assert (optimization_cost >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+optimization_cost+" and contour cost = "+cost;
 						if(DEBUG_LEVEL_2)
 							printSelectivityCost(qrun_sel, optimization_cost);
 						
 					}
 					
-					
-					//
-					if(optimization_cost > Math.pow(beta, dimension)*cost)
-						optimization_cost = Math.pow(beta, dimension)*cost;
-					
 					//if we hit the boundary then we are done
-					if(qrun_sel[last_dim1] >= 1.0){
+					if(qrun_sel[last_dim1] >= 1.0f){
+						if(!ContourLocationAlreadyExist(loc.dim_values))
+							contour_points.add(loc);//check this again!
 						break;
 					}
+					
+					if(came_inside_dim1_loop)
+						assert(optimization_cost <= target_cost1_dim1 && optimization_cost >= target_cost2_dim1) : "dim1 is not in the range"; 
+					
+					//
+					if(optimization_cost > Math.pow(beta, dimension)*cost){
+						System.out.println("How is this possible? and cost increase is "+optimization_cost/Math.pow(beta, dimension)*cost);
+						optimization_cost = Math.pow(beta, dimension)*cost;
+					}
+					
+					
+
 				}
 			}	
 
@@ -527,11 +574,28 @@ public class onlinePB {
 		return null;
 	}
 
-	
+	private boolean ContourLocationAlreadyExist(float[] arr) {
+		//TODO: need to test this
+		boolean flag = false;
+		for(location loc: contour_points){
+			flag = true;
+			for(int i=0;i<dimension;i++){
+				if(loc.get_dimension(i)!= arr[i]){
+					flag = false;
+					break;
+				}
+			}
+			if(flag==true)
+				return true;
+		}
+		
+		return false;
+}
+
 	
 	private double calculateJumpSize( int dim, double base_cost) throws SQLException {
 
-		
+		getFPCCost(qrun_sel, -3);
 		float delta[] = {0.1f,0.2f,0.3f};
 			float sum_slope = 0, divFactor =0;
 			for(float del: delta){
@@ -569,6 +633,7 @@ public class onlinePB {
 			if(DEBUG_LEVEL_1)
 				System.out.println("jump size is "+jump_size);
 			
+			fpc_call ++;
 			return jump_size;
 		}
 
@@ -744,8 +809,10 @@ public class onlinePB {
 				String xml_query = null;
 				//this is for pure fpc
 				//exp_query = select_query;
-				if(p_no == -2 && XMLPath!=null)
+				if((p_no == -2 || p_no == -3) && XMLPath!=null){
 					exp_query = "explain " + exp_query + " fpc "+XMLPath;
+					xml_query = new String("explain (format xml) "+ select_query) ;
+				}
 				else if(p_no ==-1){
 					exp_query = "explain " + exp_query ;
 					xml_query = new String("explain (format xml) "+ select_query) ;
@@ -776,13 +843,10 @@ public class onlinePB {
 				stmt.execute("set cpu_index_tuple_cost=0.005");
 				stmt.execute("set cpu_tuple_cost=0.01");
 				
-				ResultSet rs = stmt.executeQuery(exp_query);
-				rs.next();
-				String str1 = rs.getString(1);
 				
-				
-				if(false){
-				if(p_no == -1 && xml_query!=null){
+				//XML Query
+
+				if(p_no == -3 && xml_query!=null){
 					ResultSet rs_xml = stmt.executeQuery(xml_query);
 					StringBuilder xplan = new StringBuilder();
 					while(rs_xml.next())  {
@@ -802,8 +866,15 @@ public class onlinePB {
 							throw new PicassoException("Error getting plan: "+e);
 						}
 					}
+					return -1;
 				}
-				}
+				
+				ResultSet rs = stmt.executeQuery(exp_query);
+				rs.next();
+				String str1 = rs.getString(1);
+				
+				
+
 				//System.out.println(str1);
 				
 				//System.out.println(str1);
@@ -1191,7 +1262,12 @@ class location implements Serializable
 			planNumber=plans_vector.size() - 1;
 			plan.setPlanNo(planNumber);
 			//Dump xml plan
-			String xml_path = apktPath+"offlinePB/"+"planStructureXML/"+plan.getPlanNo()+".xml";
+			String xml_path = apktPath+"onlinePB/"+"planStructureXML/"+plan.getPlanNo()+".xml";
+			File dir = new File(apktPath+"onlinePB/"+"planStructureXML/");
+			//check if the dir exists
+			if(!dir.exists())
+				dir.mkdirs();
+				
 			File xml_file =new File(xml_path);
 			//Execute the xml query
 			

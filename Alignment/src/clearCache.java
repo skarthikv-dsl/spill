@@ -12,8 +12,8 @@ public class clearCache {
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		clearCache obj = new clearCache();
-		obj.run();
-		//obj.selectivityGen();
+		//obj.run();
+		obj.selectivityGen();
 	}
 	private void selectivityGen() {
 		// TODO Auto-generated method stub
@@ -26,7 +26,7 @@ public class clearCache {
 			
 			double QDIST_SKEW_10 = 2.0;
 			double QDIST_SKEW_30 = 1.33;
-			double QDIST_SKEW_100 = 1.15;
+			double QDIST_SKEW_100 = 1.027;
 			double QDIST_SKEW_300 = 1.027;
 			double QDIST_SKEW_1000 = 1.00808;
 			
@@ -108,7 +108,7 @@ public class clearCache {
 				if(i%5==0)
 					System.out.println();
 				//System.out.print("selecE100["+i+"] = "+selectivity[i]+";"+"\t");
-				System.out.format("selecE100[%d] = %.8f; \t",i, selectivity[i]);
+				System.out.format("selectivity[%d] = %.7ff; \t",i, selectivity[i]);
 			}
 			System.out.println();
 	}

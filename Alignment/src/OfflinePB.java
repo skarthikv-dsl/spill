@@ -105,7 +105,7 @@ public class OfflinePB
 	static String select_query;
 	static String predicates;
 	static int database_conn=1;
-	static int decimalPrecision = 4;
+	
 	static Vector<Plan> plans_vector = new Vector<Plan>();
 	
 	//The following parameters has to be set manually for each query
@@ -115,6 +115,7 @@ public class OfflinePB
 	
 	static int sel_distribution;
 	static boolean MSOCalculation = true;
+	static boolean memoization = true;
 	static Connection conn = null;
 
 	static ArrayList<Integer> remainingDim;
@@ -128,17 +129,23 @@ public class OfflinePB
 	 static HashMap<Integer,Double> minContourCostMap = new HashMap<Integer,Double>();
 	 static double learning_cost = 0;
 	 static boolean done = false;
-	 static boolean visualisation_2D = true;
+
 	 float[] actual_sel;
+	 static int opt_calls = 0;
 	 
 	 //for ASO calculation 
 	 static double planCount[], planRelativeArea[];
 	 static float picsel[], locationWeight[];
 
 	 static double areaSpace =0,totalEstimatedArea = 0;
-
+	 
+	 //parameters to set
+	 static boolean visualisation_2D = false;
+	 static int decimalPrecision = 5;
+	 
 	public static void main(String args[]) throws IOException, SQLException, PicassoException
 	{
+		long startTime = System.nanoTime();
 		OfflinePB obj = new OfflinePB();
 		obj.loadPropertiesFile();
 		String pktPath = apktPath + qtName + "_new9.4.apkt" ;
@@ -208,9 +215,17 @@ public class OfflinePB
 			min_cost = l_loc.get_cost();
 		}
 		else{
-			h_cost = obj.getOptimalCost(totalPoints-1);
-			min_cost = obj.getOptimalCost(0);
-
+			int [] h_loc_arr = new int[obj.dimension];
+			int [] l_loc_arr = new int[obj.dimension];
+			for(int d=0;d < obj.dimension; d++){
+				h_loc_arr[d] = resolution-1;
+				l_loc_arr[d] = 0;
+			}
+			location h_loc = new location(obj.convertIndextoSelectivity(h_loc_arr),obj);
+			h_cost = h_loc.get_cost();
+						
+			location l_loc = new location(obj.convertIndextoSelectivity(l_loc_arr),obj);
+			min_cost = l_loc.get_cost();
 		}
 			
 		double ratio = h_cost/min_cost;
@@ -239,14 +254,17 @@ public class OfflinePB
 			
 			obj.nexusAlgoContour(cost); 
 
-			writeContourPointstoFile(i);
+			if(visualisation_2D)
+				writeContourPointstoFile(i);
+			System.out.println("The running optimization calls are "+opt_calls);
 			int size_of_contour = all_contour_points.size();
 			ContourPointsMap.put(i, new ArrayList<location>(all_contour_points)); //storing the contour points
 			System.out.println("Size of contour"+size_of_contour );
 				cost = cost*2;
 				i = i+1;
 		}
-		
+		long endTime = System.nanoTime();
+		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
 		System.exit(0);
 	
 		System.out.println("The minimum cost contour map is "+minContourCostMap);
@@ -372,10 +390,21 @@ public class OfflinePB
 		 * had the same plan. If so, no need to open the .../predicateOrder/plan.txt again
 		 */
 
-		leftInfo = new location(convertIndextoSelectivity(left),this);
+		leftInfo = locationAlreadyExist(convertIndextoSelectivity(left));
+		
+		if(leftInfo == null){
+			leftInfo = new location(convertIndextoSelectivity(left),this);
+			opt_calls++;
+		}
 		double leftCost = leftInfo.get_cost();
 		
-		rightInfo = new location(convertIndextoSelectivity(right),this);
+		
+		rightInfo = locationAlreadyExist(convertIndextoSelectivity(right));
+		
+		if(rightInfo == null){
+			rightInfo = new location(convertIndextoSelectivity(right),this);
+			opt_calls++;
+		}
 		double rightCost = rightInfo.get_cost(); 
 		
 		int d=dimension-1;
@@ -385,7 +414,12 @@ public class OfflinePB
 			copyLoc(left, right);
 			leftCost = rightCost;
 			right[--d] = resolution-1;
-			rightInfo = new location(convertIndextoSelectivity(right),this);
+
+			rightInfo = locationAlreadyExist(convertIndextoSelectivity(right));			
+			if(rightInfo == null){
+				rightInfo = new location(convertIndextoSelectivity(right),this);
+				opt_calls++;
+			}
 			rightCost = rightInfo.get_cost(); 
 		}
 	
@@ -403,7 +437,12 @@ public class OfflinePB
 			}
 			else
 			{
-				midInfo = new location(convertIndextoSelectivity(mid),this);
+				midInfo = locationAlreadyExist(convertIndextoSelectivity(mid));
+				
+				if(midInfo == null){
+					midInfo = new location(convertIndextoSelectivity(mid),this);
+					opt_calls++;
+				}
 				midCost = midInfo.get_cost();
 	
 				if(midCost >= seedCost) 
@@ -423,7 +462,7 @@ public class OfflinePB
 	
 		System.out.println("\n Found seed location with cost " + seedCost + " as "
 							+ getIndex(right, resolution) + " with cost = " + rightCost);
-		if(!locationAlreadyExist(rightInfo.dim_values))	
+		if(!ContourLocationAlreadyExist(rightInfo.dim_values))	
 			all_contour_points.add(rightInfo);
 		
 		//isContourPoint[getIndex(rightInfo.dim_values, resolution)] = true;		
@@ -447,7 +486,7 @@ public class OfflinePB
 		int iteration_no=0;
 		while(cur_seed >= 0 && focus_dim > 0) 
 		{	
-			System.out.println("Iteration number is "+iteration_no++);
+			//System.out.println("Iteration number is "+iteration_no++);
 			seed_coords = getCoordinates(dimension, resolution, cur_seed);
 
 			candidate1_coords = nextLocDim(seed_coords, swap_dim); // find next location by increasing value along swapDim
@@ -472,14 +511,20 @@ public class OfflinePB
 			}
 			else if(candidate2_coords[0] >= 0 && candidate1_coords[0] < 0) 
 			{					
-				location seedInfo =  new location(convertIndextoSelectivity(candidate2_coords),this);
+				location seedInfo;
+				
+				seedInfo = locationAlreadyExist(convertIndextoSelectivity(candidate2_coords));
+				if(seedInfo == null){
+					seedInfo =  new location(convertIndextoSelectivity(candidate2_coords),this);
+					opt_calls++;
+				}
 				int newSeed = getIndex(convertSelectivitytoIndex(seedInfo.dim_values),resolution);
 
 				if( seedInfo.get_cost() < search_cost )
 					return;
 				else
 				{
-					if(!locationAlreadyExist(seedInfo.dim_values))
+					if(!ContourLocationAlreadyExist(seedInfo.dim_values))
 						all_contour_points.add(seedInfo);
 					if(swap_dim > 0)
 					{
@@ -490,8 +535,19 @@ public class OfflinePB
 			}
 
 			// get cost of candidate locations
-			location cand1Info = new location(convertIndextoSelectivity(candidate1_coords), this);
-			location cand2Info = new location(convertIndextoSelectivity(candidate2_coords),this);
+			location cand1Info, cand2Info;
+			cand1Info = locationAlreadyExist(convertIndextoSelectivity(candidate1_coords));
+			if(cand1Info == null){
+				cand1Info = new location(convertIndextoSelectivity(candidate1_coords), this);
+				opt_calls ++;
+			}
+			
+			cand2Info = locationAlreadyExist(convertIndextoSelectivity(candidate2_coords));
+			if(cand2Info == null){
+				cand2Info = new location(convertIndextoSelectivity(candidate2_coords),this);
+				opt_calls ++;
+			}
+			
 			location seedInfo;
 
 			// assign next seed location
@@ -513,7 +569,7 @@ public class OfflinePB
 					seedInfo = cand2Info;
 			}
 
-			if(!locationAlreadyExist(seedInfo.dim_values))
+			if(!ContourLocationAlreadyExist(seedInfo.dim_values))
 				all_contour_points.add(seedInfo);
 
 			cur_seed = getIndex(convertSelectivitytoIndex(seedInfo.dim_values), resolution);
@@ -552,6 +608,23 @@ public class OfflinePB
 		return newIndex;
 	}
 
+	private boolean ContourLocationAlreadyExist(float[] arr) {
+		//TODO: need to test this
+		boolean flag = false;
+		for(location loc: all_contour_points){
+			flag = true;
+			for(int i=0;i<dimension;i++){
+				if(loc.get_dimension(i)!= arr[i]){
+					flag = false;
+					break;
+				}
+			}
+			if(flag==true)
+				return true;
+		}
+		
+		return false;
+}
 	
 	public void copyLoc(int destIdx[], int srcIdx[])
 	{
@@ -1166,26 +1239,28 @@ public void initialize(int location) {
 		return null;
 	}
 
-	private boolean locationAlreadyExist(float[] arr) {
+	private location locationAlreadyExist(float[] arr) {
 		//TODO: need to test this
+		if(!memoization)
+			return null;
+
 		boolean flag = false;
-		for(location loc: all_contour_points){
-			flag = true;
-			for(int i=0;i<dimension;i++){
-				if(loc.get_dimension(i)!= arr[i]){
-					flag = false;
-					break;
+		for(int c = 1; c<=ContourPointsMap.keySet().size(); c++){
+			for(location loc: ContourPointsMap.get(c)){
+				flag = true;
+				for(int i=0;i<dimension;i++){
+					if(loc.get_dimension(i)!= arr[i]){
+						flag = false;
+						break;
+					}
 				}
+				if(flag==true)
+					return loc;
 			}
-			if(flag==true)
-				return true;
 		}
-		
-		return false;
-	}
+		return null;
+}
 
-
-	
 	
 	
 	// Function which does binary search to find the actual point !!
@@ -1412,26 +1487,50 @@ public void initialize(int location) {
 			
 			if(resolution==100){
 				if(sel_distribution == 1){
-					selectivity[0] = 0.000064f; 	selectivity[1] = 0.000093f; 	selectivity[2] = 0.000126f; 	selectivity[3] = 0.000161f; 	selectivity[4] = 0.000198f;
-					selectivity[5] = 0.000239f; 	selectivity[6] = 0.000284f; 	selectivity[7] = 0.000332f; 	selectivity[8] = 0.000384f; 	selectivity[9] = 0.000440f;
-					selectivity[10] = 0.000501f; 	selectivity[11] = 0.000567f; 	selectivity[12] = 0.000638f; 	selectivity[13] = 0.000716f; 	selectivity[14] = 0.000800f;
-					selectivity[15] = 0.000890f; 	selectivity[16] = 0.000989f; 	selectivity[17] = 0.001095f; 	selectivity[18] = 0.001211f; 	selectivity[19] = 0.001335f;
-					selectivity[20] = 0.001471f; 	selectivity[21] = 0.001617f; 	selectivity[22] = 0.001776f; 	selectivity[23] = 0.001948f; 	selectivity[24] = 0.002134f;
-					selectivity[25] = 0.002335f; 	selectivity[26] = 0.002554f; 	selectivity[27] = 0.002790f; 	selectivity[28] = 0.003046f; 	selectivity[29] = 0.003323f;
-					selectivity[30] = 0.003624f; 	selectivity[31] = 0.003949f; 	selectivity[32] = 0.004301f; 	selectivity[33] = 0.004683f; 	selectivity[34] = 0.005096f;
-					selectivity[35] = 0.005543f; 	selectivity[36] = 0.006028f; 	selectivity[37] = 0.006552f; 	selectivity[38] = 0.007121f; 	selectivity[39] = 0.007736f;
-					selectivity[40] = 0.008403f; 	selectivity[41] = 0.009125f; 	selectivity[42] = 0.009907f; 	selectivity[43] = 0.010753f; 	selectivity[44] = 0.011670f;
-					selectivity[45] = 0.012663f; 	selectivity[46] = 0.013739f; 	selectivity[47] = 0.014904f; 	selectivity[48] = 0.016165f; 	selectivity[49] = 0.017531f;
-					selectivity[50] = 0.019011f; 	selectivity[51] = 0.020613f; 	selectivity[52] = 0.022348f; 	selectivity[53] = 0.024228f; 	selectivity[54] = 0.026263f;
-					selectivity[55] = 0.028467f; 	selectivity[56] = 0.030854f; 	selectivity[57] = 0.033440f; 	selectivity[58] = 0.036240f; 	selectivity[59] = 0.039272f;
-					selectivity[60] = 0.042556f; 	selectivity[61] = 0.046113f; 	selectivity[62] = 0.049965f; 	selectivity[63] = 0.054136f; 	selectivity[64] = 0.058654f;
-					selectivity[65] = 0.063547f; 	selectivity[66] = 0.068845f; 	selectivity[67] = 0.074584f; 	selectivity[68] = 0.080799f; 	selectivity[69] = 0.087530f;
-					selectivity[70] = 0.094819f; 	selectivity[71] = 0.102714f; 	selectivity[72] = 0.111263f; 	selectivity[73] = 0.120523f; 	selectivity[74] = 0.130550f;
-					selectivity[75] = 0.141411f; 	selectivity[76] = 0.153172f; 	selectivity[77] = 0.165910f; 	selectivity[78] = 0.179705f; 	selectivity[79] = 0.194645f;
-					selectivity[80] = 0.210825f; 	selectivity[81] = 0.228348f; 	selectivity[82] = 0.247325f; 	selectivity[83] = 0.267877f; 	selectivity[84] = 0.290136f;
-					selectivity[85] = 0.314241f; 	selectivity[86] = 0.340348f; 	selectivity[87] = 0.368621f; 	selectivity[88] = 0.399241f; 	selectivity[89] = 0.432403f;
-					selectivity[90] = 0.468316f; 	selectivity[91] = 0.507211f; 	selectivity[92] = 0.549334f; 	selectivity[93] = 0.594953f; 	selectivity[94] = 0.644359f;
-					selectivity[95] = 0.697865f; 	selectivity[96] = 0.755812f; 	selectivity[97] = 0.818569f; 	selectivity[98] = 0.886535f; 	selectivity[99] = 0.990142f;
+					
+					//used for SPILLBOUND
+//					selectivity[0] = 0.000064f; 	selectivity[1] = 0.000093f; 	selectivity[2] = 0.000126f; 	selectivity[3] = 0.000161f; 	selectivity[4] = 0.000198f;
+//					selectivity[5] = 0.000239f; 	selectivity[6] = 0.000284f; 	selectivity[7] = 0.000332f; 	selectivity[8] = 0.000384f; 	selectivity[9] = 0.000440f;
+//					selectivity[10] = 0.000501f; 	selectivity[11] = 0.000567f; 	selectivity[12] = 0.000638f; 	selectivity[13] = 0.000716f; 	selectivity[14] = 0.000800f;
+//					selectivity[15] = 0.000890f; 	selectivity[16] = 0.000989f; 	selectivity[17] = 0.001095f; 	selectivity[18] = 0.001211f; 	selectivity[19] = 0.001335f;
+//					selectivity[20] = 0.001471f; 	selectivity[21] = 0.001617f; 	selectivity[22] = 0.001776f; 	selectivity[23] = 0.001948f; 	selectivity[24] = 0.002134f;
+//					selectivity[25] = 0.002335f; 	selectivity[26] = 0.002554f; 	selectivity[27] = 0.002790f; 	selectivity[28] = 0.003046f; 	selectivity[29] = 0.003323f;
+//					selectivity[30] = 0.003624f; 	selectivity[31] = 0.003949f; 	selectivity[32] = 0.004301f; 	selectivity[33] = 0.004683f; 	selectivity[34] = 0.005096f;
+//					selectivity[35] = 0.005543f; 	selectivity[36] = 0.006028f; 	selectivity[37] = 0.006552f; 	selectivity[38] = 0.007121f; 	selectivity[39] = 0.007736f;
+//					selectivity[40] = 0.008403f; 	selectivity[41] = 0.009125f; 	selectivity[42] = 0.009907f; 	selectivity[43] = 0.010753f; 	selectivity[44] = 0.011670f;
+//					selectivity[45] = 0.012663f; 	selectivity[46] = 0.013739f; 	selectivity[47] = 0.014904f; 	selectivity[48] = 0.016165f; 	selectivity[49] = 0.017531f;
+//					selectivity[50] = 0.019011f; 	selectivity[51] = 0.020613f; 	selectivity[52] = 0.022348f; 	selectivity[53] = 0.024228f; 	selectivity[54] = 0.026263f;
+//					selectivity[55] = 0.028467f; 	selectivity[56] = 0.030854f; 	selectivity[57] = 0.033440f; 	selectivity[58] = 0.036240f; 	selectivity[59] = 0.039272f;
+//					selectivity[60] = 0.042556f; 	selectivity[61] = 0.046113f; 	selectivity[62] = 0.049965f; 	selectivity[63] = 0.054136f; 	selectivity[64] = 0.058654f;
+//					selectivity[65] = 0.063547f; 	selectivity[66] = 0.068845f; 	selectivity[67] = 0.074584f; 	selectivity[68] = 0.080799f; 	selectivity[69] = 0.087530f;
+//					selectivity[70] = 0.094819f; 	selectivity[71] = 0.102714f; 	selectivity[72] = 0.111263f; 	selectivity[73] = 0.120523f; 	selectivity[74] = 0.130550f;
+//					selectivity[75] = 0.141411f; 	selectivity[76] = 0.153172f; 	selectivity[77] = 0.165910f; 	selectivity[78] = 0.179705f; 	selectivity[79] = 0.194645f;
+//					selectivity[80] = 0.210825f; 	selectivity[81] = 0.228348f; 	selectivity[82] = 0.247325f; 	selectivity[83] = 0.267877f; 	selectivity[84] = 0.290136f;
+//					selectivity[85] = 0.314241f; 	selectivity[86] = 0.340348f; 	selectivity[87] = 0.368621f; 	selectivity[88] = 0.399241f; 	selectivity[89] = 0.432403f;
+//					selectivity[90] = 0.468316f; 	selectivity[91] = 0.507211f; 	selectivity[92] = 0.549334f; 	selectivity[93] = 0.594953f; 	selectivity[94] = 0.644359f;
+//					selectivity[95] = 0.697865f; 	selectivity[96] = 0.755812f; 	selectivity[97] = 0.818569f; 	selectivity[98] = 0.886535f; 	selectivity[99] = 0.990142f;
+					
+					//for OnlinePB
+					selectivity[0] = 0.0010073f; 	selectivity[1] = 0.0030557f; 	selectivity[2] = 0.0051594f; 	selectivity[3] = 0.0073200f; 	selectivity[4] = 0.0095388f; 	
+					selectivity[5] = 0.0118176f; 	selectivity[6] = 0.0141579f; 	selectivity[7] = 0.0165613f; 	selectivity[8] = 0.0190297f; 	selectivity[9] = 0.0215647f; 	
+					selectivity[10] = 0.0241682f; 	selectivity[11] = 0.0268420f; 	selectivity[12] = 0.0295879f; 	selectivity[13] = 0.0324080f; 	selectivity[14] = 0.0353042f; 	
+					selectivity[15] = 0.0382787f; 	selectivity[16] = 0.0413334f; 	selectivity[17] = 0.0444706f; 	selectivity[18] = 0.0476926f; 	selectivity[19] = 0.0510015f; 	
+					selectivity[20] = 0.0543997f; 	selectivity[21] = 0.0578898f; 	selectivity[22] = 0.0614740f; 	selectivity[23] = 0.0651550f; 	selectivity[24] = 0.0689354f; 	
+					selectivity[25] = 0.0728179f; 	selectivity[26] = 0.0768052f; 	selectivity[27] = 0.0809002f; 	selectivity[28] = 0.0851057f; 	selectivity[29] = 0.0894247f; 	
+					selectivity[30] = 0.0938604f; 	selectivity[31] = 0.0984159f; 	selectivity[32] = 0.1030943f; 	selectivity[33] = 0.1078991f; 	selectivity[34] = 0.1128336f; 	
+					selectivity[35] = 0.1179013f; 	selectivity[36] = 0.1231059f; 	selectivity[37] = 0.1284509f; 	selectivity[38] = 0.1339403f; 	selectivity[39] = 0.1395779f; 	
+					selectivity[40] = 0.1453678f; 	selectivity[41] = 0.1513139f; 	selectivity[42] = 0.1574206f; 	selectivity[43] = 0.1636922f; 	selectivity[44] = 0.1701331f; 	
+					selectivity[45] = 0.1767479f; 	selectivity[46] = 0.1835413f; 	selectivity[47] = 0.1905182f; 	selectivity[48] = 0.1976834f; 	selectivity[49] = 0.2050420f; 	
+					selectivity[50] = 0.2125994f; 	selectivity[51] = 0.2203608f; 	selectivity[52] = 0.2283317f; 	selectivity[53] = 0.2365179f; 	selectivity[54] = 0.2449251f; 	
+					selectivity[55] = 0.2535593f; 	selectivity[56] = 0.2624266f; 	selectivity[57] = 0.2715334f; 	selectivity[58] = 0.2808860f; 	selectivity[59] = 0.2904911f; 	
+					selectivity[60] = 0.3003556f; 	selectivity[61] = 0.3104864f; 	selectivity[62] = 0.3208908f; 	selectivity[63] = 0.3315761f; 	selectivity[64] = 0.3425498f; 	
+					selectivity[65] = 0.3538199f; 	selectivity[66] = 0.3653942f; 	selectivity[67] = 0.3772811f; 	selectivity[68] = 0.3894889f; 	selectivity[69] = 0.4020263f; 	
+					selectivity[70] = 0.4149023f; 	selectivity[71] = 0.4281258f; 	selectivity[72] = 0.4417065f; 	selectivity[73] = 0.4556538f; 	selectivity[74] = 0.4699776f; 	
+					selectivity[75] = 0.4846882f; 	selectivity[76] = 0.4997960f; 	selectivity[77] = 0.5153117f; 	selectivity[78] = 0.5312464f; 	selectivity[79] = 0.5476113f; 	
+					selectivity[80] = 0.5644180f; 	selectivity[81] = 0.5816785f; 	selectivity[82] = 0.5994050f; 	selectivity[83] = 0.6176102f; 	selectivity[84] = 0.6363069f; 	
+					selectivity[85] = 0.6555084f; 	selectivity[86] = 0.6752283f; 	selectivity[87] = 0.6954807f; 	selectivity[88] = 0.7162799f; 	selectivity[89] = 0.7376407f; 	
+					selectivity[90] = 0.7595782f; 	selectivity[91] = 0.7821080f; 	selectivity[92] = 0.8052461f; 	selectivity[93] = 0.8290090f; 	selectivity[94] = 0.8534135f; 	
+					selectivity[95] = 0.8784769f; 	selectivity[96] = 0.9042169f; 	selectivity[97] = 0.9306520f; 	selectivity[98] = 0.9578008f; 	selectivity[99] = 0.9856827f; 	
 
 				}
 				else if(sel_distribution == 0){
