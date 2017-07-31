@@ -58,6 +58,7 @@ public class onlinePB {
 	static String predicates;
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
 	static float qrun_sel[];
+	static float qrun_sel_rev[];
 	static float beta;
 	static int opt_call = 0;
 	static int fpc_call = 0;
@@ -65,17 +66,19 @@ public class onlinePB {
 	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
 	static ArrayList<location> contour_points = new ArrayList<location>();
 	static ArrayList<location> non_contour_points = new ArrayList<location>();
+	static String XMLPath = null;
 	
 	//parameters to set
-	//static float minimum_selectivity = 0.000064f;
-	static float minimum_selectivity = 0.001f;
+	static float minimum_selectivity = 0.000064f;
+	//static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
 	static int decimalPrecision = 5;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
-	static boolean visualisation_2D = false;
+	static boolean visualisation_2D = true;
+	static boolean enhancement = true; 
 	static boolean memoization = true;
-	static String XMLPath = null; 
+	 
 
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException {
@@ -152,8 +155,11 @@ public class onlinePB {
 		
 		
 		qrun_sel = new float[dimension];
-		for(int d=0;d<dimension;d++)
+		qrun_sel_rev = new float[dimension];
+		for(int d=0;d<dimension;d++){
 			qrun_sel[d] = -1.0f;
+			qrun_sel_rev[d] = -1.0f;
+		}
 		
 		XMLPath = new String(apktPath+"onlinePB.xml");
 		beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
@@ -182,7 +188,7 @@ public class onlinePB {
 			System.out.println("Contour "+i+" cost : "+cost);
 			contour_points.clear();			
 			non_contour_points.clear();
-			if(i==4)
+			if(i==5)
 				System.out.println("Interesting");
 			obj.generateCoveringContours(order,cost);
 
@@ -369,57 +375,98 @@ public class onlinePB {
 				double optimization_cost = loc.get_cost(); 
 				
 				
+				location loc_rev;
+				double optimization_cost_rev = Double.MIN_VALUE;
+				
+				if(enhancement){
+				//just the initialize the last two dimensions;
+				qrun_sel_rev[last_dim2] = minimum_selectivity;
+				qrun_sel_rev[last_dim1] = 1.0f;
+				
+				if((loc = locationAlreadyExist(qrun_sel_rev)) == null){
+					loc = new location(qrun_sel_rev, this);
+					non_contour_points.add(loc);
+					opt_call++;
+				}
+				assert(loc != null): "location is null";
+				optimization_cost_rev = loc.get_cost(); 
 				if(DEBUG_LEVEL_2)
-					printSelectivityCost(qrun_sel, optimization_cost);
+					printSelectivityCost(qrun_sel_rev, optimization_cost);
 				
+				}
 				
+				boolean increase_along_dim1 = true;
+		
 				//we are reverse jumping along last_dim2 dimension
+				
+				double target_cost1 = Math.pow(beta, dimension-2)*cost;
+				double target_cost2 = Math.pow(beta, dimension-1)*cost;
+				double target_cost3 = Math.pow(beta, dimension)*cost;
+				int orig_dim1 = last_dim1;
+				int orig_dim2 = last_dim2;
+				double opt_cost_copy = Double.MIN_VALUE;
+				
 				for(;;){
 					
+					float [] qrun_copy = new float [dimension];
+					for(int i=0; i < dimension ; i++){
+						if(increase_along_dim1){
+							qrun_copy[i] = qrun_sel[i];
+							last_dim1 = orig_dim1;
+							last_dim2 = orig_dim2;
+							opt_cost_copy = optimization_cost; 
+						}
+						else{ 
+							qrun_copy[i] = qrun_sel_rev[i];
+							last_dim1 = orig_dim2;
+							last_dim2 = orig_dim1;
+							opt_cost_copy = optimization_cost_rev;
+						}
+					}
 					
 					boolean came_inside_dim2_loop = false;
-					double target_cost1_dim2 = Math.pow(beta, dimension-2)*cost;
-					double target_cost2_dim2 = Math.pow(beta, dimension-1)*cost;
-					while((qrun_sel[last_dim2] > minimum_selectivity) && (target_cost1_dim2 <= optimization_cost))
+					while((qrun_copy[last_dim2] > minimum_selectivity) && (target_cost1 <= opt_cost_copy))
 					{
 
 						came_inside_dim2_loop = true;
 						
-						if (optimization_cost <=  target_cost2_dim2)
+						if (opt_cost_copy <=  target_cost2)
 							break;
 						
-						float old_sel = qrun_sel[last_dim2];
+						float old_sel = qrun_copy[last_dim2];
 						
-						qrun_sel[last_dim2] = roundToDouble(old_sel/beta);
+						qrun_copy[last_dim2] = roundToDouble(old_sel/beta);
 
 						
-						if(qrun_sel[last_dim2] <= minimum_selectivity)
-							qrun_sel[last_dim2] = minimum_selectivity;
+						if(qrun_copy[last_dim2] <= minimum_selectivity)
+							qrun_copy[last_dim2] = minimum_selectivity;
 						
-						assert(qrun_sel[last_dim2] <= old_sel) : "selectivity not decreasing, even if it has to";
+						assert(qrun_copy[last_dim2] <= old_sel) : "selectivity not decreasing, even if it has to";
 						if(DEBUG_LEVEL_2)
-						System.out.println("Selectivity learnt "+old_sel/(qrun_sel[last_dim2]*beta));
-						if((loc = locationAlreadyExist(qrun_sel)) == null){
-							loc = new location(qrun_sel, this);
-							non_contour_points.add(loc);
+						System.out.println("Selectivity learnt "+old_sel/(qrun_copy[last_dim2]*beta));
+						if((loc = locationAlreadyExist(qrun_copy)) == null){
+							loc = new location(qrun_copy, this);
+							//non_contour_points.add(loc);
 							//counting the optimization calls
 							opt_call++;
 						}
-						assert(loc != null) : "location is null";
-						optimization_cost = loc.get_cost();
 						
-						if(qrun_sel[last_dim1] > minimum_selectivity)
-							assert (optimization_cost >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+optimization_cost+" and contour cost = "+cost;
-						assert (optimization_cost >= cost): "covering locaiton has less than contour cost";
+						non_contour_points.add(loc);
+						assert(loc != null) : "location is null";
+						opt_cost_copy = loc.get_cost();
+						
+						if(qrun_copy[last_dim1] > minimum_selectivity)
+							assert (opt_cost_copy >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+opt_cost_copy+" and contour cost = "+cost;
+						
 						if(DEBUG_LEVEL_2)
-							printSelectivityCost(qrun_sel, optimization_cost);
+							printSelectivityCost(qrun_copy, opt_cost_copy);
 						
 						
 					}
 					
 					//if we hit the boundary then we are done
-					if(qrun_sel[last_dim2] <= minimum_selectivity){
-						qrun_sel[last_dim2] = minimum_selectivity;
+					if(qrun_copy[last_dim2] <= minimum_selectivity){
+						qrun_copy[last_dim2] = minimum_selectivity;
 						if(!ContourLocationAlreadyExist(loc.dim_values))
 							contour_points.add(loc);
 						break;
@@ -427,7 +474,7 @@ public class onlinePB {
 					
 					
 					if(came_inside_dim2_loop)
-						assert(optimization_cost <= target_cost2_dim2 && optimization_cost >=target_cost1_dim2) : "not in the valid cost range for dim2";
+						assert(opt_cost_copy <= target_cost2 && opt_cost_copy >=target_cost1) : "not in the valid cost range for dim2";
 					
 
 
@@ -442,14 +489,13 @@ public class onlinePB {
 //					optimization_cost = loc.get_cost();
 					
 					boolean came_inside_dim1_loop = false;
-					double target_cost1_dim1 = Math.pow(beta, dimension)*cost;
-					double target_cost2_dim1 = Math.pow(beta, dimension-1)*cost;
-					while((qrun_sel[last_dim1] < 1.0f) && (optimization_cost <= target_cost1_dim1))
+					
+					while((qrun_copy[last_dim1] < 1.0f) && (opt_cost_copy <= target_cost3))
 					{
 
 						came_inside_dim1_loop = true;
 						
-						if (optimization_cost >=  target_cost2_dim1){
+						if (opt_cost_copy >=  target_cost2){
 							
 							if(!ContourLocationAlreadyExist(loc.dim_values))
 								contour_points.add(loc);//check this again!
@@ -458,68 +504,88 @@ public class onlinePB {
 						
 						
 						// the argument for calculate jump size is the dimension along which we need to traverse				
-						double forward_jump = calculateJumpSize(last_dim1,optimization_cost);
+						double forward_jump = calculateJumpSize(qrun_copy,last_dim1,opt_cost_copy);
 
 						if(DEBUG_LEVEL_2)
-							System.out.println("The forward jump size is "+(beta -1)*forward_jump+" from selectivity "+qrun_sel[last_dim1]);
+							System.out.println("The forward jump size is "+(beta -1)*forward_jump+" from selectivity "+qrun_copy[last_dim1]);
 						
-						float old_sel = qrun_sel[last_dim1]; 
-						qrun_sel[last_dim1] += (beta -1)*forward_jump; //check this again!
+						float old_sel = qrun_copy[last_dim1]; 
+						qrun_copy[last_dim1] += (beta -1)*forward_jump; //check this again!
 						
 						assert((beta -1)*forward_jump > 0.0f) : "jump in the negative direction";
 						
-						if(qrun_sel[last_dim1]/(old_sel*beta) < 1.0f)
-							qrun_sel[last_dim1] = old_sel*beta;
+						if(qrun_copy[last_dim1]/(old_sel*beta) < 1.0f)
+							qrun_copy[last_dim1] = old_sel*beta;
 						
 						//just rounding up the float value
-						qrun_sel[last_dim1] = roundToDouble(qrun_sel[last_dim1]); 
+						qrun_copy[last_dim1] = roundToDouble(qrun_copy[last_dim1]); 
 						
-						assert(qrun_sel[last_dim1] >= old_sel) : "selectivity not increasing, even if it has to";
+						assert(qrun_copy[last_dim1] >= old_sel) : "selectivity not increasing, even if it has to";
 						
-						if(qrun_sel[last_dim1] >= 1.0f){
+						if(qrun_copy[last_dim1] >= 1.0f){
 
 							if(!ContourLocationAlreadyExist(loc.dim_values))
 								contour_points.add(loc);//check this again!
-							qrun_sel[last_dim1] = 1.0f;
+							qrun_copy[last_dim1] = 1.0f;
 						}
 						
 						if(DEBUG_LEVEL_2)
-						System.out.println("Selectivity learnt "+qrun_sel[last_dim1]/(old_sel*beta));
+						System.out.println("Selectivity learnt "+qrun_copy[last_dim1]/(old_sel*beta));
 						
-						if((loc = locationAlreadyExist(qrun_sel)) == null){
-							loc = new location(qrun_sel, this);
-							non_contour_points.add(loc);
+						if((loc = locationAlreadyExist(qrun_copy)) == null){
+							loc = new location(qrun_copy, this);
+							//non_contour_points.add(loc);
 							//counting the optimization calls
 							opt_call++;
 						}
-						assert(loc != null) : "location is null";
-						optimization_cost = loc.get_cost();
 						
-						if(qrun_sel[last_dim2] < 1.0)
-							assert (optimization_cost >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+optimization_cost+" and contour cost = "+cost;
-						if(DEBUG_LEVEL_2)
-							printSelectivityCost(qrun_sel, optimization_cost);
+						non_contour_points.add(loc);
+						assert(loc != null) : "location is null";
+						opt_cost_copy = loc.get_cost();
+						
+						if(qrun_copy[last_dim2] < 1.0)
+							assert (opt_cost_copy >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+optimization_cost+" and contour cost = "+cost;
+						
+							if(DEBUG_LEVEL_2)
+							printSelectivityCost(qrun_copy, opt_cost_copy);
 						
 					}
 					
 					//if we hit the boundary then we are done
-					if(qrun_sel[last_dim1] >= 1.0f){
+					if(qrun_copy[last_dim1] >= 1.0f){
 						if(!ContourLocationAlreadyExist(loc.dim_values))
 							contour_points.add(loc);//check this again!
 						break;
 					}
 					
 					if(came_inside_dim1_loop)
-						assert(optimization_cost <= target_cost1_dim1 && optimization_cost >= target_cost2_dim1) : "dim1 is not in the range"; 
+						assert(opt_cost_copy <= target_cost3 && opt_cost_copy >= target_cost2) : "dim1 is not in the range"; 
 					
 					//
-					if(optimization_cost > Math.pow(beta, dimension)*cost){
-						System.out.println("How is this possible? and cost increase is "+optimization_cost/Math.pow(beta, dimension)*cost);
-						optimization_cost = Math.pow(beta, dimension)*cost;
+					if(opt_cost_copy > Math.pow(beta, dimension)*cost){
+						System.out.println("How is this possible? and cost increase is "+opt_cost_copy/Math.pow(beta, dimension)*cost);
+						opt_cost_copy = Math.pow(beta, dimension)*cost;
 					}
 					
 					
-
+					//copy back the copy-variable to the original data structure
+					for(int i=0; i < dimension ; i++){
+						if(increase_along_dim1){
+							qrun_sel[i] = qrun_copy[i];
+							optimization_cost = opt_cost_copy; 
+						}
+						else{ 
+							qrun_sel_rev[i] = qrun_copy[i];
+							optimization_cost_rev  = opt_cost_copy;
+						}
+					}
+					
+					if(enhancement){
+						increase_along_dim1 = increase_along_dim1 ? false : true;
+						
+						if((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1]) || (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2]))
+							break;
+					}
 				}
 			}	
 
@@ -593,16 +659,16 @@ public class onlinePB {
 }
 
 	
-	private double calculateJumpSize( int dim, double base_cost) throws SQLException {
+	private double calculateJumpSize(float[] qrun_copy, int dim, double base_cost) throws SQLException {
 
-		getFPCCost(qrun_sel, -3);
+		getFPCCost(qrun_copy, -3);
 		float delta[] = {0.1f,0.2f,0.3f};
 			float sum_slope = 0, divFactor =0;
 			for(float del: delta){
 				float sel[] = new float[dimension];
 
 				for(int d=0; d<dimension;d++)
-					sel[d] = qrun_sel[d];
+					sel[d] = qrun_copy[d];
 
 				sel[dim] = sel[dim]*(1+del);
 				double fpc_cost = 0;
