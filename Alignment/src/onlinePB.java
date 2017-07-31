@@ -69,13 +69,13 @@ public class onlinePB {
 	static String XMLPath = null;
 	
 	//parameters to set
-	static float minimum_selectivity = 0.000064f;
-	//static float minimum_selectivity = 0.001f;
+	//static float minimum_selectivity = 0.000064f;
+	static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
 	static int decimalPrecision = 5;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
-	static boolean visualisation_2D = true;
+	static boolean visualisation_2D = false;
 	static boolean enhancement = true; 
 	static boolean memoization = true;
 	 
@@ -269,7 +269,10 @@ public class onlinePB {
 	
 	public void generateCoveringContours(ArrayList<Integer> order,double cost) throws IOException, SQLException, PicassoException
 	{
+		
 		String funName = "generateCoveringContours";
+		if(DEBUG_LEVEL_1)
+			System.out.println("Entered function "+funName);
 		//learntDim contains the dimensions already learnt (which is null initially)
 		//learntDimIndices contains the exact point in the space for the learnt dimensions
 		
@@ -383,6 +386,12 @@ public class onlinePB {
 				qrun_sel_rev[last_dim2] = minimum_selectivity;
 				qrun_sel_rev[last_dim1] = 1.0f;
 				
+				//set the first two dimensions as per qrun
+				for(int i=0;i<dimension; i++){
+					if(learntDim.contains(i))
+						qrun_sel_rev[i] = qrun_sel[i];																					
+				}
+				
 				if((loc = locationAlreadyExist(qrun_sel_rev)) == null){
 					loc = new location(qrun_sel_rev, this);
 					non_contour_points.add(loc);
@@ -433,6 +442,26 @@ public class onlinePB {
 						if (opt_cost_copy <=  target_cost2)
 							break;
 						
+						//second condition for breaking from loop
+						if(enhancement){
+
+							for(int i=0; i < dimension ; i++){
+								if(increase_along_dim1){
+									qrun_sel[i] = qrun_copy[i];
+									optimization_cost = opt_cost_copy; 
+								}
+								else{ 
+									qrun_sel_rev[i] = qrun_copy[i];
+									optimization_cost_rev  = opt_cost_copy;
+								}
+							}
+
+							if((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1]) || (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2])){
+
+								//setting 
+								break;
+							}
+						}							
 						float old_sel = qrun_copy[last_dim2];
 						
 						qrun_copy[last_dim2] = roundToDouble(old_sel/beta);
@@ -446,12 +475,12 @@ public class onlinePB {
 						System.out.println("Selectivity learnt "+old_sel/(qrun_copy[last_dim2]*beta));
 						if((loc = locationAlreadyExist(qrun_copy)) == null){
 							loc = new location(qrun_copy, this);
-							//non_contour_points.add(loc);
+							non_contour_points.add(loc);
 							//counting the optimization calls
 							opt_call++;
 						}
 						
-						non_contour_points.add(loc);
+						//non_contour_points.add(loc);
 						assert(loc != null) : "location is null";
 						opt_cost_copy = loc.get_cost();
 						
@@ -502,7 +531,26 @@ public class onlinePB {
 							break;
 						}
 						
-						
+						//second condition for breaking from loop
+						if(enhancement){
+
+							for(int i=0; i < dimension ; i++){
+								if(increase_along_dim1){
+									qrun_sel[i] = qrun_copy[i];
+									optimization_cost = opt_cost_copy; 
+								}
+								else{ 
+									qrun_sel_rev[i] = qrun_copy[i];
+									optimization_cost_rev  = opt_cost_copy;
+								}
+							}
+
+							if((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1]) || (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2])){
+
+								//setting 
+								break;
+							}
+						}	
 						// the argument for calculate jump size is the dimension along which we need to traverse				
 						double forward_jump = calculateJumpSize(qrun_copy,last_dim1,opt_cost_copy);
 
@@ -534,12 +582,12 @@ public class onlinePB {
 						
 						if((loc = locationAlreadyExist(qrun_copy)) == null){
 							loc = new location(qrun_copy, this);
-							//non_contour_points.add(loc);
+							non_contour_points.add(loc);
 							//counting the optimization calls
 							opt_call++;
 						}
 						
-						non_contour_points.add(loc);
+						//non_contour_points.add(loc);
 						assert(loc != null) : "location is null";
 						opt_cost_copy = loc.get_cost();
 						
@@ -608,6 +656,9 @@ public class onlinePB {
 	
 	private location locationAlreadyExist(float[] arr) {
 		
+		String funName = "locationAlreadyExist";
+		if(DEBUG_LEVEL_1)
+			System.out.println("Entered function "+funName);
 		if(!memoization)
 			return null;
 		boolean flag = false;
