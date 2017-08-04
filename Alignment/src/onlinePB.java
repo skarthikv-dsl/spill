@@ -28,6 +28,8 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.Vector;
@@ -72,6 +74,7 @@ public class onlinePB {
 	//static float minimum_selectivity = 0.000064f;
 	static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
+	static float lambda = 20;
 	static int decimalPrecision = 5;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
@@ -892,6 +895,148 @@ public class onlinePB {
 //}
 //
 
+	private void ContourCentricCostGreedy(int contour_no)
+	{
+		ArrayList<location> contour_locs = new ArrayList<location>();
+		
+		if(contour_no == -1){
+			//get all the location of all the contours
+			
+			for(int i=1; i<=ContourPointsMap.size();i++)
+				contour_locs.addAll(ContourPointsMap.get(i));
+		}
+		else{
+			contour_locs = ContourPointsMap.get(contour_no);
+		}
+		
+		int[] index = new int[dimension];
+		
+		int originalPlanCnt = new File(apktPath+"onlinePB/planStructureXML").listFiles().length ;
+		int plansArray[] = new int[originalPlanCnt];
+		HashSet<Integer> chosenPlanSet = new HashSet<Integer>();
+		int remainingSpace = 0;
+
+		Iterator iter;
+		int ix;
+
+		System.out.println(" < contour plans reduction > ");
+
+		
+		ix = 0;
+		while(ix < originalPlanCnt)
+		{
+			plansArray[ix] = ix;
+			ix++;
+		}
+
+		iter = contour_locs.iterator();
+		while(iter.hasNext())
+		{
+			location loc = (location)iter.next();
+			loc.is_within_threshold = new boolean[originalPlanCnt];
+			loc.reduced_planNumber = -1;
+			remainingSpace++;
+		}
+
+		String newQuery;
+		Plan plan = null;
+		double countCoverageLocations[];
+		int total = remainingSpace;
+		double maxCoverage = -1;
+		while(remainingSpace > 0)
+		{
+			countCoverageLocations = new double[originalPlanCnt];
+
+			iter = contour_locs.iterator();
+			int cnt = 0;
+			while(iter.hasNext())
+			{
+				location objContourPt = (location) iter.next();
+				if(objContourPt.reduced_planNumber != -1)
+					continue;
+				if(cnt++ > 10)
+				{
+//					System.out.println("..");
+					cnt = 0;
+				}
+				
+				for (int i=0; i<originalPlanCnt; i++)
+				{
+					
+					double foreign_cost  = getFPCCost(objContourPt.dim_values, i);
+
+					if(foreign_cost < (1 + (lambda/100.0)) * objContourPt.opt_cost)
+					{
+						objContourPt.is_within_threshold[i] = true;
+						countCoverageLocations[i] += 1;
+						if(maxCoverage < countCoverageLocations[i])
+						{
+							maxCoverage = countCoverageLocations[i];
+							if(contour_no!=-1) {
+								double perc = (((double)maxCoverage/(double)total)*100.0);
+							}
+						}
+					}
+				}
+			}
+
+			//2.find the plan that covers max area
+			maxCoverage = 0;
+			int maxCoveragePlan = -1;
+			int maxCoveragePlanIndex = -1;
+			
+			for (int i = 0; i < originalPlanCnt; i++)
+			{
+				if(maxCoverage < countCoverageLocations[i])
+				{
+					maxCoverage = countCoverageLocations[i];
+					maxCoveragePlanIndex = i;
+					maxCoveragePlan = plansArray[i];
+				}
+			}
+			if(maxCoveragePlan == -1)
+				break;
+
+			//3.remember the plan that covers max area & update the remaining space
+			chosenPlanSet.add(maxCoveragePlan);
+			remainingSpace -= countCoverageLocations[maxCoveragePlanIndex];			
+
+
+			//4. update reduced plan # of all locations where picked plan is lambda-optimal
+			iter = contour_locs.iterator();
+			while(iter.hasNext())
+			{
+				location objContourPt = (location)iter.next();
+				if(objContourPt.is_within_threshold[maxCoveragePlanIndex] == true)
+				{
+					objContourPt.reduced_planNumber = maxCoveragePlan;	
+				}
+			}
+		}
+
+		// update what plans are in which contour
+			HashSet<Integer> reducedPlansSet = new HashSet<Integer>();
+			for (int k = 0; k < ContourPointsMap.size(); k++) {
+				reducedPlansSet.clear();
+				iter = contour_locs.iterator();
+				while (iter.hasNext()) {
+					location objContourPt = (location) iter.next();
+					if (objContourPt.contour_no == k) {
+						reducedPlansSet.add(objContourPt.reduced_planNumber);
+					}
+				}
+
+				@SuppressWarnings("rawtypes")
+				Iterator it = reducedPlansSet.iterator();
+				while (it.hasNext()) {
+					short p = (Short) it.next();
+					contourPlansReduced.get(k).add(p);
+				}
+				System.out.println();
+			}
+		}
+		
+	}
 	
 	public double getFPCCost(float selectivity[], int p_no) throws SQLException{
 		//Get the path to p_no.xml
@@ -1167,7 +1312,8 @@ class location implements Serializable
 	float [] dim_values;
 	static Vector<Plan> plans_vector = new Vector<Plan>();
 	static int decimalPrecision;
-
+	boolean is_within_threshold[];
+	int reduced_planNumber;
 	
 	
 	location(location loc) {
