@@ -56,6 +56,7 @@ public class onlinePB {
 	static Connection conn = null;
 	static int database_conn=1;
 	static double h_cost;
+	static double min_cost;
 	static String select_query;
 	static String predicates;
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
@@ -134,18 +135,21 @@ public class onlinePB {
 		
 		//generating the contours contourwise
 		
-		int i;double min_cost;
+		int i;
 
 		
 		if(visualisation_2D){
 			obj.dimension = 2;
-			float [] h_loc_arr = {1.0f,1.0f};
-			location h_loc = new location(h_loc_arr,obj);
-			h_cost = h_loc.get_cost();
 			
 			float [] l_loc_arr = {minimum_selectivity,minimum_selectivity};
 			location l_loc = new location(l_loc_arr,obj);
 			min_cost = l_loc.get_cost();
+			
+			float [] h_loc_arr = {1.0f,1.0f};
+			location h_loc = new location(h_loc_arr,obj);
+			h_cost = h_loc.get_cost();
+			
+			
 		}
 		else{
 			h_cost = obj.getOptimalCost(obj.totalPoints-1);
@@ -201,7 +205,14 @@ public class onlinePB {
 			System.out.println("The running FPC calls are "+fpc_call);
 			int size_of_contour = contour_points.size();
 			ContourPointsMap.put(i, new ArrayList<location>(contour_points)); //storing the contour points
+			
 			non_ContourPointsMap.put(i, new ArrayList<location>(non_contour_points)); //storing the contour points
+			
+			for(location l: contour_points)
+				l.set_contour_no(i);
+			for(location l: non_contour_points)
+				l.set_contour_no(i);
+
 			System.out.println("Size of contour"+size_of_contour );
 
 			cost *=2;
@@ -219,6 +230,9 @@ public class onlinePB {
 		
 		long endTime = System.nanoTime();
 		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
+		
+		//obj.ContourCentricCostGreedy(-1);
+		System.out.println("");
 
 	}
 	
@@ -656,7 +670,11 @@ public class onlinePB {
 		}
 	}
 	
-	
+	private int getContourNo(double cost) {
+		
+		double ratio = cost/min_cost;
+		return (int)(Math.ceil(Math.log(ratio)/Math.log(2)))+1;
+	}
 	private location locationAlreadyExist(float[] arr) {
 		
 		String funName = "locationAlreadyExist";
@@ -895,7 +913,7 @@ public class onlinePB {
 //}
 //
 
-	private void ContourCentricCostGreedy(int contour_no)
+	private void ContourCentricCostGreedy(int contour_no) throws SQLException
 	{
 		ArrayList<location> contour_locs = new ArrayList<location>();
 		
@@ -1013,10 +1031,13 @@ public class onlinePB {
 				}
 			}
 		}
-
+		
+			System.out.println("After Reduction:");
+		
+			HashMap<Integer,HashSet<Integer>> contourPlansReduced = new HashMap<Integer,HashSet<Integer>>();
 		// update what plans are in which contour
 			HashSet<Integer> reducedPlansSet = new HashSet<Integer>();
-			for (int k = 0; k < ContourPointsMap.size(); k++) {
+			for (int k = 1; k <= ContourPointsMap.size(); k++) {
 				reducedPlansSet.clear();
 				iter = contour_locs.iterator();
 				while (iter.hasNext()) {
@@ -1026,23 +1047,24 @@ public class onlinePB {
 					}
 				}
 
-				@SuppressWarnings("rawtypes")
-				Iterator it = reducedPlansSet.iterator();
-				while (it.hasNext()) {
-					short p = (Short) it.next();
-					contourPlansReduced.get(k).add(p);
-				}
-				System.out.println();
+//				@SuppressWarnings("rawtypes")
+//				Iterator it = reducedPlansSet.iterator();
+//				while (it.hasNext()) {
+//					int p = (Short) it.next();
+//					contourPlansReduced.get(k).add(p);
+//				}
+				contourPlansReduced.put(k, reducedPlansSet);
+				
+				System.out.println("Contour"+k+" = "+reducedPlansSet.size());
 			}
 		}
-		
-	}
+	
 	
 	public double getFPCCost(float selectivity[], int p_no) throws SQLException{
 		//Get the path to p_no.xml
 		
 		
-		String xml_path = apktPath+"planStructureXML/"+p_no+".xml";
+		String xml_path = apktPath+"/onlinePB/planStructureXML/"+p_no+".xml";
 		
 		 String regx;
 	     Pattern pattern;
@@ -1314,6 +1336,7 @@ class location implements Serializable
 	static int decimalPrecision;
 	boolean is_within_threshold[];
 	int reduced_planNumber;
+	int contour_no;
 	
 	
 	location(location loc) {
@@ -1325,6 +1348,7 @@ class location implements Serializable
 		this.opt_plan_no = loc.opt_plan_no;
 		this.opt_cost = loc.opt_cost;
 		this.decimalPrecision = loc.decimalPrecision;
+		this.contour_no = loc.contour_no;
 		this.dim_values = new float[dimension];
 		//System.arraycopy(pg.dim_values, 0, dim_values, 0, dimension);
 		for(int it=0;it<dimension;it++)
@@ -1332,7 +1356,7 @@ class location implements Serializable
 
 	}
 	
-	location(float arr[], onlinePB obj) throws  IOException, PicassoException{
+	location(float arr[],  onlinePB obj) throws  IOException, PicassoException{
 		
 		this.dimension = obj.dimension;
 		this.conn = obj.conn;
@@ -1367,6 +1391,14 @@ class location implements Serializable
 		}
 		
 		getPlan();
+	}
+	
+	public void set_contour_no(int c) {
+		contour_no = c;
+	}
+	
+	public int get_contour_no() {
+		return contour_no;
 	}
 	
 	/*
