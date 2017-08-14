@@ -75,7 +75,7 @@ public class onlinePB {
 	//static float minimum_selectivity = 0.000064f;
 	static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
-	static float lambda = 20;
+	static float lambda = 50;
 	static int decimalPrecision = 5;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
@@ -222,18 +222,18 @@ public class onlinePB {
 		System.out.println("the number of optimization calls are "+opt_call);
 		System.out.println("the number of FPC calls are "+fpc_call);
 		
-		
-
-		if (conn != null) {
-	        try { conn.close(); } catch (SQLException e) {}
-	    }
+	
 		
 		long endTime = System.nanoTime();
 		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
 		
-		//obj.ContourCentricCostGreedy(-1);
+		obj.ContourCentricCostGreedy(-1);
 		System.out.println("");
-
+		
+		
+		if (conn != null) {
+	        try { conn.close(); } catch (SQLException e) {}
+	    }
 	}
 	
 	private void printSelectivityCost(float  sel_array[], double cost){
@@ -920,11 +920,14 @@ public class onlinePB {
 		if(contour_no == -1){
 			//get all the location of all the contours
 			
-			for(int i=1; i<=ContourPointsMap.size();i++)
+			for(int i=1; i<=ContourPointsMap.size();i++) {
 				contour_locs.addAll(ContourPointsMap.get(i));
+				contour_locs.addAll(non_ContourPointsMap.get(i));
+			}
 		}
 		else{
-			contour_locs = ContourPointsMap.get(contour_no);
+			contour_locs.addAll(ContourPointsMap.get(contour_no));
+			contour_locs.addAll(non_ContourPointsMap.get(contour_no));
 		}
 		
 		int[] index = new int[dimension];
@@ -1062,7 +1065,11 @@ public class onlinePB {
 	
 	public double getFPCCost(float selectivity[], int p_no) throws SQLException{
 		//Get the path to p_no.xml
+		String funName = "getFPCCost";
 		
+		if(DEBUG_LEVEL_1) {
+			System.out.println("Enterred "+funName);
+		}
 		
 		String xml_path = apktPath+"/onlinePB/planStructureXML/"+p_no+".xml";
 		
@@ -1111,7 +1118,9 @@ public class onlinePB {
 				//System.exit(1);
 				//String exp_query = new String(query_opt_spill);
 				
-				stmt.execute("set work_mem = '100MB'");
+				assert(stmt !=null) : "null statement ";
+				if(stmt != null)
+					stmt.execute("set work_mem = '100MB'");
 				//NOTE,Settings: 4GB for DS and 1GB for H
 				if(database_conn==0){
 					stmt.execute("set effective_cache_size='1GB'");
@@ -1181,7 +1190,9 @@ public class onlinePB {
 				
 			}
 
-			
+			if(DEBUG_LEVEL_1) {
+				System.out.println("Exitting "+funName);
+			}
 	
 			assert (execCost > 1 ): "execCost is less than 1";
 			return execCost; 
