@@ -72,14 +72,14 @@ public class onlinePB {
 	static String XMLPath = null;
 	
 	//parameters to set
-	//static float minimum_selectivity = 0.000064f;
-	static float minimum_selectivity = 0.001f;
+	static float minimum_selectivity = 0.000064f;
+	//static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
 	static float lambda = 50;
 	static int decimalPrecision = 5;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
-	static boolean visualisation_2D = false;
+	static boolean visualisation_2D = true;
 	static boolean enhancement = true; 
 	static boolean memoization = true;
 	 
@@ -111,6 +111,8 @@ public class onlinePB {
 			System.out.println("entered DB conn1");
 			Class.forName("org.postgresql.Driver");
 
+			File f_marwa = new File("/home/dsladmin/marwa");
+			
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
@@ -119,11 +121,19 @@ public class onlinePB {
 								"sa", "database");
 			}
 			else{
+			
+				if(f_marwa.exists() && !f_marwa.isDirectory()) { 
+					System.out.println("entered DB tpcds");
+					conn = DriverManager
+							.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
+									"sa", "database");
+				}
+				else{
 				System.out.println("entered DB tpcds");
 				conn = DriverManager
 						.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
 								"sa", "database");
-
+				}
 			}
 			System.out.println("Opened database successfully");
 		}
@@ -195,8 +205,10 @@ public class onlinePB {
 			System.out.println("Contour "+i+" cost : "+cost);
 			contour_points.clear();			
 			non_contour_points.clear();
-			if(i==5)
-				System.out.println("Interesting");
+//			if(i< 7) {
+//				i++;
+//				continue;
+//			}
 			obj.generateCoveringContours(order,cost);
 
 			if(visualisation_2D)
@@ -213,7 +225,7 @@ public class onlinePB {
 			for(location l: non_contour_points)
 				l.set_contour_no(i);
 
-			System.out.println("Size of contour"+size_of_contour );
+			System.out.println("Size of contour: "+size_of_contour );
 
 			cost *=2;
 			i++;
@@ -222,18 +234,20 @@ public class onlinePB {
 		System.out.println("the number of optimization calls are "+opt_call);
 		System.out.println("the number of FPC calls are "+fpc_call);
 		
-	
+		
+
+		
 		
 		long endTime = System.nanoTime();
 		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
 		
-		obj.ContourCentricCostGreedy(-1);
-		System.out.println("");
-		
+		//obj.ContourCentricCostGreedy(-1);
 		
 		if (conn != null) {
 	        try { conn.close(); } catch (SQLException e) {}
 	    }
+		System.out.println("");
+
 	}
 	
 	private void printSelectivityCost(float  sel_array[], double cost){
@@ -254,7 +268,7 @@ public class onlinePB {
 //	    String content = "This is the content to write into file";
 
 
-         File file = new File("/home/srinivas/spillBound/data/others/covering_contours/"+qtName+contour_no+".txt"); 
+         File file = new File("/home/dsladmin/Srinivas/data/others/covering_contours/"+qtName+contour_no+".txt"); 
            
 	    // if file doesn't exists, then create it
 	    if (!file.exists()) {
@@ -268,13 +282,20 @@ public class onlinePB {
 	    PrintWriter pw = new PrintWriter(writer);
 	    //Take iterator over the list
 	    for(location p : contour_points) {		 
-	   	 pw.print(p.get_dimension(0) + "\t"+p.get_dimension(1)+"\n");
+	   	 	for(int d=0; d < dimension; d++)
+	   	 		if(d < dimension -1)
+	   	 			pw.print(p.get_dimension(d) + "\t");
+	   	 		else
+	   	 			pw.print(p.get_dimension(d) + "\n");
 	    }
-	    for(location p : non_contour_points) {		 
-		   	 pw.print(p.get_dimension(0) + "\t"+p.get_dimension(1)+"\n");
-		 }
+//	    for(location p : non_contour_points) {		 
+//	    	for(int d=0; d < dimension; d++)
+//	   	 		if(d < dimension -1)
+//	   	 			pw.print(p.get_dimension(d) + "\t");
+//	   	 		else
+//	   	 			pw.print(p.get_dimension(d) + "\n");
+//		 }
 	    pw.close();
-//	    pwaz.close();
 	    writer.close();
 	    
 		} catch (IOException e) {
@@ -1118,9 +1139,7 @@ public class onlinePB {
 				//System.exit(1);
 				//String exp_query = new String(query_opt_spill);
 				
-				assert(stmt !=null) : "null statement ";
-				if(stmt != null)
-					stmt.execute("set work_mem = '100MB'");
+				stmt.execute("set work_mem = '100MB'");
 				//NOTE,Settings: 4GB for DS and 1GB for H
 				if(database_conn==0){
 					stmt.execute("set effective_cache_size='1GB'");
