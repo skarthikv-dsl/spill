@@ -70,7 +70,7 @@ public class onlinePB {
 	static ArrayList<location> contour_points = new ArrayList<location>();
 	static ArrayList<location> non_contour_points = new ArrayList<location>();
 	static String XMLPath = null;
-	
+	static File f_marwa;
 	//parameters to set
 	static float minimum_selectivity = 0.000064f;
 	//static float minimum_selectivity = 0.001f;
@@ -79,7 +79,7 @@ public class onlinePB {
 	static int decimalPrecision = 5;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
-	static boolean visualisation_2D = true;
+	static boolean visualisation_2D = false;
 	static boolean enhancement = true; 
 	static boolean memoization = true;
 	 
@@ -111,7 +111,7 @@ public class onlinePB {
 			System.out.println("entered DB conn1");
 			Class.forName("org.postgresql.Driver");
 
-			File f_marwa = new File("/home/dsladmin/marwa");
+			f_marwa = new File("/home/dsladmin/marwa");
 			
 			//Settings
 			//System.out.println("entered DB conn2");
@@ -211,7 +211,7 @@ public class onlinePB {
 //			}
 			obj.generateCoveringContours(order,cost);
 
-			if(visualisation_2D)
+			//if(visualisation_2D)
 				writeContourPointstoFile(i);
 			System.out.println("The running optimization calls are "+opt_call);
 			System.out.println("The running FPC calls are "+fpc_call);
@@ -233,9 +233,6 @@ public class onlinePB {
 		}
 		System.out.println("the number of optimization calls are "+opt_call);
 		System.out.println("the number of FPC calls are "+fpc_call);
-		
-		
-
 		
 		
 		long endTime = System.nanoTime();
@@ -266,38 +263,65 @@ public class onlinePB {
 		try {
 	    
 //	    String content = "This is the content to write into file";
+			File file_cs, file_contour;
+			
+			
+			
+			if(f_marwa.exists() && !f_marwa.isDirectory()) {
+				file_cs = new File("/home/dsladmin/Srinivas/data/others/covering_contours/"+qtName+contour_no+".txt");
+			}
+			else{
+				file_cs = new File("/home/dsladmin/Srinivas/data/others/covering_contours/"+qtName+contour_no+".txt");
+			}
+          
+			if(f_marwa.exists() && !f_marwa.isDirectory()) {
+				file_contour = new File("/home/dsladmin/Srinivas/data/others/contours/"+qtName+contour_no+".txt");
+			}
+			else{
+				file_contour = new File("/home/dsladmin/Srinivas/data/others/contours/"+qtName+contour_no+".txt");
+			}
 
-
-         File file = new File("/home/dsladmin/Srinivas/data/others/covering_contours/"+qtName+contour_no+".txt"); 
-           
+			
 	    // if file doesn't exists, then create it
-	    if (!file.exists()) {
-	        file.createNewFile();
+	    if (!file_cs.exists()) {
+	        file_cs.createNewFile();
+	    }
+	    
+	    if (!file_contour.exists()) {
+	        file_contour.createNewFile();
 	    }
 	    
 
-	    FileWriter writer = new FileWriter(file, false);
+	    FileWriter writer_cs = new FileWriter(file_cs, false);
+	    FileWriter writer_contour = new FileWriter(file_contour, false);
 
 	    
-	    PrintWriter pw = new PrintWriter(writer);
+	    PrintWriter pw_cs = new PrintWriter(writer_cs);
+	    PrintWriter pw_contour = new PrintWriter(writer_contour);
+	    
 	    //Take iterator over the list
 	    for(location p : contour_points) {		 
 	   	 	for(int d=0; d < dimension; d++)
 	   	 		if(d < dimension -1)
-	   	 			pw.print(p.get_dimension(d) + "\t");
+	   	 			pw_cs.print(p.get_dimension(d) + "\t");
 	   	 		else
-	   	 			pw.print(p.get_dimension(d) + "\n");
+	   	 			pw_cs.print(p.get_dimension(d) + "\n");
 	    }
-//	    for(location p : non_contour_points) {		 
-//	    	for(int d=0; d < dimension; d++)
-//	   	 		if(d < dimension -1)
-//	   	 			pw.print(p.get_dimension(d) + "\t");
-//	   	 		else
-//	   	 			pw.print(p.get_dimension(d) + "\n");
-//		 }
-	    pw.close();
-	    writer.close();
+
+	    for(location p : non_contour_points) {		 
+	    	for(int d=0; d < dimension; d++)
+	   	 		if(d < dimension -1)
+	   	 		pw_contour.print(p.get_dimension(d) + "\t");
+	   	 		else
+	   	 		pw_contour.print(p.get_dimension(d) + "\n");
+		 }
 	    
+	    pw_cs.close();
+	    writer_cs.close();
+
+	    pw_contour.close();
+	    writer_contour.close();
+
 		} catch (IOException e) {
 	    e.printStackTrace();
 	}
@@ -435,6 +459,7 @@ public class onlinePB {
 					non_contour_points.add(loc);
 					opt_call++;
 				}
+				
 				assert(loc != null): "location is null";
 				optimization_cost_rev = loc.get_cost(); 
 				if(DEBUG_LEVEL_2)
@@ -509,8 +534,11 @@ public class onlinePB {
 							qrun_copy[last_dim2] = minimum_selectivity;
 						
 						assert(qrun_copy[last_dim2] <= old_sel) : "selectivity not decreasing, even if it has to";
+						
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+old_sel/(qrun_copy[last_dim2]*beta));
+						
+						
 						if((loc = locationAlreadyExist(qrun_copy)) == null){
 							loc = new location(qrun_copy, this);
 							non_contour_points.add(loc);
@@ -521,6 +549,10 @@ public class onlinePB {
 						//non_contour_points.add(loc);
 						assert(loc != null) : "location is null";
 						opt_cost_copy = loc.get_cost();
+						
+						if(qrun_copy[last_dim2] <= minimum_selectivity)
+							break;
+						
 						
 						if(qrun_copy[last_dim1] > minimum_selectivity)
 							assert (opt_cost_copy >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+opt_cost_copy+" and contour cost = "+cost;
@@ -533,9 +565,13 @@ public class onlinePB {
 					
 					//if we hit the boundary then we are done
 					if(qrun_copy[last_dim2] <= minimum_selectivity){
-						qrun_copy[last_dim2] = minimum_selectivity;
-						if(!ContourLocationAlreadyExist(loc.dim_values))
-							contour_points.add(loc);
+//						
+						assert(qrun_copy[last_dim2] <= 1.0f) : "selectivity more than 1: not possible";
+//						if((loc = locationAlreadyExist(qrun_copy)) == null){
+//							loc = new location(qrun_copy, this);
+//						}
+//						if(!ContourLocationAlreadyExist(loc.dim_values))
+//							contour_points.add(loc); //definitely problem
 						break;
 					}
 					
@@ -563,9 +599,11 @@ public class onlinePB {
 						came_inside_dim1_loop = true;
 						
 						if (opt_cost_copy >=  target_cost2){
-							
+							if((loc = locationAlreadyExist(qrun_copy)) == null){
+								loc = new location(qrun_copy, this);
+							}
 							if(!ContourLocationAlreadyExist(loc.dim_values))
-								contour_points.add(loc);//check this again!
+								contour_points.add(loc);
 							break;
 						}
 						
@@ -609,10 +647,20 @@ public class onlinePB {
 						assert(qrun_copy[last_dim1] >= old_sel) : "selectivity not increasing, even if it has to";
 						
 						if(qrun_copy[last_dim1] >= 1.0f){
-
-							if(!ContourLocationAlreadyExist(loc.dim_values))
-								contour_points.add(loc);//check this again!
+							
 							qrun_copy[last_dim1] = 1.0f;
+							if((loc = locationAlreadyExist(qrun_copy)) == null){
+								loc = new location(qrun_copy, this);
+								opt_call++;
+							}
+							if(!ContourLocationAlreadyExist(loc.dim_values))
+								contour_points.add(loc);
+					
+							// check to see if the terminus point is reached for the 2D slice 
+							if(qrun_copy[last_dim2] >= 1.0f)
+								return; 
+							
+							break;
 						}
 						
 						if(DEBUG_LEVEL_2)
@@ -639,8 +687,15 @@ public class onlinePB {
 					
 					//if we hit the boundary then we are done
 					if(qrun_copy[last_dim1] >= 1.0f){
-						if(!ContourLocationAlreadyExist(loc.dim_values))
-							contour_points.add(loc);//check this again!
+					
+						assert(qrun_copy[last_dim1] <= 1.0f) : "selectivity more than 1: not possible";
+//						if(!ContourLocationAlreadyExist(loc.dim_values))
+//							contour_points.add(loc);//check this again!
+						
+						// check to see if the terminus point is reached for the 2D slice 
+						if(qrun_copy[last_dim2] >= 1.0f)
+							return; 
+
 						break;
 					}
 					
