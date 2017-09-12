@@ -205,11 +205,20 @@ public class onlinePB {
 			System.out.println("Contour "+i+" cost : "+cost);
 			contour_points.clear();			
 			non_contour_points.clear();
-//			if(i< 7) {
-//				i++;
-//				continue;
-//			}
-			obj.generateCoveringContours(order,cost);
+			
+			if(i == 3)
+				System.out.println("Interesting");
+			
+			if(cost < h_cost)
+				obj.generateCoveringContours(order,cost);
+			else {
+				//just add the terminus location to the contour
+				for(int d=0;d<dimension;d++)
+					qrun_sel[d] = 1.0f;
+				location loc_terminus = new location(qrun_sel,obj);
+				contour_points.add(loc_terminus);
+			}
+				
 
 			//if(visualisation_2D)
 				writeContourPointstoFile(i);
@@ -308,13 +317,13 @@ public class onlinePB {
 	   	 			pw_cs.print(p.get_dimension(d) + "\n");
 	    }
 
-	    for(location p : non_contour_points) {		 
-	    	for(int d=0; d < dimension; d++)
-	   	 		if(d < dimension -1)
-	   	 		pw_contour.print(p.get_dimension(d) + "\t");
-	   	 		else
-	   	 		pw_contour.print(p.get_dimension(d) + "\n");
-		 }
+//	    for(location p : non_contour_points) {		 
+//	    	for(int d=0; d < dimension; d++)
+//	   	 		if(d < dimension -1)
+//	   	 		pw_contour.print(p.get_dimension(d) + "\t");
+//	   	 		else
+//	   	 		pw_contour.print(p.get_dimension(d) + "\n");
+//		 }
 	    
 	    pw_cs.close();
 	    writer_cs.close();
@@ -359,7 +368,10 @@ public class onlinePB {
 		if(remainingDimList.size()==2)
 		{ 
 			int last_dim1=-1, last_dim2=-1;
-
+			
+			if(qrun_sel[0] == 0.01219)
+				System.out.println("intereseting");
+			
 			for(int i=0;i<dimension;i++)
 			{
 				if(learntDim.contains(i))
@@ -477,6 +489,7 @@ public class onlinePB {
 				int orig_dim1 = last_dim1;
 				int orig_dim2 = last_dim2;
 				double opt_cost_copy = Double.MIN_VALUE;
+				boolean contour_done = false; //to capture the finishing status of contour processing
 				
 				for(;;){
 					
@@ -497,6 +510,7 @@ public class onlinePB {
 					}
 					
 					boolean came_inside_dim2_loop = false;
+					contour_done = false;
 					while((qrun_copy[last_dim2] > minimum_selectivity) && (target_cost1 <= opt_cost_copy))
 					{
 
@@ -522,6 +536,7 @@ public class onlinePB {
 							if((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1]) || (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2])){
 
 								//setting 
+								contour_done = true;
 								break;
 							}
 						}							
@@ -550,8 +565,10 @@ public class onlinePB {
 						assert(loc != null) : "location is null";
 						opt_cost_copy = loc.get_cost();
 						
-						if(qrun_copy[last_dim2] <= minimum_selectivity)
+						if(qrun_copy[last_dim2] <= minimum_selectivity) {
+							contour_done = true;
 							break;
+						}
 						
 						
 						if(qrun_copy[last_dim1] > minimum_selectivity)
@@ -563,24 +580,12 @@ public class onlinePB {
 						
 					}
 					
-					//if we hit the boundary then we are done
-					if(qrun_copy[last_dim2] <= minimum_selectivity){
-//						
-						assert(qrun_copy[last_dim2] <= 1.0f) : "selectivity more than 1: not possible";
-//						if((loc = locationAlreadyExist(qrun_copy)) == null){
-//							loc = new location(qrun_copy, this);
-//						}
-//						if(!ContourLocationAlreadyExist(loc.dim_values))
-//							contour_points.add(loc); //definitely problem
+					//if we hit one of the boundary then we are done
+					if(contour_done){
 						break;
 					}
 					
 					
-					if(came_inside_dim2_loop)
-						assert(opt_cost_copy <= target_cost2 && opt_cost_copy >=target_cost1) : "not in the valid cost range for dim2";
-					
-
-
 					//we are forward jumping along last_dim1 dimension
 					//qrun_sel[last_dim1] = minimum_selectivity;
 //					if((loc = locationAlreadyExist(qrun_sel)) == null){
@@ -592,7 +597,7 @@ public class onlinePB {
 //					optimization_cost = loc.get_cost();
 					
 					boolean came_inside_dim1_loop = false;
-					
+					contour_done = false;
 					while((qrun_copy[last_dim1] < 1.0f) && (opt_cost_copy <= target_cost3))
 					{
 
@@ -623,6 +628,7 @@ public class onlinePB {
 
 							if((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1]) || (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2])){
 
+								contour_done = true;
 								//setting 
 								break;
 							}
@@ -660,6 +666,7 @@ public class onlinePB {
 							if(qrun_copy[last_dim2] >= 1.0f)
 								return; 
 							
+							contour_done = true;
 							break;
 						}
 						
@@ -686,12 +693,8 @@ public class onlinePB {
 					}
 					
 					//if we hit the boundary then we are done
-					if(qrun_copy[last_dim1] >= 1.0f){
-					
-						assert(qrun_copy[last_dim1] <= 1.0f) : "selectivity more than 1: not possible";
-//						if(!ContourLocationAlreadyExist(loc.dim_values))
-//							contour_points.add(loc);//check this again!
-						
+					if(contour_done){
+
 						// check to see if the terminus point is reached for the 2D slice 
 						if(qrun_copy[last_dim2] >= 1.0f)
 							return; 
@@ -724,7 +727,7 @@ public class onlinePB {
 					if(enhancement){
 						increase_along_dim1 = increase_along_dim1 ? false : true;
 						
-						if((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1]) || (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2]))
+						if((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1]) || (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2]) || contour_done)
 							break;
 					}
 				}
@@ -751,6 +754,8 @@ public class onlinePB {
 		double ratio = cost/min_cost;
 		return (int)(Math.ceil(Math.log(ratio)/Math.log(2)))+1;
 	}
+	
+	
 	private location locationAlreadyExist(float[] arr) {
 		
 		String funName = "locationAlreadyExist";
