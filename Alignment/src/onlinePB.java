@@ -72,16 +72,18 @@ public class onlinePB {
 	static String XMLPath = null;
 	static File f_marwa;
 	//parameters to set
-	static float minimum_selectivity = 0.000064f;
-	//static float minimum_selectivity = 0.001f;
+	//static float minimum_selectivity = 0.000064f;
+	static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
 	static float lambda = 50;
-	static int decimalPrecision = 5;
+	static int decimalPrecision = 6;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
 	static boolean visualisation_2D = false;
 	static boolean enhancement = true; 
 	static boolean memoization = true;
+	static int location_hits = 0;
+	static float cost_error = 0.05f;
 	 
 
 	
@@ -242,6 +244,7 @@ public class onlinePB {
 		}
 		System.out.println("the number of optimization calls are "+opt_call);
 		System.out.println("the number of FPC calls are "+fpc_call);
+		System.out.println("location hits "+location_hits);
 		
 		
 		long endTime = System.nanoTime();
@@ -369,7 +372,7 @@ public class onlinePB {
 		{ 
 			int last_dim1=-1, last_dim2=-1;
 			
-			if(qrun_sel[0] == 0.01219)
+			if(Math.abs(qrun_sel[0] - 0.01219) < 0.0001f)
 				System.out.println("intereseting");
 			
 			for(int i=0;i<dimension;i++)
@@ -513,7 +516,11 @@ public class onlinePB {
 					contour_done = false;
 					while((qrun_copy[last_dim2] > minimum_selectivity) && (target_cost1 <= opt_cost_copy))
 					{
-
+						
+						if((Math.abs(qrun_copy[0] - 0.01219) < 0.0001f) && (Math.abs(qrun_copy[1] - 0.00621) < 0.0001f) && (Math.abs(qrun_copy[2] - 1.0) < 0.0001f)  )
+							System.out.println("intereseting");
+						
+						
 						came_inside_dim2_loop = true;
 						
 						if (opt_cost_copy <=  target_cost2)
@@ -601,6 +608,9 @@ public class onlinePB {
 					while((qrun_copy[last_dim1] < 1.0f) && (opt_cost_copy <= target_cost3))
 					{
 
+						if((Math.abs(qrun_copy[0] - 0.01219) < 0.0001f) && (Math.abs(qrun_copy[1] - 0.00621) < 0.0001f) && (Math.abs(qrun_copy[2] - 1.0) < 0.0001f)  )
+							System.out.println("intereseting");
+
 						came_inside_dim1_loop = true;
 						
 						if (opt_cost_copy >=  target_cost2){
@@ -609,6 +619,9 @@ public class onlinePB {
 							}
 							if(!ContourLocationAlreadyExist(loc.dim_values))
 								contour_points.add(loc);
+							
+							if(Math.abs(qrun_copy[0] - 0.01219) < 0.0001f)
+								System.out.println("really interesting");
 							break;
 						}
 						
@@ -702,8 +715,10 @@ public class onlinePB {
 						break;
 					}
 					
+					
 					if(came_inside_dim1_loop)
-						assert(opt_cost_copy <= target_cost3 && opt_cost_copy >= target_cost2) : "dim1 is not in the range"; 
+						assert(opt_cost_copy <= target_cost3*(1+cost_error) && (1+cost_error)*opt_cost_copy >= target_cost2) : "dim1 is not in the range: opt_cost = "+opt_cost_copy+" target_cost2 = "+ target_cost2+ " target_cost3 = "+target_cost3; 
+						
 					
 					//
 					if(opt_cost_copy > Math.pow(beta, dimension)*cost){
@@ -739,13 +754,14 @@ public class onlinePB {
 		
 		Integer curDim = remainingDimList.get(0); 
 
-		for(qrun_sel[curDim] = minimum_selectivity; qrun_sel[curDim] <= 1.0; qrun_sel[curDim] *= beta)
+		for(qrun_sel[curDim] = minimum_selectivity; qrun_sel[curDim] <= 1.0; )
 		{	
 //			if(qrun_sel[0] == minimum_selectivity)
 //				continue;
 			learntDim.add(curDim);
 			generateCoveringContours(order, cost);
 			learntDim.remove(learntDim.indexOf(curDim));
+			qrun_sel[curDim] = roundToDouble(qrun_sel[curDim]*beta);
 		}
 	}
 	
@@ -769,25 +785,31 @@ public class onlinePB {
 			for(location loc: ContourPointsMap.get(c)){
 				flag = true;
 				for(int i=0;i<dimension;i++){
-					if(loc.get_dimension(i)!= arr[i]){
+					//if(loc.get_dimension(i) != arr[i]){
+					if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
 						flag = false;
 						break;
 					}
 				}
-				if(flag==true)
+				if(flag==true) {
+					location_hits ++;
 					return loc;
+				}
 			}
 			
 			for(location loc: non_ContourPointsMap.get(c)){
 				flag = true;
 				for(int i=0;i<dimension;i++){
-					if(loc.get_dimension(i)!= arr[i]){
+					//if(loc.get_dimension(i) != arr[i]){
+					if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
 						flag = false;
 						break;
 					}
 				}
-				if(flag==true)
+				if(flag==true) {
+					location_hits ++;
 					return loc;
+				}
 			}
 		}
 		return null;
@@ -799,7 +821,7 @@ public class onlinePB {
 		for(location loc: contour_points){
 			flag = true;
 			for(int i=0;i<dimension;i++){
-				if(loc.get_dimension(i)!= arr[i]){
+				if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.000001){
 					flag = false;
 					break;
 				}
