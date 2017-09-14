@@ -208,8 +208,11 @@ public class onlinePB {
 			contour_points.clear();			
 			non_contour_points.clear();
 			
-			if(i == 3)
-				System.out.println("Interesting");
+//			if(i < 2){
+//				i++;
+//				cost *=2;
+//				continue;
+//			}
 			
 			if(cost < h_cost)
 				obj.generateCoveringContours(order,cost);
@@ -276,10 +279,12 @@ public class onlinePB {
 	    
 //	    String content = "This is the content to write into file";
 			File file_cs, file_contour;
+			File file;
 			
 			
 			
 			if(f_marwa.exists() && !f_marwa.isDirectory()) {
+
 				file_cs = new File("/home/dsladmin/Srinivas/data/others/covering_contours/"+qtName+contour_no+".txt");
 			}
 			else{
@@ -293,7 +298,8 @@ public class onlinePB {
 				file_contour = new File("/home/dsladmin/Srinivas/data/others/contours/"+qtName+contour_no+".txt");
 			}
 
-			
+          
+           
 	    // if file doesn't exists, then create it
 	    if (!file_cs.exists()) {
 	        file_cs.createNewFile();
@@ -608,7 +614,7 @@ public class onlinePB {
 					while((qrun_copy[last_dim1] < 1.0f) && (opt_cost_copy <= target_cost3))
 					{
 
-						if((Math.abs(qrun_copy[0] - 0.01219) < 0.0001f) && (Math.abs(qrun_copy[1] - 0.00621) < 0.0001f) && (Math.abs(qrun_copy[2] - 1.0) < 0.0001f)  )
+						if((Math.abs(qrun_copy[0] - 0.01219) < 0.000001f) && (Math.abs(qrun_copy[1] - 0.00621) < 0.000001f) && (Math.abs(qrun_copy[2] - 1.0) < 0.00001f)  )
 							System.out.println("intereseting");
 
 						came_inside_dim1_loop = true;
@@ -646,6 +652,10 @@ public class onlinePB {
 								break;
 							}
 						}	
+						
+						if((Math.abs(qrun_copy[0] - 0.006726) < 0.000001f) && (Math.abs(qrun_copy[1] - 0.001189) < 0.000001f) && (Math.abs(qrun_copy[2] - 0.031114) < 0.000001f) && (Math.abs(qrun_copy[3] - 1.0) < 0.000001f) )
+							System.out.println("intereseting");
+
 						// the argument for calculate jump size is the dimension along which we need to traverse				
 						double forward_jump = calculateJumpSize(qrun_copy,last_dim1,opt_cost_copy);
 
@@ -654,6 +664,9 @@ public class onlinePB {
 						
 						float old_sel = qrun_copy[last_dim1]; 
 						qrun_copy[last_dim1] += (beta -1)*forward_jump; //check this again!
+						
+						if((beta -1)*forward_jump <= 0.0f)
+							printSelectivityCost(qrun_copy,opt_cost_copy);
 						
 						assert((beta -1)*forward_jump > 0.0f) : "jump in the negative direction";
 						
@@ -721,9 +734,15 @@ public class onlinePB {
 						
 					
 					//
-					if(opt_cost_copy > Math.pow(beta, dimension)*cost){
-						System.out.println("How is this possible? and cost increase is "+opt_cost_copy/Math.pow(beta, dimension)*cost);
+					if(opt_cost_copy > (Math.pow(beta, dimension)*cost)){
+						
 						opt_cost_copy = Math.pow(beta, dimension)*cost;
+						
+						if(opt_cost_copy > (Math.pow(beta, dimension)*cost*(1+cost_error))){
+							System.out.print("How is this possible? and cost increase is "+opt_cost_copy/(Math.pow(beta, dimension)*cost));
+							System.out.println(" \t opt_cost_copy "+opt_cost_copy+" max possible cost "+(Math.pow(beta, dimension)*cost));
+						}
+
 					}
 					
 					
@@ -759,6 +778,7 @@ public class onlinePB {
 //			if(qrun_sel[0] == minimum_selectivity)
 //				continue;
 			learntDim.add(curDim);
+			//if(qrun_sel[0] >= 0.006 && qrun_sel[1] >= 0.001 )
 			generateCoveringContours(order, cost);
 			learntDim.remove(learntDim.indexOf(curDim));
 			qrun_sel[curDim] = roundToDouble(qrun_sel[curDim]*beta);
@@ -821,7 +841,7 @@ public class onlinePB {
 		for(location loc: contour_points){
 			flag = true;
 			for(int i=0;i<dimension;i++){
-				if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.000001){
+				if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
 					flag = false;
 					break;
 				}
@@ -854,22 +874,31 @@ public class onlinePB {
 					fpc_cost = (1+del)*base_cost;
 				
 				float sel_diff = del*(sel[dim]/(1+del));
-				sum_slope += (fpc_cost - base_cost)/(sel_diff);
+				
+				if(fpc_cost > base_cost){
+					sum_slope += (fpc_cost - base_cost)/(sel_diff);
+					divFactor ++;
+				}
+				
 				if(DEBUG_LEVEL_2)
 				{
 					System.out.println("Dim = "+dim+" fpc = "+(fpc_cost)+" base cost = "+base_cost+" neighbour location = "+sel[dim]+" base location = "+sel[dim]/(1+del));
 				}
-				if(fpc_cost != base_cost)
-					divFactor ++;
+				
 			}
 			
-			double avg_slope =1;
-			if(divFactor >0 )
-				 avg_slope = sum_slope/divFactor;
-			 //TODO: really need to do something else for it!
+			double avg_slope =1;double jump_size = minimum_selectivity;
+			if(divFactor >0 ){
+				 avg_slope = sum_slope/divFactor; 			 //TODO: really need to do something else for it!
+				 
+					//now return the jump_size which is cost/slope or F/m;
+				 jump_size = base_cost/avg_slope;
+			}
+
 			
-		//now return the jump_size which is cost/slope or F/m;
-			double jump_size = base_cost/avg_slope;
+
+			
+			
 			
 			if(DEBUG_LEVEL_1)
 				System.out.println("jump size is "+jump_size);
