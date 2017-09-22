@@ -71,6 +71,8 @@ public class onlinePB {
 	static ArrayList<location> non_contour_points = new ArrayList<location>();
 	static String XMLPath = null;
 	static File f_marwa;
+	
+	
 	//parameters to set
 	//static float minimum_selectivity = 0.000064f;
 	static float minimum_selectivity = 0.001f;
@@ -84,7 +86,7 @@ public class onlinePB {
 	static boolean memoization = true;
 	static int location_hits = 0;
 	static float cost_error = 0.05f;
-	 
+	static boolean contoursReadFromFile = true;
 
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException {
@@ -144,123 +146,151 @@ public class onlinePB {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 		
-		
-		//generating the contours contourwise
-		
-		int i;
+		File ContoursFile = new File(apktPath+"contours/Contours.map");
 
-		
-		if(visualisation_2D){
-			obj.dimension = 2;
-			
-			float [] l_loc_arr = {minimum_selectivity,minimum_selectivity};
-			location l_loc = new location(l_loc_arr,obj);
-			min_cost = l_loc.get_cost();
-			
-			float [] h_loc_arr = {1.0f,1.0f};
-			location h_loc = new location(h_loc_arr,obj);
-			h_cost = h_loc.get_cost();
-			
-			
+		if(contoursReadFromFile && ContoursFile.exists()){
+			obj.readContourPointsFromFile();
 		}
 		else{
-			h_cost = obj.getOptimalCost(obj.totalPoints-1);
-			qrun_sel = new float[dimension];
-			for(int d=0;d<dimension;d++)
-				qrun_sel[d] = minimum_selectivity;
-			min_cost = obj.getFPCCost(qrun_sel, -1);
+			//generating the contours contourwise
+			int i;
 
-		}
-		
-		
-		qrun_sel = new float[dimension];
-		qrun_sel_rev = new float[dimension];
-		for(int d=0;d<dimension;d++){
-			qrun_sel[d] = -1.0f;
-			qrun_sel_rev[d] = -1.0f;
-		}
-		
-		XMLPath = new String(apktPath+"onlinePB.xml");
-		beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
-		double cost = min_cost;
-		double ratio = h_cost/min_cost;
-		assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
-		System.out.println("the ratio of C_max/c_min is "+ratio);
 
-		//reset the values to -1 for the rest of the code 
-		for(int d=0;d<dimension;d++)
-			qrun_sel[d] = -1.0f;
-		
-		i = 1;
-		
-		ArrayList<Integer> order = new ArrayList<Integer>();
-		order.clear(); 
-		for(int d=0;d<obj.dimension;d++)
-			order.add(d);
-		
-		
-		while(cost < 2*h_cost)
-		{
-			if(cost>h_cost)
-				cost = h_cost;
-			System.out.println("---------------------------------------------------------------------------------------------\n");
-			System.out.println("Contour "+i+" cost : "+cost);
-			contour_points.clear();			
-			non_contour_points.clear();
-			
-//			if(i < 2){
-//				i++;
-//				cost *=2;
-//				continue;
-//			}
-			
-			if(cost < h_cost)
-				obj.generateCoveringContours(order,cost);
-			else {
-				//just add the terminus location to the contour
-				for(int d=0;d<dimension;d++)
-					qrun_sel[d] = 1.0f;
-				location loc_terminus = new location(qrun_sel,obj);
-				contour_points.add(loc_terminus);
+			if(visualisation_2D){
+				obj.dimension = 2;
+
+				float [] l_loc_arr = {minimum_selectivity,minimum_selectivity};
+				location l_loc = new location(l_loc_arr,obj);
+				min_cost = l_loc.get_cost();
+
+				float [] h_loc_arr = {1.0f,1.0f};
+				location h_loc = new location(h_loc_arr,obj);
+				h_cost = h_loc.get_cost();
+
+
 			}
-				
+			else{
+				h_cost = obj.getOptimalCost(obj.totalPoints-1);
+				qrun_sel = new float[dimension];
+				for(int d=0;d<dimension;d++)
+					qrun_sel[d] = minimum_selectivity;
+				min_cost = obj.getFPCCost(qrun_sel, -1);
 
-			//if(visualisation_2D)
+			}
+
+
+			qrun_sel = new float[dimension];
+			qrun_sel_rev = new float[dimension];
+			for(int d=0;d<dimension;d++){
+				qrun_sel[d] = -1.0f;
+				qrun_sel_rev[d] = -1.0f;
+			}
+
+			XMLPath = new String(apktPath+"onlinePB.xml");
+			beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
+			double cost = min_cost;
+			double ratio = h_cost/min_cost;
+			assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
+			System.out.println("the ratio of C_max/c_min is "+ratio);
+
+			//reset the values to -1 for the rest of the code 
+			for(int d=0;d<dimension;d++)
+				qrun_sel[d] = -1.0f;
+
+			i = 1;
+
+			ArrayList<Integer> order = new ArrayList<Integer>();
+			order.clear(); 
+			for(int d=0;d<obj.dimension;d++)
+				order.add(d);
+
+
+			while(cost < 2*h_cost)
+			{
+				if(cost>h_cost)
+					cost = h_cost;
+				System.out.println("---------------------------------------------------------------------------------------------\n");
+				System.out.println("Contour "+i+" cost : "+cost);
+				contour_points.clear();			
+				non_contour_points.clear();
+
+				//			if(i < 2){
+				//				i++;
+				//				cost *=2;
+				//				continue;
+				//			}
+
+				if(cost < h_cost)
+					obj.generateCoveringContours(order,cost);
+				else {
+					//just add the terminus location to the contour
+					for(int d=0;d<dimension;d++)
+						qrun_sel[d] = 1.0f;
+					location loc_terminus = new location(qrun_sel,obj);
+					contour_points.add(loc_terminus);
+				}
+
+
+				//if(visualisation_2D)
 				writeContourPointstoFile(i);
-			System.out.println("The running optimization calls are "+opt_call);
-			System.out.println("The running FPC calls are "+fpc_call);
-			int size_of_contour = contour_points.size();
-			ContourPointsMap.put(i, new ArrayList<location>(contour_points)); //storing the contour points
-			
-			non_ContourPointsMap.put(i, new ArrayList<location>(non_contour_points)); //storing the contour points
-			
-			for(location l: contour_points)
-				l.set_contour_no(i);
-			for(location l: non_contour_points)
-				l.set_contour_no(i);
+				System.out.println("The running optimization calls are "+opt_call);
+				System.out.println("The running FPC calls are "+fpc_call);
+				int size_of_contour = contour_points.size();
+				ContourPointsMap.put(i, new ArrayList<location>(contour_points)); //storing the contour points
 
-			System.out.println("Size of contour: "+size_of_contour );
+				non_ContourPointsMap.put(i, new ArrayList<location>(non_contour_points)); //storing the contour points
 
-			cost *=2;
-			i++;
+				for(location l: contour_points)
+					l.set_contour_no(i);
+				for(location l: non_contour_points)
+					l.set_contour_no(i);
 
+				System.out.println("Size of contour: "+size_of_contour );
+
+				cost *=2;
+				i++;
+
+			}
+			System.out.println("the number of optimization calls are "+opt_call);
+			System.out.println("the number of FPC calls are "+fpc_call);
+			System.out.println("location hits "+location_hits);
+
+
+			long endTime = System.nanoTime();
+			System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
 		}
-		System.out.println("the number of optimization calls are "+opt_call);
-		System.out.println("the number of FPC calls are "+fpc_call);
-		System.out.println("location hits "+location_hits);
-		
-		
-		long endTime = System.nanoTime();
-		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
-		
-		//obj.ContourCentricCostGreedy(-1);
-		
-		if (conn != null) {
-	        try { conn.close(); } catch (SQLException e) {}
-	    }
-		System.out.println("");
 
+		obj.ContourCentricCostGreedy(-1);
+
+		if (conn != null) {
+			try { conn.close(); } catch (SQLException e) {}
+		}
+		System.out.println("");
+		readContourPointsFromFile
 	}
+	
+	public void readContourPointsFromFile() throws ClassNotFoundException {
+
+		try {
+			
+			ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"contours/Contours.map")));
+			ContourLocationsMap obj = (ContourLocationsMap)ip.readObject();
+			ContourPointsMap = obj.getContourMap();
+			Iterator itr = ContourPointsMap.keySet().iterator();
+			while(itr.hasNext()){
+				Integer key = (Integer) itr.next();
+				
+				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
+				System.out.println("The no. of locations on contour "+(key.intValue())+" is "+ContourPointsMap.get(key).size());
+				System.out.println("--------------------------------------------------------------------------------------");
+				
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		//System.exit(0);
+	}
+
 	
 	private void printSelectivityCost(float  sel_array[], double cost){
 		
@@ -326,13 +356,13 @@ public class onlinePB {
 	   	 			pw_cs.print(p.get_dimension(d) + "\n");
 	    }
 
-//	    for(location p : non_contour_points) {		 
-//	    	for(int d=0; d < dimension; d++)
-//	   	 		if(d < dimension -1)
-//	   	 		pw_contour.print(p.get_dimension(d) + "\t");
-//	   	 		else
-//	   	 		pw_contour.print(p.get_dimension(d) + "\n");
-//		 }
+	    for(location p : non_contour_points) {		 
+	    	for(int d=0; d < dimension; d++)
+	   	 		if(d < dimension -1)
+	   	 		pw_contour.print(p.get_dimension(d) + "\t");
+	   	 		else
+	   	 		pw_contour.print(p.get_dimension(d) + "\n");
+		 }
 	    
 	    pw_cs.close();
 	    writer_cs.close();
@@ -832,6 +862,37 @@ public class onlinePB {
 				}
 			}
 		}
+		
+		for(location loc: contour_points){
+			flag = true;
+			for(int i=0;i<dimension;i++){
+				//if(loc.get_dimension(i) != arr[i]){
+				if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
+					flag = false;
+					break;
+				}
+			}
+			if(flag==true) {
+				location_hits ++;
+				return loc;
+			}
+		}
+		
+		for(location loc: non_contour_points){
+			flag = true;
+			for(int i=0;i<dimension;i++){
+				//if(loc.get_dimension(i) != arr[i]){
+				if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
+					flag = false;
+					break;
+				}
+			}
+			if(flag==true) {
+				location_hits ++;
+				return loc;
+			}
+		}
+		
 		return null;
 	}
 
