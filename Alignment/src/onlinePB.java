@@ -30,9 +30,15 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.Vector;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -51,10 +57,11 @@ public class onlinePB {
 	static float selectivity[];
 	static String apktPath;
 	static String qtName ;
-	//static Jdbc3PoolingDataSource source;
+	static Jdbc3PoolingDataSource source;
 	static String query;
-	static Connection conn = null;
+	Connection conn = null;
 	static int database_conn=1;
+	static int sel_distribution = 1;
 	static double h_cost;
 	static double min_cost;
 	static String select_query;
@@ -69,15 +76,19 @@ public class onlinePB {
 	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
 	static ArrayList<location> contour_points = new ArrayList<location>();
 	static ArrayList<location> non_contour_points = new ArrayList<location>();
+	static HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
 	static String XMLPath = null;
 	static File f_marwa;
-	
-	
+	static double learning_cost_pb = 0;
+	static boolean done_pb = false;
+	static float[] actual_sel_pb; 
+	static int num_of_usable_threads;
 	//parameters to set
-	//static float minimum_selectivity = 0.000064f;
-	static float minimum_selectivity = 0.001f;
+	//static float minimum_selectivity = 0.00005f;
+	static float minimum_selectivity = 0.0001f;
+	//static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
-	static float lambda = 50;
+	static float lambda = 20;
 	static int decimalPrecision = 6;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
@@ -87,10 +98,13 @@ public class onlinePB {
 	static int location_hits = 0;
 	static float cost_error = 0.05f;
 	static boolean contoursReadFromFile = true;
+	static boolean singleThread = false;
 
 	
-	public static void main(String[] args) throws IOException, SQLException, PicassoException {
+	public static void main(String[] args) throws IOException, SQLException, PicassoException, ClassNotFoundException {
 	
+		int threads = (int) ( Runtime.getRuntime().availableProcessors()*1);
+		num_of_usable_threads = threads;
 		long startTime = System.nanoTime();
 		onlinePB obj = new onlinePB();  
 		obj.loadPropertiesFile();
@@ -113,32 +127,45 @@ public class onlinePB {
 		
 		try{
 			System.out.println("entered DB conn1");
-			Class.forName("org.postgresql.Driver");
-
+			source = new Jdbc3PoolingDataSource();
+			source.setDataSourceName("A Data Source");
 			f_marwa = new File("/home/dsladmin/marwa");
 			
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
-				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
-								"sa", "database");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+//								"sa", "database");
 			}
 			else{
 			
 				if(f_marwa.exists() && !f_marwa.isDirectory()) { 
 					System.out.println("entered DB tpcds");
-					conn = DriverManager
-							.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
-									"sa", "database");
+//					conn = DriverManager
+//							.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
+//									"sa", "database");
+					source.setServerName("localhost:5431");
+					source.setDatabaseName("tpcds-ai");
 				}
 				else{
 				System.out.println("entered DB tpcds");
-				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
-								"sa", "database");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+//								"sa", "database");
+				source.setServerName("localhost:5432");
+				source.setDatabaseName("tpcds-ai");
 				}
 			}
+			source.setUser("sa");
+			source.setPassword("database");
+			
+			if(singleThread)
+				source.setMaxConnections(1);
+			else
+				source.setMaxConnections(num_of_usable_threads);
+			
+			obj.conn = source.getConnection();
 			System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
@@ -146,7 +173,7 @@ public class onlinePB {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 		
-		File ContoursFile = new File(apktPath+"contours/Contours.map");
+		File ContoursFile = new File(apktPath+"online_contours/Contours.map");
 
 		if(contoursReadFromFile && ContoursFile.exists()){
 			obj.readContourPointsFromFile();
@@ -170,13 +197,19 @@ public class onlinePB {
 
 			}
 			else{
-				h_cost = obj.getOptimalCost(obj.totalPoints-1);
+				
 				qrun_sel = new float[dimension];
+				for(int d=0;d<dimension;d++)
+					qrun_sel[d] = 1.0f;
+				location loc_terminus = new location(qrun_sel,obj);
+				h_cost = loc_terminus.get_cost(); 
+				contour_points.add(loc_terminus);
+				
 				for(int d=0;d<dimension;d++)
 					qrun_sel[d] = minimum_selectivity;
 				min_cost = obj.getFPCCost(qrun_sel, -1);
-
 			}
+
 
 
 			qrun_sel = new float[dimension];
@@ -193,6 +226,7 @@ public class onlinePB {
 			assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
 			System.out.println("the ratio of C_max/c_min is "+ratio);
 
+			//System.exit(0);
 			//reset the values to -1 for the rest of the code 
 			for(int d=0;d<dimension;d++)
 				qrun_sel[d] = -1.0f;
@@ -236,6 +270,7 @@ public class onlinePB {
 				System.out.println("The running optimization calls are "+opt_call);
 				System.out.println("The running FPC calls are "+fpc_call);
 				int size_of_contour = contour_points.size();
+				int size_of_non_contour = non_contour_points.size();
 				ContourPointsMap.put(i, new ArrayList<location>(contour_points)); //storing the contour points
 
 				non_ContourPointsMap.put(i, new ArrayList<location>(non_contour_points)); //storing the contour points
@@ -246,6 +281,7 @@ public class onlinePB {
 					l.set_contour_no(i);
 
 				System.out.println("Size of contour: "+size_of_contour );
+				System.out.println("Size of non-contour: "+size_of_non_contour );
 
 				cost *=2;
 				i++;
@@ -258,23 +294,339 @@ public class onlinePB {
 
 			long endTime = System.nanoTime();
 			System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
+			obj.writeMaptoFile();
 		}
-
-		obj.ContourCentricCostGreedy(-1);
-
-		if (conn != null) {
-			try { conn.close(); } catch (SQLException e) {}
-		}
+		
 		System.out.println("");
-		readContourPointsFromFile
+		if (obj.conn != null) {
+			try { obj.conn.close(); } catch (SQLException e) {}
+		}		
+		
+		
+		obj.ContourCentricCostGreedy(-1);
+		
+		obj.conn = source.getConnection();
+		obj.runPlanBouquetAlgo();
+		if (obj.conn != null) {
+			try { obj.conn.close(); } catch (SQLException e) {}
+		}
+		
+		System.out.println("");
+		
 	}
 	
+	
+	public void runPlanBouquetAlgo() throws SQLException {
+		
+		/*
+		 * running the plan bouquet algorithm 
+		 */
+		double MSO =0, ASO = 0,SO=0,anshASO = 0;
+		int ASO_points=0;
+		int min_point =0;
+
+		//getPlanCountArray();
+		
+		
+		int max_point = totalPoints;
+		float[] q_sel = new float[dimension];
+		for(int d=0;d<dimension;d++)
+			q_sel[d] = minimum_selectivity;
+		min_cost = getFPCCost(q_sel, -1);
+		
+		for(int d=0;d<dimension;d++)
+			q_sel[d] = 1.0f;
+		h_cost = getFPCCost(q_sel, -1);
+		
+		double[] subOpt = new double[max_point];
+		
+		  for (int  j = min_point; j < max_point ; j++)
+		  {
+			System.out.println("Entering loop "+j);
+
+//			if(j != 28)
+//				continue;
+			//initialization for every loop
+			
+			double algo_cost = 0;
+			SO =0;
+			
+			
+
+			double cost = min_cost;
+			initialize(j);
+			int[] index = getCoordinates(dimension, resolution, j);
+//			if(index[0]%5 !=0 || index[1]%5!=0)
+//				continue;
+//			obj.actual_sel_pb[0] = 0.31;obj.actual_sel_pb[1] = 0.3;obj.actual_sel_pb[2] = 0.6; /*uncomment for single execution*/
+			
+			// TODO: not required for(int d=0;d<dimension;d++) actual_sel_pb[d] = findNearestSelectivity(actual_sel_pb[d]);
+			
+			double cost_act_sel_pb = getFPCCost(actual_sel_pb, -1);
+			if(cost_act_sel_pb < (double)10000)
+				continue;
+			
+			//----------------------------------------------------------
+			int i = 1;
+			while(i<=ContourPointsMap.size() && !done_pb)
+			{	
+				if(cost<(double)10000){
+					cost *= 2;
+					i++;
+					continue;
+				}
+				assert (cost<=2*h_cost) : "cost limit exceeding in loop = "+j;
+				
+				if(cost>h_cost)
+					cost=h_cost;
+				System.out.println("---------------------------------------------------------------------------------------------\n");
+				System.out.println("Contour "+i+" cost : "+cost+"\n");
+				
+				run_PB_Algo_for_qa(i,cost,cost_act_sel_pb);
+				
+				algo_cost = algo_cost+ (learning_cost_pb);
+				System.out.println("The current algo_cost is "+algo_cost);
+				System.out.println("The cost expended in this contour is "+learning_cost_pb);
+				cost = cost*2;  
+				i = i+1;
+				System.out.println("---------------------------------------------------------------------------------------------\n");
+
+			}  //end of while
+			
+			assert(done_pb) : "In Main done_pb variable not true even when the while loop is broken out in Index = "+j;
+			
+			/*
+			 * printing the actual selectivity
+			 */
+			System.out.print("\nThe actual selectivity is original \t");
+			for(int d=0;d<dimension;d++) 
+				System.out.print(actual_sel_pb[d]+",");
+			
+			//calculateMSOBound();
+			/*
+			 * storing the index of the actual selectivities. Using this printing the
+			 * index (an approximation) of actual selectivities and its cost
+			 */
+			int [] index_actual_sel = new int[dimension]; 
+			for(int d=0;d<dimension;d++) index_actual_sel[d] = findNearestPoint(actual_sel_pb[d]);
+			
+			System.out.print("\nCost of actual_sel_pb ="+cost_act_sel_pb+" at ");
+			for(int d=0;d<dimension;d++) System.out.print(index_actual_sel[d]+",");
+
+			SO = (algo_cost/cost_act_sel_pb);
+			SO = SO * (1 + lambda/100);		
+			subOpt[j] = SO;
+
+			ASO += SO;
+			ASO_points++;
+			//anshASO += SO*locationWeight[j];
+			if(SO>MSO)
+				MSO = SO;
+			System.out.println("\nOnline PB The SubOptimaility  is "+SO);
+		  } //end of for
+		  System.out.println("\nOnline PB MSO is "+MSO);
+
+	}
+
+	
+	public void run_PB_Algo_for_qa(int contour_no, double cost, double cost_act_sel_pb) {
+
+		String funName = "planBouquetAlgo";
+		
+		double last_exec_cost = 0;
+		learning_cost_pb =0;
+		int [] arr = new int[dimension];
+		HashSet<Integer> unique_plans = new HashSet();
+		int unique_points =0;
+		double max_cost =0 , min_cost = Double.MAX_VALUE;
+		
+		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
+			
+			location p = ContourPointsMap.get(contour_no).get(c);
+			
+			/*needed for testing the code*/
+			unique_points ++;
+			if(p.get_cost()>max_cost)
+				max_cost = p.get_cost();
+			if(p.get_cost() < min_cost)
+				min_cost = p.get_cost();
+			
+			/*
+			 * to check if p dominates actual selectivity
+			 */
+			boolean flag = true;
+			for(int d=0;d<dimension;d++){
+				if(p.get_dimension(d) <= (actual_sel_pb[d]) ){
+					flag = false;
+					break;
+				}
+			}
+			
+			
+			
+			if(!unique_plans.contains(p.get_plan_no())){
+				
+				learning_cost_pb += p.get_cost(); //TODO: see if its correct
+				last_exec_cost = p.get_cost();
+				unique_plans.add(p.get_plan_no());
+			}
+			
+			if(flag == true){
+				if(cost_act_sel_pb >= 4*cost)
+					flag = false;
+			}
+			
+//			if(!flag && cost_generic(convertSelectivitytoIndex(actual_sel_pb)) < 2*cost)
+//				flag = checkFPC(p.get_plan_no(),contour_no);
+			
+
+			if(flag){
+				done_pb = true;
+				 System.out.println("The number unique points are "+unique_points);
+				 System.out.println("The number unique plans are "+unique_plans.size());
+				 System.out.println("The  unique plans are "+unique_plans);
+				 //System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
+				 if(!uniquePlansMap.containsKey(contour_no))
+					 uniquePlansMap.put(contour_no, unique_plans.size());
+				 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
+					 uniquePlansMap.remove(contour_no);
+					 uniquePlansMap.put(contour_no, unique_plans.size());
+				 }
+				//Settings:  changed to include only the contour cost and not the point
+//				 if(p.get_cost() > last_exec_cost ){
+//					 learning_cost_pb -= last_exec_cost;
+//					 learning_cost_pb += p.get_cost();
+//				 }
+//				 learning_cost_pb -= last_exec_cost;
+//				 int [] int_actual_sel = new int[dimension];
+//				 for(int d=0;d<dimension;d++)
+//					 int_actual_sel[d] = findNearestPoint(actual_sel_pb[d]);
+//				 double oneDimCost=0;
+////				 if(cost_generic(convertSelectivitytoIndex(actual_sel_pb)) < 2*cost)
+//				 
+//				 
+//				 if(fpc_cost_generic(int_actual_sel, p.get_plan_no())<oneDimCost)
+//					 oneDimCost = fpc_cost_generic(int_actual_sel, p.get_plan_no());
+//				 if(cost_generic(int_actual_sel)> oneDimCost)
+//					 oneDimCost = cost_generic(int_actual_sel);
+//				 learning_cost_pb  += oneDimCost;
+//	 
+				
+				return;
+			}
+		}
+		 //assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
+		
+		if(!uniquePlansMap.containsKey(contour_no))
+			 uniquePlansMap.put(contour_no, unique_plans.size());
+		 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
+			 uniquePlansMap.remove(contour_no);
+			 uniquePlansMap.put(contour_no, unique_plans.size());
+		 }
+		
+		 System.out.println("The number of unique points are "+unique_points);
+		 System.out.println("The number of unique plans are "+unique_plans.size());
+		 System.out.println("The  unique plans are "+unique_plans);
+		 System.out.println("Contour No. is "+contour_no+" : Max cost is "+max_cost+" and min cost is "+min_cost+" with learning cost "+learning_cost_pb);
+//		 if(cost_generic(convertSelectivitytoIndex(actual_sel_pb)) < 2*cost)
+
+	}
+
+//	private boolean checkFPC(int plan_no, int contour_no) {
+//		
+//		int last_contour = (int)(Math.ceil(Math.log(cost_generic(convertSelectivitytoIndex(actual_sel_pb))/OptimalCost[0])/Math.log(2)));
+//		last_contour++;
+//		double cost_q_a = cost_generic(convertSelectivitytoIndex(actual_sel_pb));
+//		double budget = Math.pow(2,last_contour-1)*OptimalCost[0];
+//		if(budget>OptimalCost[totalPoints-1])
+//			budget = OptimalCost[totalPoints-1];
+//		if(last_contour==contour_no && cost_q_a!=budget){
+//			if(cost_q_a<=OptimalCost[totalPoints-1])
+//				assert(budget>cost_q_a):" last contour cost is less than actual selectivity cost";
+//			if(fpc_cost_generic(convertSelectivitytoIndex(actual_sel_pb), plan_no)<budget){
+//				return true;
+//			}
+//			else
+//				return false;
+//		}
+//		else 
+//			return false;
+//	}
+
+	
+	// Function which does binary search to find the actual point !!
+	// Return the index near to the selecitivity=mid;
+		public int findNearestPoint(float mid)
+		{
+			int i;
+			int return_index = 0;
+			float diff;
+			if(mid >= selectivity[resolution-1])
+				return resolution-1;
+			for(i=0;i<resolution;i++)
+			{
+				diff = mid - selectivity[i];
+				if(Math.abs(diff) <= 0.0000001)
+				{
+					return_index = i;
+					break;
+				}
+			}
+			//System.out.println("return_index="+return_index);
+			return return_index;
+		}
+
+	
+	public void calculateMSOBound() {
+
+		 double algo_cost = 0;
+		 double max_pb_so = Double.MIN_VALUE;
+		 double cost = OptimalCost[0];
+		 int skip =0;
+		 for(int i=1;i<=uniquePlansMap.size();i++){
+			 if(cost<(double)10000 && !apktPath.contains("SQL")){
+					cost *= 2;
+					skip++;
+					i--;
+					continue;
+				}
+			 else if(cost>OptimalCost[totalPoints-1])
+				 cost = OptimalCost[totalPoints-1];
+			 algo_cost += Math.pow(2,i-1)*uniquePlansMap.get(i+skip);
+			 if(i>1){
+			 double so = algo_cost/Math.pow(2,i-2);
+			 if(so > max_pb_so)
+				 max_pb_so = so;
+			 }
+		 }
+		 System.out.println("PB MSO is "+max_pb_so*(1+lambda/100));
+	}
+
+	
+	public void initialize(int location) {
+
+		String funName = "intialize";
+		loadSelectivity();
+		learning_cost_pb = 0;
+		done_pb = false;
+		//updating the actual selectivities for each of the dimensions
+		int index[] = getCoordinates(dimension, resolution, location);
+		
+		actual_sel_pb = new float[dimension];
+		for(int i=0;i<dimension;i++){
+			actual_sel_pb[i] = selectivity[index[i]];
+		}
+	}
+
+
 	public void readContourPointsFromFile() throws ClassNotFoundException {
 
 		try {
+			ObjectInputStream ip;
+			onlineLocationsMap obj;
 			
-			ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"contours/Contours.map")));
-			ContourLocationsMap obj = (ContourLocationsMap)ip.readObject();
+			ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Contours.map")));
+			obj = (onlineLocationsMap)ip.readObject();
 			ContourPointsMap = obj.getContourMap();
 			Iterator itr = ContourPointsMap.keySet().iterator();
 			while(itr.hasNext()){
@@ -285,12 +637,25 @@ public class onlinePB {
 				System.out.println("--------------------------------------------------------------------------------------");
 				
 			}
+			
+			ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/non_Contours.map")));
+			obj = (onlineLocationsMap)ip.readObject();
+			non_ContourPointsMap = obj.getContourMap();
+			itr = non_ContourPointsMap.keySet().iterator();
+			while(itr.hasNext()){
+				Integer key = (Integer) itr.next();
+				
+				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
+				System.out.println("The no. of locations on Non contour "+(key.intValue())+" is "+non_ContourPointsMap.get(key).size());
+				System.out.println("--------------------------------------------------------------------------------------");
+				
+			}
+
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 		//System.exit(0);
 	}
-
 	
 	private void printSelectivityCost(float  sel_array[], double cost){
 		
@@ -356,13 +721,13 @@ public class onlinePB {
 	   	 			pw_cs.print(p.get_dimension(d) + "\n");
 	    }
 
-	    for(location p : non_contour_points) {		 
-	    	for(int d=0; d < dimension; d++)
-	   	 		if(d < dimension -1)
-	   	 		pw_contour.print(p.get_dimension(d) + "\t");
-	   	 		else
-	   	 		pw_contour.print(p.get_dimension(d) + "\n");
-		 }
+//	    for(location p : non_contour_points) {		 
+//	    	for(int d=0; d < dimension; d++)
+//	   	 		if(d < dimension -1)
+//	   	 		pw_contour.print(p.get_dimension(d) + "\t");
+//	   	 		else
+//	   	 		pw_contour.print(p.get_dimension(d) + "\n");
+//		 }
 	    
 	    pw_cs.close();
 	    writer_cs.close();
@@ -374,6 +739,176 @@ public class onlinePB {
 	    e.printStackTrace();
 	}
 		
+	}
+
+	
+	public void writeMaptoFile(){
+
+		try {
+			String path;
+			FileOutputStream fos;
+			ObjectOutputStream oos;
+
+			//for writing the contours map
+			path = new String (apktPath+"online_contours/Contours.map");
+			fos = new FileOutputStream (path);
+			oos = new ObjectOutputStream(fos);
+			oos.writeObject(new onlineLocationsMap(ContourPointsMap));
+			
+			//for writing the non contours map
+			path = new String (apktPath+"online_contours/non_Contours.map");
+			fos = new FileOutputStream (path);
+			oos = new ObjectOutputStream(fos);
+			oos.writeObject(new onlineLocationsMap(non_ContourPointsMap));
+			
+			oos.flush();
+			oos.close();
+
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+			System.exit(0);
+	}
+	
+	//-------------------------------------------------------------------------------------------------------------------
+	/*
+	 * Populates the selectivity Matrix according to the input given
+	 * */
+	void loadSelectivity()
+	{
+		String funName = "loadSelectivity: ";
+		System.out.println(funName+" Resolution = "+resolution);
+		double sel;
+		this.selectivity = new float [resolution];
+
+		if(resolution == 10){
+			if(sel_distribution == 0){
+
+				//This is for TPCH queries 
+				selectivity[0] = 0.0005f;	selectivity[1] = 0.005f;selectivity[2] = 0.01f;	selectivity[3] = 0.02f;
+				selectivity[4] = 0.05f;		selectivity[5] = 0.10f;	selectivity[6] = 0.20f;	selectivity[7] = 0.40f;
+				selectivity[8] = 0.60f;		selectivity[9] = 0.95f;                                   // oct - 2012
+			}
+			else if( sel_distribution ==1){
+
+				//This is for TPCDS queries
+				selectivity[0] = 0.00005f;	selectivity[1] = 0.0005f;selectivity[2] = 0.005f;	selectivity[3] = 0.02f;
+				selectivity[4] = 0.05f;		selectivity[5] = 0.10f;	selectivity[6] = 0.15f;	selectivity[7] = 0.25f;
+				selectivity[8] = 0.50f;		selectivity[9] = 0.99f;                                // dec - 2012
+			}
+			else
+				assert (false) :funName+ "ERROR: should not come here";
+
+		}		
+		if(resolution == 20){
+
+			if(sel_distribution == 0){
+
+				selectivity[0] = 0.0005f;   selectivity[1] = 0.0008f;		selectivity[2] = 0.001f;	selectivity[3] = 0.002f;
+				selectivity[4] = 0.004f;   selectivity[5] = 0.006f;		selectivity[6] = 0.008f;	selectivity[7] = 0.01f;
+				selectivity[8] = 0.03f;	selectivity[9] = 0.05f;	selectivity[10] = 0.08f;	selectivity[11] = 0.10f;
+				selectivity[12] = 0.200f;	selectivity[13] = 0.300f;	selectivity[14] = 0.400f;	selectivity[15] = 0.500f;
+				selectivity[16] = 0.600f;	selectivity[17] = 0.700f;	selectivity[18] = 0.800f;	selectivity[19] = 0.99f;
+			}
+			else if( sel_distribution ==1){
+
+					selectivity[0] = 0.0001f;	selectivity[1] = 0.0002f;
+				selectivity[2] = 0.0004f;   selectivity[3] = 0.0006f;		selectivity[4] = 0.0008f;	selectivity[5] = 0.001f;
+				selectivity[6] = 0.002f;	selectivity[7] = 0.004f;   selectivity[8] = 0.005f;	selectivity[9] = 0.008f;	selectivity[10] = 0.01f;
+				selectivity[11] = 0.05f;	selectivity[12] = 0.1f;	selectivity[13] = 0.15f;	selectivity[14] = 0.25f;
+				selectivity[15] = 0.40f;	selectivity[16] = 0.60f;	selectivity[17] = 0.80f;	selectivity[18] = 0.9f; selectivity[19] = 0.99f;
+			}
+			else
+				assert (false) :funName+ "ERROR: should not come here";
+
+
+		}
+
+		if(resolution == 30){
+
+			if(sel_distribution == 0){
+				//tpch
+				selectivity[0] = 0.0005f;  selectivity[1] = 0.0008f;	selectivity[2] = 0.001f;	selectivity[3] = 0.002f;
+				selectivity[4] = 0.004f;   selectivity[5] = 0.006f;	selectivity[6] = 0.008f;	selectivity[7] = 0.01f;
+				selectivity[8] = 0.03f;	selectivity[9] = 0.05f;
+				selectivity[10] = 0.07f;	selectivity[11] = 0.1f;	selectivity[12] = 0.15f;	selectivity[13] = 0.20f;
+				selectivity[14] = 0.25f;	selectivity[15] = 0.30f;	selectivity[16] = 0.35f;	selectivity[17] = 0.40f;
+				selectivity[18] = 0.45f;	selectivity[19] = 0.50f;	selectivity[20] = 0.55f;	selectivity[21] = 0.60f;
+				selectivity[22] = 0.65f;	selectivity[23] = 0.70f;	selectivity[24] = 0.75f;	selectivity[25] = 0.80f;
+				selectivity[26] = 0.85f;	selectivity[27] = 0.90f;	selectivity[28] = 0.95f;	selectivity[29] = 0.99f;
+			}
+
+			else if(sel_distribution == 1){
+				selectivity[0] = 0.0001f;  selectivity[1] = 0.0002f;	selectivity[2] = 0.0005f;	selectivity[3] = 0.0007f;
+				selectivity[4] = 0.0010f;   selectivity[5] = 0.005f;	selectivity[6] = 0.0100f;	selectivity[7] = 0.0200f;
+				selectivity[8] = 0.0300f;	selectivity[9] = 0.0400f;	selectivity[10] = 0.0500f;	selectivity[11] = 0.0600f;
+				selectivity[12] = 0.0700f;	selectivity[13] = 0.0800f;	selectivity[14] = 0.0900f;	selectivity[15] = 0.1000f;
+				selectivity[16] = 0.1200f;	selectivity[17] = 0.1400f;	selectivity[18] = 0.1600f;	selectivity[19] = 0.1800f;
+				selectivity[20] = 0.2000f;	selectivity[21] = 0.2500f;	selectivity[22] = 0.3000f;	selectivity[23] = 0.4000f;
+				selectivity[24] = 0.5000f;	selectivity[25] = 0.6000f;	selectivity[26] = 0.7000f;	selectivity[27] = 0.8000f;
+				selectivity[28] = 0.9000f;	selectivity[29] = 0.9950f;
+			}
+
+			else
+				assert (false) :funName+ "ERROR: should not come here";
+		}
+
+		if(resolution==100){
+
+			if(sel_distribution == 1){
+				selectivity[0] = 0.000064f; 	selectivity[1] = 0.000093f; 	selectivity[2] = 0.000126f; 	selectivity[3] = 0.000161f; 	selectivity[4] = 0.000198f;
+				selectivity[5] = 0.000239f; 	selectivity[6] = 0.000284f; 	selectivity[7] = 0.000332f; 	selectivity[8] = 0.000384f; 	selectivity[9] = 0.000440f;
+				selectivity[10] = 0.000501f; 	selectivity[11] = 0.000567f; 	selectivity[12] = 0.000638f; 	selectivity[13] = 0.000716f; 	selectivity[14] = 0.000800f;
+				selectivity[15] = 0.000890f; 	selectivity[16] = 0.000989f; 	selectivity[17] = 0.001095f; 	selectivity[18] = 0.001211f; 	selectivity[19] = 0.001335f;
+				selectivity[20] = 0.001471f; 	selectivity[21] = 0.001617f; 	selectivity[22] = 0.001776f; 	selectivity[23] = 0.001948f; 	selectivity[24] = 0.002134f;
+				selectivity[25] = 0.002335f; 	selectivity[26] = 0.002554f; 	selectivity[27] = 0.002790f; 	selectivity[28] = 0.003046f; 	selectivity[29] = 0.003323f;
+				selectivity[30] = 0.003624f; 	selectivity[31] = 0.003949f; 	selectivity[32] = 0.004301f; 	selectivity[33] = 0.004683f; 	selectivity[34] = 0.005096f;
+				selectivity[35] = 0.005543f; 	selectivity[36] = 0.006028f; 	selectivity[37] = 0.006552f; 	selectivity[38] = 0.007121f; 	selectivity[39] = 0.007736f;
+				selectivity[40] = 0.008403f; 	selectivity[41] = 0.009125f; 	selectivity[42] = 0.009907f; 	selectivity[43] = 0.010753f; 	selectivity[44] = 0.011670f;
+				selectivity[45] = 0.012663f; 	selectivity[46] = 0.013739f; 	selectivity[47] = 0.014904f; 	selectivity[48] = 0.016165f; 	selectivity[49] = 0.017531f;
+				selectivity[50] = 0.019011f; 	selectivity[51] = 0.020613f; 	selectivity[52] = 0.022348f; 	selectivity[53] = 0.024228f; 	selectivity[54] = 0.026263f;
+				selectivity[55] = 0.028467f; 	selectivity[56] = 0.030854f; 	selectivity[57] = 0.033440f; 	selectivity[58] = 0.036240f; 	selectivity[59] = 0.039272f;
+				selectivity[60] = 0.042556f; 	selectivity[61] = 0.046113f; 	selectivity[62] = 0.049965f; 	selectivity[63] = 0.054136f; 	selectivity[64] = 0.058654f;
+				selectivity[65] = 0.063547f; 	selectivity[66] = 0.068845f; 	selectivity[67] = 0.074584f; 	selectivity[68] = 0.080799f; 	selectivity[69] = 0.087530f;
+				selectivity[70] = 0.094819f; 	selectivity[71] = 0.102714f; 	selectivity[72] = 0.111263f; 	selectivity[73] = 0.120523f; 	selectivity[74] = 0.130550f;
+				selectivity[75] = 0.141411f; 	selectivity[76] = 0.153172f; 	selectivity[77] = 0.165910f; 	selectivity[78] = 0.179705f; 	selectivity[79] = 0.194645f;
+				selectivity[80] = 0.210825f; 	selectivity[81] = 0.228348f; 	selectivity[82] = 0.247325f; 	selectivity[83] = 0.267877f; 	selectivity[84] = 0.290136f;
+				selectivity[85] = 0.314241f; 	selectivity[86] = 0.340348f; 	selectivity[87] = 0.368621f; 	selectivity[88] = 0.399241f; 	selectivity[89] = 0.432403f;
+				selectivity[90] = 0.468316f; 	selectivity[91] = 0.507211f; 	selectivity[92] = 0.549334f; 	selectivity[93] = 0.594953f; 	selectivity[94] = 0.644359f;
+				selectivity[95] = 0.697865f; 	selectivity[96] = 0.755812f; 	selectivity[97] = 0.818569f; 	selectivity[98] = 0.886535f; 	selectivity[99] = 0.990142f;
+
+			}
+			else if(sel_distribution == 0){
+				selectivity[0] = 0.005995f; 	selectivity[1] = 0.015985f; 	selectivity[2] = 0.025975f; 	selectivity[3] = 0.035965f; 	selectivity[4] = 0.045955f; 	
+				selectivity[5] = 0.055945f; 	selectivity[6] = 0.065935f; 	selectivity[7] = 0.075925f; 	selectivity[8] = 0.085915f; 	selectivity[9] = 0.095905f; 	
+				selectivity[10] = 0.105895f; 	selectivity[11] = 0.115885f; 	selectivity[12] = 0.125875f; 	selectivity[13] = 0.135865f; 	selectivity[14] = 0.145855f; 	
+				selectivity[15] = 0.155845f; 	selectivity[16] = 0.165835f; 	selectivity[17] = 0.175825f; 	selectivity[18] = 0.185815f; 	selectivity[19] = 0.195805f; 	
+				selectivity[20] = 0.205795f; 	selectivity[21] = 0.215785f; 	selectivity[22] = 0.225775f; 	selectivity[23] = 0.235765f; 	selectivity[24] = 0.245755f; 	
+				selectivity[25] = 0.255745f; 	selectivity[26] = 0.265735f; 	selectivity[27] = 0.275725f; 	selectivity[28] = 0.285715f; 	selectivity[29] = 0.295705f; 	
+				selectivity[30] = 0.305695f; 	selectivity[31] = 0.315685f; 	selectivity[32] = 0.325675f; 	selectivity[33] = 0.335665f; 	selectivity[34] = 0.345655f; 	
+				selectivity[35] = 0.355645f; 	selectivity[36] = 0.365635f; 	selectivity[37] = 0.375625f; 	selectivity[38] = 0.385615f; 	selectivity[39] = 0.395605f; 	
+				selectivity[40] = 0.405595f; 	selectivity[41] = 0.415585f; 	selectivity[42] = 0.425575f; 	selectivity[43] = 0.435565f; 	selectivity[44] = 0.445555f; 	
+				selectivity[45] = 0.455545f; 	selectivity[46] = 0.465535f; 	selectivity[47] = 0.475525f; 	selectivity[48] = 0.485515f; 	selectivity[49] = 0.495505f; 	
+				selectivity[50] = 0.505495f; 	selectivity[51] = 0.515485f; 	selectivity[52] = 0.525475f; 	selectivity[53] = 0.535465f; 	selectivity[54] = 0.545455f; 	
+				selectivity[55] = 0.555445f; 	selectivity[56] = 0.565435f; 	selectivity[57] = 0.575425f; 	selectivity[58] = 0.585415f; 	selectivity[59] = 0.595405f; 	
+				selectivity[60] = 0.605395f; 	selectivity[61] = 0.615385f; 	selectivity[62] = 0.625375f; 	selectivity[63] = 0.635365f; 	selectivity[64] = 0.645355f; 	
+				selectivity[65] = 0.655345f; 	selectivity[66] = 0.665335f; 	selectivity[67] = 0.675325f; 	selectivity[68] = 0.685315f; 	selectivity[69] = 0.695305f; 	
+				selectivity[70] = 0.705295f; 	selectivity[71] = 0.715285f; 	selectivity[72] = 0.725275f; 	selectivity[73] = 0.735265f; 	selectivity[74] = 0.745255f; 	
+				selectivity[75] = 0.755245f; 	selectivity[76] = 0.765235f; 	selectivity[77] = 0.775225f; 	selectivity[78] = 0.785215f; 	selectivity[79] = 0.795205f; 	
+				selectivity[80] = 0.805195f; 	selectivity[81] = 0.815185f; 	selectivity[82] = 0.825175f; 	selectivity[83] = 0.835165f; 	selectivity[84] = 0.845155f; 	
+				selectivity[85] = 0.855145f; 	selectivity[86] = 0.865135f; 	selectivity[87] = 0.875125f; 	selectivity[88] = 0.885115f; 	selectivity[89] = 0.895105f; 	
+				selectivity[90] = 0.905095f; 	selectivity[91] = 0.915085f; 	selectivity[92] = 0.925075f; 	selectivity[93] = 0.935065f; 	selectivity[94] = 0.945055f; 	
+				selectivity[95] = 0.955045f; 	selectivity[96] = 0.965035f; 	selectivity[97] = 0.975025f; 	selectivity[98] = 0.985015f; 	selectivity[99] = 0.995005f;
+			}
+
+			else
+				assert (false) :funName+ "ERROR: should not come here";
+		}
+		//the selectivity distribution
+		//System.out.println("The selectivity distribution using is ");
+		//			for(int i=0;i<resolution;i++)
+		//			System.out.println("\t"+selectivity[i]);
 	}
 
 	
@@ -803,17 +1338,27 @@ public class onlinePB {
 		
 		Integer curDim = remainingDimList.get(0); 
 
-		for(qrun_sel[curDim] = minimum_selectivity; qrun_sel[curDim] <= 1.0; )
+		for(qrun_sel[curDim] = minimum_selectivity; ; )
 		{	
 //			if(qrun_sel[0] == minimum_selectivity)
 //				continue;
+			boolean flag = false;
+			if(qrun_sel[curDim] > 1.0f){
+				qrun_sel[curDim] = 1.0f;
+				flag = true;
+			}
+				
 			learntDim.add(curDim);
 			//if(qrun_sel[0] >= 0.006 && qrun_sel[1] >= 0.001 )
 			generateCoveringContours(order, cost);
 			learntDim.remove(learntDim.indexOf(curDim));
 			qrun_sel[curDim] = roundToDouble(qrun_sel[curDim]*beta);
+			
+			if(flag)
+				break;
 		}
 	}
+	
 	
 	private int getContourNo(double cost) {
 		
@@ -862,37 +1407,6 @@ public class onlinePB {
 				}
 			}
 		}
-		
-		for(location loc: contour_points){
-			flag = true;
-			for(int i=0;i<dimension;i++){
-				//if(loc.get_dimension(i) != arr[i]){
-				if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
-					flag = false;
-					break;
-				}
-			}
-			if(flag==true) {
-				location_hits ++;
-				return loc;
-			}
-		}
-		
-		for(location loc: non_contour_points){
-			flag = true;
-			for(int i=0;i<dimension;i++){
-				//if(loc.get_dimension(i) != arr[i]){
-				if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
-					flag = false;
-					break;
-				}
-			}
-			if(flag==true) {
-				location_hits ++;
-				return loc;
-			}
-		}
-		
 		return null;
 	}
 
@@ -914,6 +1428,7 @@ public class onlinePB {
 		return false;
 }
 
+	
 	
 	private double calculateJumpSize(float[] qrun_copy, int dim, double base_cost) throws SQLException {
 
@@ -1114,13 +1629,21 @@ public class onlinePB {
 			//get all the location of all the contours
 			
 			for(int i=1; i<=ContourPointsMap.size();i++) {
+					if(ContourPointsMap.containsKey(i))
 				contour_locs.addAll(ContourPointsMap.get(i));
-				contour_locs.addAll(non_ContourPointsMap.get(i));
+					
+					//intensionally not trying to cover non_contour points because 
+					//1. costgreedy is taking time as no. of fpc calls are |contour_locs|*|plans|
+					//2. |contour_locs| drastically if it is just covering contour
+					//3. quality of reduction also might improve
+					
+//					if(non_ContourPointsMap.containsKey(i))
+//				contour_locs.addAll(non_ContourPointsMap.get(i));
 			}
 		}
 		else{
 			contour_locs.addAll(ContourPointsMap.get(contour_no));
-			contour_locs.addAll(non_ContourPointsMap.get(contour_no));
+//			contour_locs.addAll(non_ContourPointsMap.get(contour_no));
 		}
 		
 		int[] index = new int[dimension];
@@ -1155,29 +1678,54 @@ public class onlinePB {
 		String newQuery;
 		Plan plan = null;
 		double countCoverageLocations[];
-		int total = remainingSpace;
+		int total = remainingSpace;int outerForLoopCnt =0;
 		double maxCoverage = -1;
+		iter = contour_locs.iterator();
+		ArrayList<location> non_reduced_contour_loc = new ArrayList<location>();
 		while(remainingSpace > 0)
 		{
 			countCoverageLocations = new double[originalPlanCnt];
 
+			outerForLoopCnt++;
+			
+			non_reduced_contour_loc.clear();
 			iter = contour_locs.iterator();
-			int cnt = 0;
-			while(iter.hasNext())
-			{
+			while(iter.hasNext()) {
 				location objContourPt = (location) iter.next();
 				if(objContourPt.reduced_planNumber != -1)
 					continue;
-				if(cnt++ > 10)
+				non_reduced_contour_loc.add(objContourPt);
+			}
+			
+			for (int i=0; i<originalPlanCnt; i++)
+			{					
+				ArrayList<location> non_reduced_contour_loc_with_fpc = getFPCCostParallel(non_reduced_contour_loc, i);
+				assert((non_reduced_contour_loc.size() > 0) && (non_reduced_contour_loc_with_fpc !=  null)) : "getFPCCostParallel returning wrongly null ";
+				System.out.println(" done with CF parallel ");
+				iter = non_reduced_contour_loc_with_fpc.iterator();
+//				conn = source.getConnection();
+				while(iter.hasNext())
 				{
-//					System.out.println("..");
-					cnt = 0;
-				}
-				
-				for (int i=0; i<originalPlanCnt; i++)
-				{
+					int cnt = 0;
 					
-					double foreign_cost  = getFPCCost(objContourPt.dim_values, i);
+					location objContourPt = (location) iter.next();
+					assert(objContourPt.reduced_planNumber == -1) : "should not come here";
+						
+					
+					cnt++;
+					if((cnt % 100) == 0)
+					{
+						System.out.println(" step1 "+cnt);
+						//cnt = 0;
+					}
+
+					double foreign_cost = objContourPt.fpc_cost;
+					// foreign_cost  = getFPCCost(objContourPt.dim_values, i);
+					
+					assert(foreign_cost > 0): "getFPCParallel is not working: less than zero cost";
+					
+//					double cst = getFPCCost(objContourPt.dim_values, i);
+//					assert(Math.abs(foreign_cost - cst) < 0.000001 ) : "getFPCParallel is not working: not same cost: foreign_cost = "+foreign_cost+" cst = "+cst;
 
 					if(foreign_cost < (1 + (lambda/100.0)) * objContourPt.opt_cost)
 					{
@@ -1191,9 +1739,17 @@ public class onlinePB {
 							}
 						}
 					}
+					
+					objContourPt.fpc_cost = Double.MIN_VALUE;
 				}
+//				 if (conn != null) {
+//						try { conn.close(); } catch (SQLException e) {}
+//					}
+				
+				
 			}
 
+			//System.out.println("Finished step 1");
 			//2.find the plan that covers max area
 			maxCoverage = 0;
 			int maxCoveragePlan = -1;
@@ -1230,15 +1786,15 @@ public class onlinePB {
 		
 			System.out.println("After Reduction:");
 		
-			HashMap<Integer,HashSet<Integer>> contourPlansReduced = new HashMap<Integer,HashSet<Integer>>();
+			HashMap<Integer,ArrayList<Integer>> contourPlansReduced = new HashMap<Integer,ArrayList<Integer>>();
 		// update what plans are in which contour
-			HashSet<Integer> reducedPlansSet = new HashSet<Integer>();
+			ArrayList<Integer> reducedPlansSet = new ArrayList<Integer>();
 			for (int k = 1; k <= ContourPointsMap.size(); k++) {
 				reducedPlansSet.clear();
 				iter = contour_locs.iterator();
 				while (iter.hasNext()) {
 					location objContourPt = (location) iter.next();
-					if (objContourPt.contour_no == k) {
+					if (objContourPt.contour_no == k && !reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
 						reducedPlansSet.add(objContourPt.reduced_planNumber);
 					}
 				}
@@ -1253,9 +1809,85 @@ public class onlinePB {
 				
 				System.out.println("Contour"+k+" = "+reducedPlansSet.size());
 			}
+			
+			
 		}
 	
 	
+	public ArrayList<location> getFPCCostParallel(ArrayList<location> contour_locs, int plan) throws SQLException {
+
+		System.out.println("Number of Usable threads are : "+num_of_usable_threads + " with contour locs size "+contour_locs.size()+" with plan "+plan);
+		
+		// 1. Divide the contour_locs into usable threads-1
+		
+		
+		int step_size = contour_locs.size()/num_of_usable_threads;
+		int cur_min_val = 0;
+		int cur_max_val =  0;
+		
+		ArrayList<CGinputParamStruct> inputs = new ArrayList<CGinputParamStruct>();
+		for (int j = 0; j < num_of_usable_threads ; ++j) {
+
+			cur_min_val = cur_max_val;
+			cur_max_val = cur_min_val + step_size ;
+			
+			if(j==num_of_usable_threads-1 || (contour_locs.size() < num_of_usable_threads))
+				cur_max_val = contour_locs.size();
+
+			CGinputParamStruct input = new CGinputParamStruct(new ArrayList<location>(contour_locs.subList(cur_min_val, cur_max_val)), source, plan);
+			inputs.add(input);
+			
+			if(contour_locs.size() < num_of_usable_threads)
+				break;
+		}
+		
+		//System.out.println("after spltting");
+		// 2. execute them in parallel
+	    ExecutorService service = Executors.newFixedThreadPool(num_of_usable_threads);
+	    ArrayList<Future<CGOutputParamStruct>> futures = new ArrayList<Future<CGOutputParamStruct>>();
+	    		
+	     for (final CGinputParamStruct input : inputs) {
+	        Callable<CGOutputParamStruct> callable = new Callable<CGOutputParamStruct>() {
+	            public CGOutputParamStruct call() throws Exception {
+	            	CGOutputParamStruct output = new CGOutputParamStruct();
+	            	//System.out.println("before getting the connection");
+	            	
+	            	input.getForiegnCost_all_locations(apktPath, qtName, select_query, predicates, dimension, database_conn);
+	            	
+	            	//System.out.println("after getting the connection");
+	            	output.contour_fpc_done_locs = new ArrayList<location>(input.contour_fpc_locs);
+            		return output;
+	            }
+	        };
+		       futures.add(service.submit(callable));			   
+			    
+		}
+	     service.shutdown();
+	     //System.out.println("after shutdown of service"); 
+	     //3. aggregating the results back
+	     ArrayList<location> returning_locs = new ArrayList<location>();
+	     for (Future<CGOutputParamStruct> future : futures) {
+	    	 
+		    	try {
+					CGOutputParamStruct output = future.get();
+					returning_locs.addAll(output.contour_fpc_done_locs);
+				} catch (InterruptedException | ExecutionException e) {
+					
+					e.printStackTrace();
+				}
+		    	
+		    	
+	     }
+	     //System.out.println("after aggregation");
+	     
+	     if (conn != null) {
+				try { conn.close(); } catch (SQLException e) {}
+			}
+	     
+	     assert (returning_locs.size() == contour_locs.size()) : "returning locs is same size as contour locs";
+	     return returning_locs;//for safety check
+	} 
+
 	public double getFPCCost(float selectivity[], int p_no) throws SQLException{
 		//Get the path to p_no.xml
 		String funName = "getFPCCost";
@@ -1272,8 +1904,10 @@ public class onlinePB {
 	     double execCost=-1;
 	     
 		//create the FPC query : 
-	     //Statement stmt = null;
-	     //conn = source.getConnection();
+	     //Connection conn = null;
+
+	     
+	     
 	     //System.out.println("Plan No = "+p_no);
 			try{      	
 				
@@ -1374,6 +2008,8 @@ public class onlinePB {
 				rs.close();
 				stmt.close();	
 				
+				
+
 			}
 			catch(Exception e){
 				e.printStackTrace();
@@ -1518,6 +2154,154 @@ public class onlinePB {
 
 }
 
+	class CGinputParamStruct {
+		
+		Jdbc3PoolingDataSource source;
+		ArrayList<location> contour_fpc_locs;
+		String apktPath, qtName, select_query, predicates; 
+		int dimension, database_conn, plan;
+		 Connection conn;
+		 
+		public CGinputParamStruct(ArrayList<location> locs, Jdbc3PoolingDataSource source, int plan) throws SQLException {
+			this.source = source;
+			for(location loc: locs)
+				loc.fpc_cost = Double.MIN_VALUE;
+			this.contour_fpc_locs  = new ArrayList<location>(locs);
+			this.plan  = plan; 
+		}
+		
+		public void getForiegnCost_all_locations(String apktPath, String qtName, String select_query, String predicates, int dimension, int database_conn) throws SQLException{
+			if(apktPath!= null && qtName!= null && predicates!= null && select_query!=null){ 
+				this.apktPath = apktPath;
+				this.qtName = qtName;
+				this.select_query = select_query;
+				this.predicates = predicates;
+				this.dimension = dimension;
+				this.database_conn = database_conn;
+			}
+				
+			conn = source.getConnection();
+			
+			for(location loc : contour_fpc_locs) {
+				loc.fpc_cost = getFPCCost(loc.dim_values, plan);
+			}
+			
+			if (conn != null) {
+				try { conn.close(); } catch (SQLException e) {}
+			}
+		}
+		
+		
+		public double getFPCCost(float selectivity[], int p_no) throws SQLException{
+			//Get the path to p_no.xml
+			String funName = "getFPCCost";
+			
+			
+			String xml_path = apktPath+"/onlinePB/planStructureXML/"+p_no+".xml";
+			
+			 String regx;
+		     Pattern pattern;
+		     Matcher matcher;
+		     double execCost=-1;
+		     
+			//create the FPC query : 
+		    
+
+		     
+		     
+		     //System.out.println("Plan No = "+p_no);
+				try{      	
+					
+					
+					Statement stmt = conn.createStatement();
+					String exp_query = new String("Selectivity ( "+predicates+ ") (");
+					for(int i=0;i<dimension;i++){
+						if(i !=dimension-1){
+							exp_query = exp_query + (selectivity[i])+ ", ";
+						}
+						else{
+							exp_query = exp_query + (selectivity[i]) + " )";
+						}
+					}
+					//this is for selectivity injection plus fpc
+					exp_query = exp_query + select_query;
+					String xml_query = null;
+					//this is for pure fpc
+					//exp_query = select_query;
+					if(p_no ==-1){
+						exp_query = "explain " + exp_query ;
+						xml_query = new String("explain (format xml) "+ select_query) ;
+					}
+					else {
+						assert(p_no >=0): "plan number is less than zero";
+						exp_query = "explain " + exp_query + " fpc "+xml_path;
+					}
+						
+					//exp_query = new String("explain Selectivity ( customer_demographics.cd_demo_sk = catalog_sales.cs_bill_cdemo_sk and date_dim.d_date_sk = catalog_sales.cs_sold_date_sk  and item.i_item_sk = catalog_sales.cs_item_sk and promotion.p_promo_sk = catalog_sales.cs_promo_sk) (0.005, 0.99, 0.001, 0.00005 ) select i_item_id,  avg(cs_quantity) , avg(cs_list_price) ,  avg(cs_coupon_amt) ,  avg(cs_sales_price)  from catalog_sales, customer_demographics, date_dim, item, promotion where cs_sold_date_sk = d_date_sk and cs_item_sk = i_item_sk and   cs_bill_cdemo_sk = cd_demo_sk and   cs_promo_sk = p_promo_sk and cd_gender = 'F' and  cd_marital_status = 'U' and  cd_education_status = 'Unknown' and  (p_channel_email = 'N' or p_channel_event = 'N') and  d_year = 2002 and i_current_price <= 100 group by i_item_id order by i_item_id  fpc /home/lohitkrishnan/ssd256g/data/DSQT264DR20_E/planStructureXML/3.xml");
+					//System.out.println(exp_query);
+					//System.exit(1);
+					//String exp_query = new String(query_opt_spill);
+					
+					stmt.execute("set work_mem = '100MB'");
+					//NOTE,Settings: 4GB for DS and 1GB for H
+					if(database_conn == 0){
+						stmt.execute("set effective_cache_size='1GB'");
+					}
+					else{
+						stmt.execute("set effective_cache_size='4GB'");
+					}
+
+					//NOTE,Settings: need not set the page cost's
+					stmt.execute("set  seq_page_cost = 1");
+					stmt.execute("set  random_page_cost=4");
+					stmt.execute("set cpu_operator_cost=0.0025");
+					stmt.execute("set cpu_index_tuple_cost=0.005");
+					stmt.execute("set cpu_tuple_cost=0.01");
+					
+					
+					
+					
+					ResultSet rs = stmt.executeQuery(exp_query);
+					rs.next();
+					String str1 = rs.getString(1);
+					
+					
+
+					//System.out.println(str1);
+					
+					//System.out.println(str1);
+					//Do the pattern match to get the cost here
+					regx = Pattern.quote("..") + "(.*?)" + Pattern.quote("rows=");
+					
+					pattern = Pattern.compile(regx);
+					matcher = pattern.matcher(str1);
+					while(matcher.find()){
+						execCost = Float.parseFloat(matcher.group(1));
+					//	System.out.println("execCost = "+execCost);
+					}
+					rs.close();
+					stmt.close();	
+					
+					
+
+				}
+				catch(Exception e){
+					e.printStackTrace();
+					ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+					
+				}
+
+		
+				assert (execCost > 1 ): "execCost is less than 1";
+				return execCost; 
+			
+		}
+	}
+	
+	class CGOutputParamStruct {
+		ArrayList<location> contour_fpc_done_locs;
+	}
+	
 class location implements Serializable
 {
 	private static final long serialVersionUID = 223L;
@@ -1540,6 +2324,9 @@ class location implements Serializable
 	int reduced_planNumber;
 	int contour_no;
 	
+	location(){
+		
+	}
 	
 	location(location loc) {
 	
@@ -1573,7 +2360,12 @@ class location implements Serializable
 			//		System.out.print(arr[i]+",");
 		}
 		
-		getPlan();
+		try {
+			getPlan();
+		} catch (SQLException e) {
+			
+			e.printStackTrace();
+		}
 		
 	}
 	
@@ -1592,7 +2384,12 @@ class location implements Serializable
 			//		System.out.print(arr[i]+",");
 		}
 		
-		getPlan();
+		try {
+			getPlan();
+		} catch (SQLException e) {
+			
+			e.printStackTrace();
+		}
 	}
 	
 	public void set_contour_no(int c) {
@@ -1656,13 +2453,14 @@ class location implements Serializable
         return bd.floatValue();
     }
 	
-	public void getPlan() throws PicassoException, IOException {
+	public void getPlan() throws PicassoException, IOException, SQLException {
 
 		Vector textualPlan = new Vector();
 		StringBuilder XML_Plan = new StringBuilder();
 		Plan plan = new Plan();
 		String xml_query = null;
 		String cost_str = null;
+		
 		try{      	
 			Statement stmt = conn.createStatement();
 			String exp_query = new String("Selectivity ( "+predicates+ ") ( ");
