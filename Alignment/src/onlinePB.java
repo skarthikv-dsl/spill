@@ -1433,7 +1433,7 @@ public class onlinePB {
 	private double calculateJumpSize(float[] qrun_copy, int dim, double base_cost) throws SQLException {
 
 		getFPCCost(qrun_copy, -3);
-		float delta[] = {0.1f,0.2f,0.3f};
+		float delta[] = {0.1f,0.3f};
 			float sum_slope = 0, divFactor =0;
 			for(float del: delta){
 				float sel[] = new float[dimension];
