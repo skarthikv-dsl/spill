@@ -1,4 +1,5 @@
 import java.math.BigDecimal;
+import java.util.ArrayList;
 
 public class test {
 
@@ -10,7 +11,7 @@ public class test {
 		float old_val = obj.roundToDouble(1.5555555f, 3);
 		float zero = 1.0f;
 		
-		
+		ArrayList<Double> a = new ArrayList<Double>(null);
 		float var1 = (float)1.55;
 		float var2 = 7f;
 		float new_val = (float) (var1*var2);
