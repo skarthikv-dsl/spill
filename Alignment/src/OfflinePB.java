@@ -64,6 +64,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -374,6 +375,68 @@ public class OfflinePB
 		System.out.println("SpillBound The AverageSubOptimaility  is "+(double)ASO/ASO_points);
 
 
+	}
+	
+	
+	public void readContourPointsFromFile(boolean CG_done) throws ClassNotFoundException {
+
+		try {
+			ObjectInputStream ip= null;
+			onlineLocationsMap obj;
+			
+			if(!CG_done){
+				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"offline_contours/Contours.map")));
+			}
+			else{
+				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"offline_contours/Red_Contours.map")));
+			}
+			
+			obj = (onlineLocationsMap)ip.readObject();
+			ContourPointsMap = obj.getContourMap();
+			Iterator itr = ContourPointsMap.keySet().iterator();
+			while(itr.hasNext()){
+				Integer key = (Integer) itr.next();
+				
+				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
+				System.out.println("The no. of locations on contour "+(key.intValue())+" is "+ContourPointsMap.get(key).size());
+				System.out.println("--------------------------------------------------------------------------------------");
+				
+			}
+			
+
+			
+			if(CG_done){
+				//iterator of 
+				HashMap<Integer,HashSet<Integer>> contourPlansReduced = new HashMap<Integer,HashSet<Integer>>();
+				// update what plans are in which contour
+				HashSet<Integer> reducedPlansSet = new HashSet<Integer>();
+				for (int k = 1; k <= ContourPointsMap.size(); k++) {
+					Iterator iter = ContourPointsMap.get(k).iterator();
+					reducedPlansSet.clear();
+					while (iter.hasNext()) {
+						location objContourPt = (location) iter.next();
+						if (objContourPt.contour_no == k && !reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
+							assert(objContourPt.reduced_planNumber != -1) : "contour location not reduced";
+							reducedPlansSet.add(objContourPt.reduced_planNumber);
+						}
+					}
+
+					//				@SuppressWarnings("rawtypes")
+					//				Iterator it = reducedPlansSet.iterator();
+					//				while (it.hasNext()) {
+					//					int p = (Short) it.next();
+					//					contourPlansReduced.get(k).add(p);
+					//				}
+					contourPlansReduced.put(k, reducedPlansSet);
+
+					System.out.println("Contour"+k+" = "+reducedPlansSet.size());
+				}
+			}
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		//System.exit(0);
 	}
 	
 	public int findSeedLocation(double seedCost) throws IOException, PicassoException  

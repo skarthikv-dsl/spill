@@ -27,6 +27,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -96,7 +97,7 @@ public class onlinePB {
 	static boolean enhancement = true; 
 	static boolean memoization = true;
 	static int location_hits = 0;
-	static float cost_error = 0.05f;
+	static float cost_error = 0.12f;
 	static boolean contoursReadFromFile = true;
 	static boolean cg_contoursReadFromFile = true;
 	static boolean singleThread = false;
@@ -273,8 +274,8 @@ public class onlinePB {
 				
 				for(location l: contour_points)
 					l.set_contour_no(i);
-				for(location l: non_contour_points)
-					l.set_contour_no(i);
+//				for(location l: non_contour_points)
+//					l.set_contour_no(i);
 				
 				int size_of_contour = contour_points.size();
 				int size_of_non_contour = non_contour_points.size();
@@ -320,7 +321,7 @@ public class onlinePB {
 				}
 			}
 			
-			System.exit(0);
+			//System.exit(0);
 			
 		}
 		else
@@ -469,7 +470,7 @@ public class onlinePB {
 			
 			/*needed for testing the code*/
 			unique_points ++;
-			if(p.get_cost()>max_cost)
+			if(p.get_cost() > max_cost)
 				max_cost = p.get_cost();
 			if(p.get_cost() < min_cost)
 				min_cost = p.get_cost();
@@ -477,6 +478,7 @@ public class onlinePB {
 			/*
 			 * to check if p dominates actual selectivity
 			 */
+
 			boolean flag = true;
 			for(int d=0;d<dimension;d++){
 				if(p.get_dimension(d) <= (actual_sel_pb[d]) ){
@@ -1466,9 +1468,7 @@ public class onlinePB {
 				}
 				if(flag==true) {
 					location_hits ++;
-					location loc_temp = new location(loc);
-					return loc_temp;
-				}
+					return loc;				}
 			}
 		}
 		return null;
@@ -1745,49 +1745,41 @@ public class onlinePB {
 		int total = remainingSpace;int outerForLoopCnt =0;
 		double maxCoverage = -1;
 		iter = contour_locs.iterator();
-		ArrayList<location> non_reduced_contour_loc = new ArrayList<location>();
+		
+		while(iter.hasNext()) {
+			location objContourPt = (location) iter.next();
+			objContourPt.fpc_plan_cost = new ArrayList<Double>(Collections.nCopies(originalPlanCnt, Double.MIN_VALUE));
+		}
+		
+		//get costs of all plans at all contour_locs
+		for (int i=0; i<originalPlanCnt; i++)
+			contour_locs = getFPCCostParallel(contour_locs, i);
+		
+		for(location lc : contour_locs)
+			assert(lc.fpc_plan_cost.size() == originalPlanCnt) : "for not all plans in the non_reduced_contour_loc_structure with fpc costs";
+
+		
 		while(remainingSpace > 0)
 		{
 			countCoverageLocations = new double[originalPlanCnt];
 
 			outerForLoopCnt++;
 			
-			non_reduced_contour_loc.clear();
 			iter = contour_locs.iterator();
-			while(iter.hasNext()) {
+			while(iter.hasNext())
+			{	
 				location objContourPt = (location) iter.next();
 				if(objContourPt.reduced_planNumber != -1)
 					continue;
-				non_reduced_contour_loc.add(objContourPt);
-			}
-			
-			ArrayList<location> non_reduced_contour_loc_with_fpc = non_reduced_contour_loc;
-			for (int i=0; i<originalPlanCnt; i++)
-				non_reduced_contour_loc_with_fpc = getFPCCostParallel(non_reduced_contour_loc, i);
-			
-			for (int i=0; i<originalPlanCnt; i++)
-			{	
-				if(outerForLoopCnt <=1)
-					
-				assert((non_reduced_contour_loc.size() > 0) && (non_reduced_contour_loc_with_fpc !=  null)) : "getFPCCostParallel returning wrongly null ";
-				System.out.println(" done with CG-FPC parallel ");
-				iter = non_reduced_contour_loc_with_fpc.iterator();
+				
 //				conn = source.getConnection();
-				while(iter.hasNext())
+				for (int i=0; i<originalPlanCnt; i++)
 				{
 					int cnt = 0;
 					
-					location objContourPt = (location) iter.next();
 					assert(objContourPt.reduced_planNumber == -1) : "should not come here";
 						
 					
-					cnt++;
-					if((cnt % 100) == 0)
-					{
-						System.out.println(" step1 "+cnt);
-						//cnt = 0;
-					}
-
 					double foreign_cost = objContourPt.fpc_plan_cost.get(i);
 					// foreign_cost  = getFPCCost(objContourPt.dim_values, i);
 					
@@ -2250,9 +2242,7 @@ public class onlinePB {
 		 
 		public CGinputParamStruct(ArrayList<location> locs, Jdbc3PoolingDataSource source, int plan) throws SQLException {
 			this.source = source;
-			for(location loc: locs) {
-					loc.fpc_plan_cost.set(plan, Double.MIN_VALUE);
-			}
+			
 			this.contour_fpc_locs  = new ArrayList<location>(locs);
 			this.plan  = plan; 
 		}
