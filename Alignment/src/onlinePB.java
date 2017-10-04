@@ -368,7 +368,7 @@ public class onlinePB {
 		  {
 			System.out.println("Entering loop "+j);
 
-//			if(j != 28)
+//			if(j != 98378)
 //				continue;
 			//initialization for every loop
 			
@@ -464,6 +464,12 @@ public class onlinePB {
 		int unique_points =0;
 		double max_cost =0 , min_cost = Double.MAX_VALUE;
 		
+		if(cost > (2+cost_error)*cost_act_sel_pb) {
+			//return if the cost of the contour is twice more than cost of actual selectivity
+			done_pb = true;
+			learning_cost_pb = 1;//to make sure none of the asserts fail
+			return;
+		}
 		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
 			
 			location p = ContourPointsMap.get(contour_no).get(c);

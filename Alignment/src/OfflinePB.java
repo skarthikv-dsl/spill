@@ -45,11 +45,13 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -142,9 +144,10 @@ public class OfflinePB
 	 
 	 //parameters to set
 	 static boolean visualisation_2D = false;
-	 static int decimalPrecision = 5;
+	 static int decimalPrecision = 6;
+	 static boolean contoursReadFromFile = true;
 	 
-	public static void main(String args[]) throws IOException, SQLException, PicassoException
+	public static void main(String args[]) throws IOException, SQLException, PicassoException, ClassNotFoundException
 	{
 		long startTime = System.nanoTime();
 		OfflinePB obj = new OfflinePB();
@@ -240,35 +243,40 @@ public class OfflinePB
 		
 		//reload the properties file for the new resolution and total points
 		
-		
+		File ContoursFile = new File(apktPath+"offlinePB/Contours.map");
 
-		
-		while(cost < 2*h_cost)
-		{
-		
-			if(cost>h_cost)
-				cost = h_cost;
-			System.out.println("---------------------------------------------------------------------------------------------\n");
-			System.out.println("Contour "+i+" cost : "+cost+"\n");
-			
-			all_contour_points.clear();
-			
-			obj.nexusAlgoContour(cost); 
+		if(contoursReadFromFile && ContoursFile.exists()){
+			obj.readContourPointsFromFile(false);
+		}
 
-			if(visualisation_2D)
-				writeContourPointstoFile(i);
-			System.out.println("The running optimization calls are "+opt_calls);
-			int size_of_contour = all_contour_points.size();
-			ContourPointsMap.put(i, new ArrayList<location>(all_contour_points)); //storing the contour points
-			System.out.println("Size of contour"+size_of_contour );
+		else
+		{	
+			while(cost < 2*h_cost)
+			{
+
+				if(cost>h_cost)
+					cost = h_cost;
+				System.out.println("---------------------------------------------------------------------------------------------\n");
+				System.out.println("Contour "+i+" cost : "+cost+"\n");
+
+				all_contour_points.clear();
+
+				obj.nexusAlgoContour(cost); 
+
+				if(visualisation_2D)
+					writeContourPointstoFile(i);
+				System.out.println("The running optimization calls are "+opt_calls);
+				int size_of_contour = all_contour_points.size();
+				ContourPointsMap.put(i, new ArrayList<location>(all_contour_points)); //storing the contour points
+				System.out.println("Size of contour"+size_of_contour );
 				cost = cost*2;
 				i = i+1;
+			}
+			long endTime = System.nanoTime();
+			System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
+			System.exit(0);
+
 		}
-		long endTime = System.nanoTime();
-		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
-		System.exit(0);
-	
-		System.out.println("The minimum cost contour map is "+minContourCostMap);
 		/*
 		 * running the plan bouquet algorithm 
 		 */
@@ -367,12 +375,12 @@ public class OfflinePB
 		System.out.println("\nSpillBound Harm  is "+Harm);
 	  } //end of for
 	  	//Settings
-	  	obj.writeSuboptToFile(subOpt, apktPath);
+	  	//obj.writeSuboptToFile(subOpt, apktPath);
 	  	
-	  	System.out.println("SpillBound The MaxSubOptimaility  is "+MSO);
-	  	System.out.println("SpillBound The MaxHarm  is "+MaxHarm);
-	  	System.out.println("SpillBound Anshuman average Suboptimality is "+(double)anshASO);
-		System.out.println("SpillBound The AverageSubOptimaility  is "+(double)ASO/ASO_points);
+	  	System.out.println("OfflinePB The MaxSubOptimaility  is "+MSO);
+	  	System.out.println("OfflinePB The MaxHarm  is "+MaxHarm);
+	  	System.out.println("OfflinePB Anshuman average Suboptimality is "+(double)anshASO);
+		System.out.println("OfflinePB The AverageSubOptimaility  is "+(double)ASO/ASO_points);
 
 
 	}
@@ -385,10 +393,10 @@ public class OfflinePB
 			onlineLocationsMap obj;
 			
 			if(!CG_done){
-				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"offline_contours/Contours.map")));
+				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"offlinePB/Contours.map")));
 			}
 			else{
-				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"offline_contours/Red_Contours.map")));
+				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"offlinePB/Red_Contours.map")));
 			}
 			
 			obj = (onlineLocationsMap)ip.readObject();
@@ -415,7 +423,9 @@ public class OfflinePB
 					reducedPlansSet.clear();
 					while (iter.hasNext()) {
 						location objContourPt = (location) iter.next();
-						if (objContourPt.contour_no == k && !reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
+						if (!reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
+							//TODO: removed the contour_no == k check condition; check again!
+						//if (objContourPt.contour_no == k && !reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
 							assert(objContourPt.reduced_planNumber != -1) : "contour location not reduced";
 							reducedPlansSet.add(objContourPt.reduced_planNumber);
 						}
@@ -437,6 +447,34 @@ public class OfflinePB
 			e.printStackTrace();
 		}
 		//System.exit(0);
+	}
+	
+	
+	public void writeMaptoFile(boolean CG_Done){
+
+		try {
+			String path;
+			FileOutputStream fos;
+			ObjectOutputStream oos;
+
+			//for writing the contours map
+			if(!CG_Done)
+				path = new String (apktPath+"offlinePB/Contours.map");
+			else
+				path = new String (apktPath+"offlinePB/Red_Contours.map");
+			
+			fos = new FileOutputStream (path);
+			oos = new ObjectOutputStream(fos);
+			oos.writeObject(new onlineLocationsMap(ContourPointsMap));
+			
+			oos.flush();
+			oos.close();
+
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+			System.exit(0);
 	}
 	
 	public int findSeedLocation(double seedCost) throws IOException, PicassoException  
@@ -1574,22 +1612,22 @@ public void initialize(int location) {
 //					selectivity[95] = 0.697865f; 	selectivity[96] = 0.755812f; 	selectivity[97] = 0.818569f; 	selectivity[98] = 0.886535f; 	selectivity[99] = 0.990142f;
 					
 					//for OnlinePB
-					selectivity[0] = 0.0010073f; 	selectivity[1] = 0.0030557f; 	selectivity[2] = 0.0051594f; 	selectivity[3] = 0.0073200f; 	selectivity[4] = 0.0095388f; 	
-					selectivity[5] = 0.0118176f; 	selectivity[6] = 0.0141579f; 	selectivity[7] = 0.0165613f; 	selectivity[8] = 0.0190297f; 	selectivity[9] = 0.0215647f; 	
-					selectivity[10] = 0.0241682f; 	selectivity[11] = 0.0268420f; 	selectivity[12] = 0.0295879f; 	selectivity[13] = 0.0324080f; 	selectivity[14] = 0.0353042f; 	
-					selectivity[15] = 0.0382787f; 	selectivity[16] = 0.0413334f; 	selectivity[17] = 0.0444706f; 	selectivity[18] = 0.0476926f; 	selectivity[19] = 0.0510015f; 	
-					selectivity[20] = 0.0543997f; 	selectivity[21] = 0.0578898f; 	selectivity[22] = 0.0614740f; 	selectivity[23] = 0.0651550f; 	selectivity[24] = 0.0689354f; 	
-					selectivity[25] = 0.0728179f; 	selectivity[26] = 0.0768052f; 	selectivity[27] = 0.0809002f; 	selectivity[28] = 0.0851057f; 	selectivity[29] = 0.0894247f; 	
-					selectivity[30] = 0.0938604f; 	selectivity[31] = 0.0984159f; 	selectivity[32] = 0.1030943f; 	selectivity[33] = 0.1078991f; 	selectivity[34] = 0.1128336f; 	
-					selectivity[35] = 0.1179013f; 	selectivity[36] = 0.1231059f; 	selectivity[37] = 0.1284509f; 	selectivity[38] = 0.1339403f; 	selectivity[39] = 0.1395779f; 	
-					selectivity[40] = 0.1453678f; 	selectivity[41] = 0.1513139f; 	selectivity[42] = 0.1574206f; 	selectivity[43] = 0.1636922f; 	selectivity[44] = 0.1701331f; 	
-					selectivity[45] = 0.1767479f; 	selectivity[46] = 0.1835413f; 	selectivity[47] = 0.1905182f; 	selectivity[48] = 0.1976834f; 	selectivity[49] = 0.2050420f; 	
-					selectivity[50] = 0.2125994f; 	selectivity[51] = 0.2203608f; 	selectivity[52] = 0.2283317f; 	selectivity[53] = 0.2365179f; 	selectivity[54] = 0.2449251f; 	
-					selectivity[55] = 0.2535593f; 	selectivity[56] = 0.2624266f; 	selectivity[57] = 0.2715334f; 	selectivity[58] = 0.2808860f; 	selectivity[59] = 0.2904911f; 	
-					selectivity[60] = 0.3003556f; 	selectivity[61] = 0.3104864f; 	selectivity[62] = 0.3208908f; 	selectivity[63] = 0.3315761f; 	selectivity[64] = 0.3425498f; 	
-					selectivity[65] = 0.3538199f; 	selectivity[66] = 0.3653942f; 	selectivity[67] = 0.3772811f; 	selectivity[68] = 0.3894889f; 	selectivity[69] = 0.4020263f; 	
-					selectivity[70] = 0.4149023f; 	selectivity[71] = 0.4281258f; 	selectivity[72] = 0.4417065f; 	selectivity[73] = 0.4556538f; 	selectivity[74] = 0.4699776f; 	
-					selectivity[75] = 0.4846882f; 	selectivity[76] = 0.4997960f; 	selectivity[77] = 0.5153117f; 	selectivity[78] = 0.5312464f; 	selectivity[79] = 0.5476113f; 	
+					selectivity[0] = 0.00010073f; 	selectivity[1] = 0.00030557f; 	selectivity[2] = 0.00051594f; 	selectivity[3] = 0.00073200f; 	selectivity[4] = 0.00095388f; 	
+					selectivity[5] = 0.0118176f; 	selectivity[6] = 0.00141579f; 	selectivity[7] = 0.00165613f; 	selectivity[8] = 0.00190297f; 	selectivity[9] = 0.00215647f; 	
+					selectivity[10] = 0.0241682f; 	selectivity[11] = 0.00268420f; 	selectivity[12] = 0.00295879f; 	selectivity[13] = 0.00324080f; 	selectivity[14] = 0.00353042f; 	
+					selectivity[15] = 0.0382787f; 	selectivity[16] = 0.00413334f; 	selectivity[17] = 0.00444706f; 	selectivity[18] = 0.00476926f; 	selectivity[19] = 0.00510015f; 	
+					selectivity[20] = 0.0543997f; 	selectivity[21] = 0.00578898f; 	selectivity[22] = 0.00614740f; 	selectivity[23] = 0.00651550f; 	selectivity[24] = 0.00689354f; 	
+					selectivity[25] = 0.0728179f; 	selectivity[26] = 0.00768052f; 	selectivity[27] = 0.00809002f; 	selectivity[28] = 0.00851057f; 	selectivity[29] = 0.00894247f; 	
+					selectivity[30] = 0.0938604f; 	selectivity[31] = 0.00984159f; 	selectivity[32] = 0.01030943f; 	selectivity[33] = 0.01078991f; 	selectivity[34] = 0.01128336f; 	
+					selectivity[35] = 0.1179013f; 	selectivity[36] = 0.01231059f; 	selectivity[37] = 0.01284509f; 	selectivity[38] = 0.01339403f; 	selectivity[39] = 0.01395779f; 	
+					selectivity[40] = 0.1453678f; 	selectivity[41] = 0.01513139f; 	selectivity[42] = 0.01574206f; 	selectivity[43] = 0.01636922f; 	selectivity[44] = 0.01701331f; 	
+					selectivity[45] = 0.1767479f; 	selectivity[46] = 0.01835413f; 	selectivity[47] = 0.01905182f; 	selectivity[48] = 0.01976834f; 	selectivity[49] = 0.02050420f; 	
+					selectivity[50] = 0.2125994f; 	selectivity[51] = 0.02203608f; 	selectivity[52] = 0.02283317f; 	selectivity[53] = 0.02365179f; 	selectivity[54] = 0.02449251f; 	
+					selectivity[55] = 0.2535593f; 	selectivity[56] = 0.02624266f; 	selectivity[57] = 0.02715334f; 	selectivity[58] = 0.02808860f; 	selectivity[59] = 0.02904911f; 	
+					selectivity[60] = 0.3003556f; 	selectivity[61] = 0.03104864f; 	selectivity[62] = 0.03208908f; 	selectivity[63] = 0.03315761f; 	selectivity[64] = 0.03425498f; 	
+					selectivity[65] = 0.3538199f; 	selectivity[66] = 0.03653942f; 	selectivity[67] = 0.03772811f; 	selectivity[68] = 0.03894889f; 	selectivity[69] = 0.04020263f; 	
+					selectivity[70] = 0.4149023f; 	selectivity[71] = 0.04281258f; 	selectivity[72] = 0.04417065f; 	selectivity[73] = 0.14556538f; 	selectivity[74] = 0.24699776f; 	
+					selectivity[75] = 0.4846882f; 	selectivity[76] = 0.34997960f; 	selectivity[77] = 0.45153117f; 	selectivity[78] = 0.5312464f; 	selectivity[79] = 0.5476113f; 	
 					selectivity[80] = 0.5644180f; 	selectivity[81] = 0.5816785f; 	selectivity[82] = 0.5994050f; 	selectivity[83] = 0.6176102f; 	selectivity[84] = 0.6363069f; 	
 					selectivity[85] = 0.6555084f; 	selectivity[86] = 0.6752283f; 	selectivity[87] = 0.6954807f; 	selectivity[88] = 0.7162799f; 	selectivity[89] = 0.7376407f; 	
 					selectivity[90] = 0.7595782f; 	selectivity[91] = 0.7821080f; 	selectivity[92] = 0.8052461f; 	selectivity[93] = 0.8290090f; 	selectivity[94] = 0.8534135f; 	
