@@ -100,6 +100,7 @@ public class onlinePB {
 	static float cost_error = 0.12f;
 	static boolean contoursReadFromFile = true;
 	static boolean cg_contoursReadFromFile = true;
+	static boolean writeMapstoFile = true;
 	static boolean singleThread = false;
 
 	
@@ -107,6 +108,13 @@ public class onlinePB {
 	
 		int threads = (int) ( Runtime.getRuntime().availableProcessors()*1);
 		num_of_usable_threads = threads;
+		//set the program arguments
+		if(args.length > 0){
+			alpha = Float.parseFloat(args[0]);
+			System.out.println("Alpha = "+alpha);
+			//writeMapstoFile = false;
+		}
+		
 		long startTime = System.nanoTime();
 		onlinePB obj = new onlinePB();  
 		obj.loadPropertiesFile();
@@ -267,8 +275,8 @@ public class onlinePB {
 				}
 
 
-				//if(visualisation_2D)
-				writeContourPointstoFile(i);
+					//if(writeMapstoFile)
+						writeContourPointstoFile(i);
 				System.out.println("The running optimization calls are "+opt_call);
 				System.out.println("The running FPC calls are "+fpc_call);
 				
@@ -299,7 +307,9 @@ public class onlinePB {
 
 			long endTime = System.nanoTime();
 			System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
-			obj.writeMaptoFile(false);
+			
+			if(writeMapstoFile)
+				obj.writeMaptoFile(false);
 		}
 		
 		System.out.println("");
@@ -316,10 +326,11 @@ public class onlinePB {
 			while(itr.hasNext()){
 				Integer key = (Integer)itr.next();
 				for(int pt =0;pt<ContourPointsMap.get(key).size();pt++){
-					location p = ContourPointsMap.get(key).get(pt);
+					location p = ContourPointsMap.get(key).get(pt);					
 					assert(p.get_contour_no() == key.intValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
 				}
 			}
+			
 			
 			//System.exit(0);
 			
@@ -1257,10 +1268,11 @@ public class onlinePB {
 								loc = new location(qrun_copy, this);
 							}
 							if(!ContourLocationAlreadyExist(loc.dim_values))
-								contour_points.add(loc);
+								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
+									contour_points.add(new location(loc.dim_values,this));
+								else 
+									contour_points.add(loc);
 							
-							if(Math.abs(qrun_copy[0] - 0.01219) < 0.0001f)
-								System.out.println("really interesting");
 							break;
 						}
 						
@@ -1319,8 +1331,10 @@ public class onlinePB {
 								opt_call++;
 							}
 							if(!ContourLocationAlreadyExist(loc.dim_values))
-								contour_points.add(loc);
-					
+								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
+									contour_points.add(new location(loc.dim_values,this));
+								else 
+									contour_points.add(loc);
 							// check to see if the terminus point is reached for the 2D slice 
 							if(qrun_copy[last_dim2] >= 1.0f)
 								return; 
@@ -1884,13 +1898,17 @@ public class onlinePB {
 			loc.predicates = this.predicates;
 			loc.dimension = this.dimension;
 
-			writeMaptoFile(true);
+			if(writeMapstoFile)
+				writeMaptoFile(true);
+			
 			
 			Iterator itr = ContourPointsMap.keySet().iterator();
 			while(itr.hasNext()){
 				Integer key = (Integer)itr.next();
 				for(int pt =0;pt<ContourPointsMap.get(key).size();pt++){
 					location p = ContourPointsMap.get(key).get(pt);
+					if(p.get_contour_no() != key.intValue())
+						System.out.println("problem");
 					assert(p.get_contour_no() == key.intValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
 				}
 			}
@@ -2405,7 +2423,7 @@ class location implements Serializable
 	static int decimalPrecision;
 	boolean is_within_threshold[];
 	int reduced_planNumber;
-	int contour_no;
+	int contour_no = -1;
 	
 	location(){
 		
