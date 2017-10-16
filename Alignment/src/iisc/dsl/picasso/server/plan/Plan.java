@@ -48,7 +48,7 @@ public class Plan implements Serializable {
 	//Make sure you change this if you change any of the fields below.
 	private static final long serialVersionUID = 221L;
 	
-	private Vector nodes;
+	public Vector nodes;
 	private int planno;
 	private long hash;
 	

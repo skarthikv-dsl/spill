@@ -48,6 +48,10 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 public class onlinePB {
 	
+
+
+
+	//parameters that share variables across objects
 	static int plans[];
 	static double OptimalCost[];
 	static int totalPlans;
@@ -58,32 +62,24 @@ public class onlinePB {
 	static float selectivity[];
 	static String apktPath;
 	static String qtName ;
-	static Jdbc3PoolingDataSource source;
-	static String query;
-	Connection conn = null;
-	static int database_conn=1;
-	static int sel_distribution = 1;
-	static double h_cost;
-	static double min_cost;
 	static String select_query;
 	static String predicates;
-	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
-	static float qrun_sel[];
-	static float qrun_sel_rev[];
 	static float beta;
-	static int opt_call = 0;
-	static int fpc_call = 0;
-	static HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
-	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
-	static ArrayList<location> contour_points = new ArrayList<location>();
-	static ArrayList<location> non_contour_points = new ArrayList<location>();
-	static HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
-	static String XMLPath = null;
+	static int database_conn=1;
+	static int sel_distribution = 1;
 	static File f_marwa;
+	static double h_cost;
+	static double min_cost;
+	//for plan bouquet
 	static double learning_cost_pb = 0;
 	static boolean done_pb = false;
 	static float[] actual_sel_pb; 
 	static int num_of_usable_threads;
+	HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
+	static 	HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
+	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
+	static ArrayList<Float> outermost_dimension_sel;
+	
 	//parameters to set
 	//static float minimum_selectivity = 0.00005f;
 	static float minimum_selectivity = 0.0001f;
@@ -96,12 +92,26 @@ public class onlinePB {
 	static boolean visualisation_2D = false;
 	static boolean enhancement = true; 
 	static boolean memoization = true;
-	static int location_hits = 0;
 	static float cost_error = 0.12f;
-	static boolean contoursReadFromFile = true;
-	static boolean cg_contoursReadFromFile = true;
-	static boolean writeMapstoFile = true;
+	static boolean contoursReadFromFile = false;
+	static boolean cg_contoursReadFromFile = false;
+	static boolean writeMapstoFile = false;
 	static boolean singleThread = false;
+
+	static Jdbc3PoolingDataSource source;
+	Connection conn = null;
+	ArrayList<Integer> learntDim = new ArrayList<Integer>();
+	float qrun_sel[];
+	float qrun_sel_rev[];
+	int opt_call = 0;
+	int fpc_call = 0;
+	int location_hits = 0;
+	//the following two are required for min. and max. selectivity to varying across outermost dimension
+	int min_cc_sel_idx = 0;//comes into picture during parallelization 
+	int max_cc_sel_idx ;
+	ArrayList<location> contour_points = new ArrayList<location>();
+	ArrayList<location> non_contour_points = new ArrayList<location>();
+	String XMLPath = null;
 
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException, ClassNotFoundException {
@@ -131,10 +141,7 @@ public class onlinePB {
 		
 		obj.readpkt(gdp, true);
 		obj.loadPropertiesFile();
-		
-		
-
-		
+				
 		try{
 			System.out.println("entered DB conn1");
 			source = new Jdbc3PoolingDataSource();
@@ -208,38 +215,68 @@ public class onlinePB {
 			}
 			else{
 				
-				qrun_sel = new float[dimension];
+				obj.qrun_sel = new float[dimension];
 				for(int d=0;d<dimension;d++)
-					qrun_sel[d] = 1.0f;
-				location loc_terminus = new location(qrun_sel,obj);
+					obj.qrun_sel[d] = 1.0f;
+				location loc_terminus = new location(obj.qrun_sel,obj);
 				h_cost = loc_terminus.get_cost(); 
-				contour_points.add(loc_terminus);
+				obj.contour_points.add(loc_terminus);
 				
 				for(int d=0;d<dimension;d++)
-					qrun_sel[d] = minimum_selectivity;
-				min_cost = obj.getFPCCost(qrun_sel, -1);
+					obj.qrun_sel[d] = minimum_selectivity;
+				min_cost = obj.getFPCCost(obj.qrun_sel, -1);
 			}
 
 
-
-			qrun_sel = new float[dimension];
-			qrun_sel_rev = new float[dimension];
+			
+			obj.qrun_sel = new float[dimension];
+			obj.qrun_sel_rev = new float[dimension];
 			for(int d=0;d<dimension;d++){
-				qrun_sel[d] = -1.0f;
-				qrun_sel_rev[d] = -1.0f;
+				obj.qrun_sel[d] = -1.0f;
+				obj.qrun_sel_rev[d] = -1.0f;
 			}
 
-			XMLPath = new String(apktPath+"onlinePB.xml");
 			beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
 			double cost = min_cost;
 			double ratio = h_cost/min_cost;
 			assert (h_cost >= min_cost) : "maximum cost is less than the minimum cost";
 			System.out.println("the ratio of C_max/c_min is "+ratio);
 
+
+			/*set the selectivity array for the outermost dimension*/
+			int step =0;
+			outermost_dimension_sel = new ArrayList<Float>();
+			float var = minimum_selectivity;
+			boolean flag = false;
+			while(true) {
+				flag = false;
+				step ++;
+				if(var >= 1.0f) {
+					var = 1.0f;
+					outermost_dimension_sel.add(var);
+					flag = true;
+				}
+				if(flag)
+					break;
+				outermost_dimension_sel.add(var);
+				var = obj.roundToDouble(var * beta);
+			}
+			
+			obj.max_cc_sel_idx = outermost_dimension_sel.size() - 1 ; 
+			assert(obj.max_cc_sel_idx > 0): "outermostdimension is empty";
+
+			
+			obj.setXMLPath();
+			//clear the contents of onlinePB Planstructure directory
+			File dir = new File(apktPath+"onlinePB/planStructureXML/");
+			for(File file: dir.listFiles()) 
+			    if (!file.isDirectory()) 
+			        file.delete();
+			
 			//System.exit(0);
 			//reset the values to -1 for the rest of the code 
 			for(int d=0;d<dimension;d++)
-				qrun_sel[d] = -1.0f;
+				obj.qrun_sel[d] = -1.0f;
 
 			i = 1;
 
@@ -247,16 +284,21 @@ public class onlinePB {
 			order.clear(); 
 			for(int d=0;d<obj.dimension;d++)
 				order.add(d);
-
-
+			
+			//close the connection since the multithreaded version is starting
+			if(!singleThread){
+				if (obj.conn != null) {
+					try { obj.conn.close(); } catch (SQLException e) {}
+				}
+			}
 			while(cost < 2*h_cost)
 			{
 				if(cost>h_cost)
 					cost = h_cost;
 				System.out.println("---------------------------------------------------------------------------------------------\n");
 				System.out.println("Contour "+i+" cost : "+cost);
-				contour_points = new ArrayList<location>();			
-				non_contour_points = new ArrayList<location>();
+				obj.contour_points = new ArrayList<location>();			
+				obj.non_contour_points = new ArrayList<location>();
 
 				//			if(i < 2){
 				//				i++;
@@ -264,32 +306,52 @@ public class onlinePB {
 				//				continue;
 				//			}
 
-				if(cost < h_cost)
-					obj.generateCoveringContours(order,cost);
+				if(cost < h_cost){
+					if(singleThread)
+						obj.generateCoveringContours(order,cost);
+					else
+						obj.getCoveringContoursParallel(order, cost);
+				}
 				else {
 					//just add the terminus location to the contour
+					if(!singleThread){
+						obj.conn = source.getConnection();
+					}
 					for(int d=0;d<dimension;d++)
-						qrun_sel[d] = 1.0f;
-					location loc_terminus = new location(qrun_sel,obj);
-					contour_points.add(loc_terminus);
+						obj.qrun_sel[d] = 1.0f;
+					location loc_terminus = new location(obj.qrun_sel,obj);
+					obj.contour_points.add(loc_terminus);
+					if (obj.conn != null && !singleThread) {
+						try { obj.conn.close(); } catch (SQLException e) {}
+					}
 				}
 
 
 					//if(writeMapstoFile)
-						writeContourPointstoFile(i);
-				System.out.println("The running optimization calls are "+opt_call);
-				System.out.println("The running FPC calls are "+fpc_call);
+						obj.writeContourPointstoFile(i);
+				System.out.println("The running optimization calls are "+obj.opt_call);
+				System.out.println("The running FPC calls are "+obj.fpc_call);
 				
-				for(location l: contour_points)
+				if(!singleThread){
+					obj.conn = source.getConnection();
+				}
+				for(location l: obj.contour_points){
 					l.set_contour_no(i);
+					l.conn = obj.conn;
+					l.setPlanNumber();
+				}
+				
+				if (obj.conn != null && !singleThread) {
+					try { obj.conn.close(); } catch (SQLException e) {}
+				}
 //				for(location l: non_contour_points)
 //					l.set_contour_no(i);
 				
-				int size_of_contour = contour_points.size();
-				int size_of_non_contour = non_contour_points.size();
-				ContourPointsMap.put(i, new ArrayList<location>(contour_points)); //storing the contour points
+				int size_of_contour = obj.contour_points.size();
+				int size_of_non_contour = obj.non_contour_points.size();
+				ContourPointsMap.put(i, new ArrayList<location>(obj.contour_points)); //storing the contour points
 
-				non_ContourPointsMap.put(i, new ArrayList<location>(non_contour_points)); //storing the contour points
+				non_ContourPointsMap.put(i, new ArrayList<location>(obj.non_contour_points)); //storing the contour points
 
 				
 
@@ -300,9 +362,9 @@ public class onlinePB {
 				i++;
 
 			}
-			System.out.println("the number of optimization calls are "+opt_call);
-			System.out.println("the number of FPC calls are "+fpc_call);
-			System.out.println("location hits "+location_hits);
+			System.out.println("the number of optimization calls are "+obj.opt_call);
+			System.out.println("the number of FPC calls are "+obj.fpc_call);
+			System.out.println("location hits "+obj.location_hits);
 
 
 			long endTime = System.nanoTime();
@@ -317,6 +379,7 @@ public class onlinePB {
 			try { obj.conn.close(); } catch (SQLException e) {}
 		}		
 		
+		System.exit(0);
 		File fl_red =  new File(apktPath+"online_contours/Red_Contours.map");
 		if(cg_contoursReadFromFile && fl_red.exists()){		
 			
@@ -338,8 +401,6 @@ public class onlinePB {
 		else
 			obj.ContourCentricCostGreedy(-1);
 		
-		
-			
 		obj.conn = source.getConnection();
 		obj.runPlanBouquetAlgo();
 		if (obj.conn != null) {
@@ -350,7 +411,26 @@ public class onlinePB {
 		
 	}
 	
+	public onlinePB(onlinePB obj){
+
+		//to just make sure that static variables are already assigned values
+		assert((dimension == obj.dimension) && (resolution == obj.resolution) && (Math.abs(beta - obj.beta) < 0.0001) && select_query.equals(obj.select_query) && (outermost_dimension_sel.size() == obj.outermost_dimension_sel.size()) ) : "static variables are not set at onlinePB obj initialization";
+		this.conn = null;
+		this.learntDim = new ArrayList<Integer>();
+		this.qrun_sel = new float[dimension];
+		this.qrun_sel_rev = new float[dimension];
+		this.opt_call = 0;
+		this.fpc_call = 0;
+		
+		//the following two are required for min. and max. selectivity to varying across outermost dimension
+		this.min_cc_sel_idx = obj.min_cc_sel_idx;//comes into picture during parallelization 
+		this.max_cc_sel_idx = obj.max_cc_sel_idx;	
+	}
 	
+	public onlinePB() {
+		
+	}
+
 	public void runPlanBouquetAlgo() throws SQLException {
 		
 		/*
@@ -743,7 +823,7 @@ public class onlinePB {
 	}
 	
 	
-	private static void writeContourPointstoFile(int contour_no) {
+	private void writeContourPointstoFile(int contour_no) {
 
 		try {
 	    
@@ -793,7 +873,7 @@ public class onlinePB {
 	   	 		if(d < dimension -1)
 	   	 			pw_cs.print(p.get_dimension(d) + "\t");
 	   	 		else
-	   	 			pw_cs.print(p.get_dimension(d) + "\n");
+	   	 			pw_cs.print(p.get_dimension(d) + "\t"+p.get_cost()+"\n");
 	    }
 
 //	    for(location p : non_contour_points) {		 
@@ -997,6 +1077,7 @@ public class onlinePB {
 		String funName = "generateCoveringContours";
 		if(DEBUG_LEVEL_1)
 			System.out.println("Entered function "+funName);
+		
 		//learntDim contains the dimensions already learnt (which is null initially)
 		//learntDimIndices contains the exact point in the space for the learnt dimensions
 		
@@ -1022,8 +1103,8 @@ public class onlinePB {
 		{ 
 			int last_dim1=-1, last_dim2=-1;
 			
-			if(Math.abs(qrun_sel[0] - 0.01219) < 0.0001f)
-				System.out.println("intereseting");
+			if((opt_call % 500) ==0 )
+				System.out.println("running optimiation for debug along thread  ["+min_cc_sel_idx+"-"+max_cc_sel_idx+"] opt_call = "+opt_call+" fpc call = "+fpc_call+" location hits = "+location_hits);
 			
 			for(int i=0;i<dimension;i++)
 			{
@@ -1144,9 +1225,10 @@ public class onlinePB {
 				double opt_cost_copy = Double.MIN_VALUE;
 				boolean contour_done = false; //to capture the finishing status of contour processing
 				
+				float [] qrun_copy = new float [dimension];
 				for(;;){
 					
-					float [] qrun_copy = new float [dimension];
+					
 					for(int i=0; i < dimension ; i++){
 						if(increase_along_dim1){
 							qrun_copy[i] = qrun_sel[i];
@@ -1419,28 +1501,140 @@ public class onlinePB {
 
 		
 		Integer curDim = remainingDimList.get(0); 
-
-		for(qrun_sel[curDim] = minimum_selectivity; ; )
+		
+		if(curDim == order.get(0)) //to check if it is the outer most dimension
+			qrun_sel[curDim] = outermost_dimension_sel.get(min_cc_sel_idx);
+		else 
+			qrun_sel[curDim] = minimum_selectivity;
+		
+		int itr = min_cc_sel_idx;
+		while(true)
 		{	
 //			if(qrun_sel[0] == minimum_selectivity)
 //				continue;
 			boolean flag = false;
-			if(qrun_sel[curDim] > 1.0f){
-				qrun_sel[curDim] = 1.0f;
-				flag = true;
+			
+			if(curDim == order.get(0)) {
+				if(Math.abs(qrun_sel[curDim]-4.01E-4) < 0.00001 && cost > 4306630)
+					System.out.println("Interesting");
+				qrun_sel[curDim] = outermost_dimension_sel.get(itr);
+				if(itr == max_cc_sel_idx){
+					flag = true;
+				}
+			}
+			else{
+				if(qrun_sel[curDim] > 1.0f){
+					qrun_sel[curDim] = 1.0f;
+					flag = true;
+				}
 			}
 				
 			learntDim.add(curDim);
-			//if(qrun_sel[0] >= 0.006 && qrun_sel[1] >= 0.001 )
+
 			generateCoveringContours(order, cost);
 			learntDim.remove(learntDim.indexOf(curDim));
-			qrun_sel[curDim] = roundToDouble(qrun_sel[curDim]*beta);
 			
+			if(curDim == order.get(0))
+				itr++;
+			else
+				qrun_sel[curDim] = roundToDouble(qrun_sel[curDim]*beta);
+						
 			if(flag)
 				break;
 		}
 	}
 	
+	
+	public void getCoveringContoursParallel(ArrayList<Integer> order, double cost) throws SQLException {
+
+		System.out.println("Number of Usable threads are : "+num_of_usable_threads + " with selec range size: "+outermost_dimension_sel.size());
+		
+		// 1. Divide the contour_locs into usable threads-1
+		
+		int step_size = outermost_dimension_sel.size()/num_of_usable_threads;
+		int residue = outermost_dimension_sel.size() % num_of_usable_threads;
+		int cur_min_val = 0;
+		int cur_max_val =  -1;
+				
+		ArrayList<CoveringContourinputParamStruct> inputs = new ArrayList<CoveringContourinputParamStruct>();
+		for (int j = 0; j < num_of_usable_threads ; ++j) {
+
+			cur_min_val = cur_max_val + 1;
+			cur_max_val = cur_min_val + step_size ;
+			
+			if(j==num_of_usable_threads-1 || (outermost_dimension_sel.size() < num_of_usable_threads))
+				cur_max_val = outermost_dimension_sel.size();
+
+			CoveringContourinputParamStruct input = null;
+			if((residue--) > 0 )
+				input = new CoveringContourinputParamStruct(source, cur_min_val, cur_max_val, this,order, cost);
+			else{
+				cur_max_val --;
+				input = new CoveringContourinputParamStruct(source, cur_min_val, cur_max_val, this, order, cost);
+			}
+			System.out.println("Contour generation for the range : "+"["+cur_min_val+","+cur_max_val+"]");
+			inputs.add(input);
+			
+			if(outermost_dimension_sel.size() < num_of_usable_threads)
+				break;
+		}
+		
+		//System.out.println("after spltting");
+		// 2. execute them in parallel
+	    ExecutorService service = Executors.newFixedThreadPool(num_of_usable_threads);
+	    ArrayList<Future<CoveringContourOutputParamStruct>> futures = new ArrayList<Future<CoveringContourOutputParamStruct>>();
+	    		
+	     for (final CoveringContourinputParamStruct input : inputs) {
+	        Callable<CoveringContourOutputParamStruct> callable = new Callable<CoveringContourOutputParamStruct>() {
+	            public CoveringContourOutputParamStruct call() throws Exception {
+	            	CoveringContourOutputParamStruct output = new CoveringContourOutputParamStruct();
+	            	//System.out.println("before getting the connection");
+	            	
+	            	input.setPropertiesFileConstants(apktPath, qtName, select_query, predicates, dimension, database_conn);
+	            	input.doGenerateContours();
+	            	//System.out.println("after getting the connection");
+	            	
+	    			assert(input.obj.contour_points.size() > 0 || input.obj.non_contour_points.size() > 0): "empty contour or non_contour points";
+	            	
+	    			output.contour_locs_parallel = new ArrayList<location>(input.obj.contour_points);
+	            	output.non_contour_locs_parallel = new ArrayList<location>(input.obj.non_contour_points);
+            		output.opt_call_count = input.obj.opt_call;
+            		output.fpc_call_count = input.obj.fpc_call;
+            		output.location_hits = input.obj.location_hits;
+            		//assert(input.obj.fpc_call > 0 || input.obj.opt_call > 0): "fpc calls or opt calls are zero even after contor generation";
+	            	
+        			return output;
+	            }
+	        };
+		       futures.add(service.submit(callable));			   
+			    
+		}
+	     service.shutdown();
+	     //System.out.println("after shutdown of service"); 
+	     //3. aggregating the results back
+	     contour_points.clear();
+	     for (Future<CoveringContourOutputParamStruct> future : futures) {
+	    	 
+		    	try {
+		    		CoveringContourOutputParamStruct output = future.get();
+					contour_points.addAll(output.contour_locs_parallel);
+					non_contour_points.addAll(output.non_contour_locs_parallel);
+					fpc_call += output.fpc_call_count;
+					opt_call += output.opt_call_count;
+					location_hits += output.location_hits;
+				} catch (InterruptedException | ExecutionException e) {	
+					e.printStackTrace();
+				}
+	     }
+	     //System.out.println("after aggregation");
+	     
+	     if (conn != null) {
+				try { conn.close(); } catch (SQLException e) {}
+			}
+	     
+	     return ;
+	} 
+
 	
 	private int getContourNo(double cost) {
 		
@@ -1516,11 +1710,12 @@ public class onlinePB {
 	
 	private double calculateJumpSize(float[] qrun_copy, int dim, double base_cost) throws SQLException {
 
-		getFPCCost(qrun_copy, -3);
+		getFPCCost(qrun_copy, -3); //to just dump the xml optimal plan at qrun_copy for slope calculations
 		float delta[] = {0.1f,0.3f};
 			float sum_slope = 0, divFactor =0;
+			float sel[] = new float[dimension];
 			for(float del: delta){
-				float sel[] = new float[dimension];
+				
 
 				for(int d=0; d<dimension;d++)
 					sel[d] = qrun_copy[d];
@@ -1553,13 +1748,8 @@ public class onlinePB {
 				 
 					//now return the jump_size which is cost/slope or F/m;
 				 jump_size = base_cost/avg_slope;
-			}
+			}			
 
-			
-
-			
-			
-			
 			if(DEBUG_LEVEL_1)
 				System.out.println("jump size is "+jump_size);
 			
@@ -1945,7 +2135,7 @@ public class onlinePB {
 		
 		//System.out.println("after spltting");
 		// 2. execute them in parallel
-	    ExecutorService service = Executors.newFixedThreadPool(num_of_usable_threads);
+		ExecutorService service = Executors.newFixedThreadPool(num_of_usable_threads);
 	    ArrayList<Future<CGOutputParamStruct>> futures = new ArrayList<Future<CGOutputParamStruct>>();
 	    		
 	     for (final CGinputParamStruct input : inputs) {
@@ -2047,21 +2237,21 @@ public class onlinePB {
 				//System.exit(1);
 				//String exp_query = new String(query_opt_spill);
 				
-				stmt.execute("set work_mem = '100MB'");
-				//NOTE,Settings: 4GB for DS and 1GB for H
-				if(database_conn==0){
-					stmt.execute("set effective_cache_size='1GB'");
-				}
-				else{
-					stmt.execute("set effective_cache_size='4GB'");
-				}
-
-				//NOTE,Settings: need not set the page cost's
-				stmt.execute("set  seq_page_cost = 1");
-				stmt.execute("set  random_page_cost=4");
-				stmt.execute("set cpu_operator_cost=0.0025");
-				stmt.execute("set cpu_index_tuple_cost=0.005");
-				stmt.execute("set cpu_tuple_cost=0.01");
+//				stmt.execute("set work_mem = '100MB'");
+//				//NOTE,Settings: 4GB for DS and 1GB for H
+//				if(database_conn==0){
+//					stmt.execute("set effective_cache_size='1GB'");
+//				}
+//				else{
+//					stmt.execute("set effective_cache_size='4GB'");
+//				}
+//
+//				//NOTE,Settings: need not set the page cost's
+//				stmt.execute("set  seq_page_cost = 1");
+//				stmt.execute("set  random_page_cost=4");
+//				stmt.execute("set cpu_operator_cost=0.0025");
+//				stmt.execute("set cpu_index_tuple_cost=0.005");
+//				stmt.execute("set cpu_tuple_cost=0.01");
 				
 				
 				//XML Query
@@ -2139,7 +2329,11 @@ public class onlinePB {
 		return this.OptimalCost[index];
 	}
 
-
+	void setXMLPath(){
+		assert(min_cc_sel_idx >=0 && max_cc_sel_idx <= outermost_dimension_sel.size() && outermost_dimension_sel.size() > 0) : "min and max outerdimensionselectivity index is not set correctly";
+		XMLPath = new String(apktPath+"onlinePB/forcingPlans/"+(new Integer(min_cc_sel_idx).toString())+(new Integer(max_cc_sel_idx).toString())+".xml");
+	}
+	
 	public void loadPropertiesFile() {
 		/*
 		 * Need dimension.
@@ -2256,6 +2450,74 @@ public class onlinePB {
 
 }
 
+class CoveringContourinputParamStruct {
+	
+	Jdbc3PoolingDataSource source;
+	String apktPath, qtName, select_query, predicates; 
+	int dimension, database_conn;
+	Connection conn;
+	int min_index, max_index;
+	onlinePB obj;
+	ArrayList<Integer> order;
+	double cost;
+	 
+	public CoveringContourinputParamStruct(Jdbc3PoolingDataSource source, int min_index, int max_index, onlinePB obj, ArrayList<Integer> order, double cost) throws SQLException {
+		this.source = source;
+		this.min_index = min_index;
+		this.max_index = max_index;
+		this.obj = new onlinePB(obj);
+		this.order = new ArrayList<Integer>(order);
+		this.cost = cost;
+	}
+	
+	public void setPropertiesFileConstants(String apktPath, String qtName, String select_query, String predicates, int dimension, int database_conn) throws SQLException{
+		if(apktPath!= null && qtName!= null && predicates!= null && select_query!=null){ 
+			this.apktPath = apktPath;
+			this.qtName = qtName;
+			this.select_query = select_query;
+			this.predicates = predicates;
+			this.dimension = dimension;
+			this.database_conn = database_conn;
+		}
+		else 
+			assert(false) : "either one of apktPath, qtName, predicates, dimension or database_conn is null";
+			
+	}
+	
+	public void doGenerateContours(){
+				
+		try {			
+			conn = source.getConnection();
+			obj.fpc_call =0;
+			obj.opt_call =0;
+			obj.location_hits =0;
+			obj.min_cc_sel_idx = min_index;
+			obj.max_cc_sel_idx = max_index;
+			obj.setXMLPath();
+			assert(obj.XMLPath != null && obj.XMLPath.contains(new Integer(min_index).toString())): "some issue with setting the XMLPath variable";
+			obj.conn = conn;
+			obj.contour_points.clear();
+			obj.non_contour_points.clear();
+			
+			assert(order.size() == dimension): "size of order not matching with dimensions";
+			assert(cost > 0): "contour searching cost is less than or equal to 0";
+
+			obj.generateCoveringContours(order, cost);
+			
+			assert(obj.contour_points.size() > 0 || obj.non_contour_points.size() > 0): "empty contour or non_contour points";
+			
+			//assert(obj.fpc_call > 0 || obj.opt_call > 0): "fpc calls or opt calls are zero even after contor generation";
+
+		} catch (IOException | SQLException | PicassoException e1) {
+			e1.printStackTrace();
+		}
+		
+		if (conn != null) {
+			try { conn.close(); } catch (SQLException e) {}
+		}
+	}
+}
+
 	class CGinputParamStruct {
 		
 		Jdbc3PoolingDataSource source;
@@ -2266,7 +2528,6 @@ public class onlinePB {
 		 
 		public CGinputParamStruct(ArrayList<location> locs, Jdbc3PoolingDataSource source, int plan) throws SQLException {
 			this.source = source;
-			
 			this.contour_fpc_locs  = new ArrayList<location>(locs);
 			this.plan  = plan; 
 		}
@@ -2343,21 +2604,21 @@ public class onlinePB {
 					//System.exit(1);
 					//String exp_query = new String(query_opt_spill);
 					
-					stmt.execute("set work_mem = '100MB'");
-					//NOTE,Settings: 4GB for DS and 1GB for H
-					if(database_conn == 0){
-						stmt.execute("set effective_cache_size='1GB'");
-					}
-					else{
-						stmt.execute("set effective_cache_size='4GB'");
-					}
-
-					//NOTE,Settings: need not set the page cost's
-					stmt.execute("set  seq_page_cost = 1");
-					stmt.execute("set  random_page_cost=4");
-					stmt.execute("set cpu_operator_cost=0.0025");
-					stmt.execute("set cpu_index_tuple_cost=0.005");
-					stmt.execute("set cpu_tuple_cost=0.01");
+//					stmt.execute("set work_mem = '100MB'");
+//					//NOTE,Settings: 4GB for DS and 1GB for H
+//					if(database_conn == 0){
+//						stmt.execute("set effective_cache_size='1GB'");
+//					}
+//					else{
+//						stmt.execute("set effective_cache_size='4GB'");
+//					}
+//
+//					//NOTE,Settings: need not set the page cost's
+//					stmt.execute("set  seq_page_cost = 1");
+//					stmt.execute("set  random_page_cost=4");
+//					stmt.execute("set cpu_operator_cost=0.0025");
+//					stmt.execute("set cpu_index_tuple_cost=0.005");
+//					stmt.execute("set cpu_tuple_cost=0.01");
 					
 					
 					
@@ -2403,13 +2664,21 @@ public class onlinePB {
 		ArrayList<location> contour_fpc_done_locs;
 	}
 	
+	class CoveringContourOutputParamStruct {
+		ArrayList<location> contour_locs_parallel;
+		ArrayList<location> non_contour_locs_parallel;
+		int fpc_call_count = 0;
+		int opt_call_count = 0;
+		int location_hits = 0;
+	}
+	
 class location implements Serializable
 {
 	private static final long serialVersionUID = 223L;
 	static int dimension;
 	static int database_conn;
 	static String predicates;
-	static Connection conn;
+	
 	static String select_query;
 	ArrayList<Double> fpc_plan_cost;
 	double fpc_cost = Double.MAX_VALUE;
@@ -2424,6 +2693,8 @@ class location implements Serializable
 	boolean is_within_threshold[];
 	int reduced_planNumber;
 	int contour_no = -1;
+	Plan plan = new Plan();
+	Connection conn; //should be non-static at any cost
 	
 	location(){
 		
@@ -2556,9 +2827,6 @@ class location implements Serializable
 	public void getPlan() throws PicassoException, IOException, SQLException {
 
 		Vector textualPlan = new Vector();
-		StringBuilder XML_Plan = new StringBuilder();
-		Plan plan = new Plan();
-		String xml_query = null;
 		String cost_str = null;
 		
 		try{      	
@@ -2573,24 +2841,23 @@ class location implements Serializable
 				}
 			}
 			exp_query = exp_query + select_query;
-			xml_query = "explain (format xml) "+ exp_query ;
 			exp_query = "explain " + exp_query ;
 			//String exp_query = new String(query_opt_spill);
 			//System.out.println(exp_query);
-			stmt.execute("set work_mem = '100MB'");
-			//NOTE,Settings: 4GB for DS and 1GB for H
-			if(database_conn==0){
-				stmt.execute("set effective_cache_size='1GB'");
-			}
-			else{
-				stmt.execute("set effective_cache_size='4GB'");
-			}
-
-			stmt.execute("set  seq_page_cost = 1");
-			stmt.execute("set  random_page_cost=4");
-			stmt.execute("set cpu_operator_cost=0.0025");
-			stmt.execute("set cpu_index_tuple_cost=0.005");
-			stmt.execute("set cpu_tuple_cost=0.01");
+//			stmt.execute("set work_mem = '100MB'");
+//			//NOTE,Settings: 4GB for DS and 1GB for H
+//			if(database_conn==0){
+//				stmt.execute("set effective_cache_size='1GB'");
+//			}
+//			else{
+//				stmt.execute("set effective_cache_size='4GB'");
+//			}
+//
+//			stmt.execute("set  seq_page_cost = 1");
+//			stmt.execute("set  random_page_cost=4");
+//			stmt.execute("set cpu_operator_cost=0.0025");
+//			stmt.execute("set cpu_index_tuple_cost=0.005");
+//			stmt.execute("set cpu_tuple_cost=0.01");
 			
 			ResultSet rs = stmt.executeQuery(exp_query);
 			//System.out.println("coming here");
@@ -2617,18 +2884,8 @@ class location implements Serializable
 			this.opt_cost = execCost;
 			assert(textualPlan.size()>=0): "Empty plan from the optimizer call";
 				
-			
-			ResultSet rs_xml = stmt.executeQuery(xml_query);
-			
-			while(rs_xml.next())  {
-				XML_Plan.append(rs_xml.getString(1)); 
-			}			
-			
 			rs.close();
-			rs_xml.close();
 			stmt.close();
-			
-			
 		}
 		catch(Exception e){
 			e.printStackTrace();
@@ -2648,24 +2905,77 @@ class location implements Serializable
 		//plan = database.getPlan(newQuery,query);
 		String planDiffLevel = "SUB-OPERATOR";
 			plan.computeHash(planDiffLevel);
-			planNumber = plan.getIndexInVector(plans_vector);                  // see if the plan is new or already seen
-		
 			
+		//in order to save space clear the plan tree that is saved in plan/node
+		plan.nodes.clear();	
+		assert(plan.getHash() != 0): "plan hash value not computed";
+	}
+			
+	void setPlanNumber() throws PicassoException{		
+		
+		StringBuilder XML_Plan = new StringBuilder();
+		assert(plan.getHash() != 0): "plan hash value not computed";
+		int planNumber = plan.getIndexInVector(plans_vector);                  // see if the plan is new or already seen
 		plan.setPlanNo(planNumber);
+
 		if(planNumber == -1) {
 			plans_vector.add(plan);
 			planNumber=plans_vector.size() - 1;
 			plan.setPlanNo(planNumber);
+		
 			//Dump xml plan
 			String xml_path = apktPath+"onlinePB/"+"planStructureXML/"+plan.getPlanNo()+".xml";
 			File dir = new File(apktPath+"onlinePB/"+"planStructureXML/");
 			//check if the dir exists
 			if(!dir.exists())
 				dir.mkdirs();
+			
+			//to write the xml plan into file
+			try{      	
+				Statement stmt = conn.createStatement();
+				String exp_query = new String("Selectivity ( "+predicates+ ") ( ");
+				for(int i=0;i<dimension;i++){
+					if(i !=dimension-1){
+						exp_query = exp_query + dim_values[i]+ ", ";
+					}
+					else{
+						exp_query = exp_query + dim_values[i] + " ) ";
+					}
+				}
+				exp_query = exp_query + select_query;
+				String xml_query = "explain (format xml) "+ exp_query ;
+				stmt.execute("set work_mem = '100MB'");
+				//NOTE,Settings: 4GB for DS and 1GB for H
+				if(database_conn==0){
+					stmt.execute("set effective_cache_size='1GB'");
+				}
+				else{
+					stmt.execute("set effective_cache_size='4GB'");
+				}
+
+				stmt.execute("set  seq_page_cost = 1");
+				stmt.execute("set  random_page_cost=4");
+				stmt.execute("set cpu_operator_cost=0.0025");
+				stmt.execute("set cpu_index_tuple_cost=0.005");
+				stmt.execute("set cpu_tuple_cost=0.01");					
 				
+				ResultSet rs_xml = stmt.executeQuery(xml_query);
+				while(rs_xml.next())  {
+					XML_Plan.append(rs_xml.getString(1)); 
+				}			
+				
+				rs_xml.close();
+				stmt.close();								
+			}
+			catch(Exception e){
+				e.printStackTrace();
+				ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+				throw new PicassoException("Error getting plan: "+e);
+			}
+
 			File xml_file =new File(xml_path);
 			//Execute the xml query
-			
+
 			try{
 				FileWriter fw_xml = new FileWriter(xml_file, false); 
 				fw_xml.write(XML_Plan.toString());
@@ -2676,13 +2986,13 @@ class location implements Serializable
 				ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
 				throw new PicassoException("Error getting plan: "+e);
 			}
- 
+
 		}
-		
+
 		//set the optimal plan and cost here
 		this.opt_plan_no = planNumber;
-		
 	}
+	
 	
 	int CreateNode(Plan plan, String str, int id, int parentid) {
 
