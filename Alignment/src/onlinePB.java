@@ -90,7 +90,8 @@ public class onlinePB {
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
 	static boolean visualisation_2D = false;
-	static boolean enhancement = true; 
+	static boolean enhancement = true; //toggling between last_dim1 and last_dim2
+	static boolean enhancement_end_contour = true; //
 	static boolean memoization = true;
 	static float cost_error = 0.12f;
 	static boolean contoursReadFromFile = false;
@@ -1090,7 +1091,8 @@ public class onlinePB {
 				qrun_sel[order.get(i)] = -1.0f;
 			}			
 		}
-
+		
+		float temp_qrun[] = new float[dimension];
 		//following code was used to test the recursion
 //		if(remainingDimList.size()==2 ){
 //			for(int i=0;i<dimension;i++)
@@ -1346,6 +1348,8 @@ public class onlinePB {
 						came_inside_dim1_loop = true;
 						
 						if (opt_cost_copy >=  target_cost2){
+							//found a covering contour point
+							
 							if((loc = locationAlreadyExist(qrun_copy)) == null){
 								loc = new location(qrun_copy, this);
 							}
@@ -1355,6 +1359,25 @@ public class onlinePB {
 								else 
 									contour_points.add(loc);
 							
+							if(enhancement_end_contour){
+								
+								for(int d=0; d < dimension; d++)
+									temp_qrun[d] = qrun_copy[d];
+								
+								temp_qrun[last_dim2] = minimum_selectivity;
+								
+								location temp_loc;
+								if((temp_loc = locationAlreadyExist(temp_qrun)) == null){
+									temp_loc = new location(temp_qrun, this);
+									non_contour_points.add(temp_loc);
+								}
+								
+								assert(temp_loc.get_cost() < loc.get_cost()) : "cost of the covering location is not higher than that of its boundary location";
+								if(temp_loc.get_cost() > cost) {
+									contour_done = true;
+									return;
+								}
+							}
 							break;
 						}
 						
@@ -2285,6 +2308,7 @@ public class onlinePB {
 				
 				
 
+				
 				//System.out.println(str1);
 				
 				//System.out.println(str1);
