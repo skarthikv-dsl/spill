@@ -110,7 +110,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 			else{
 				System.out.println("entered DB tpcds");
 				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+						.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
 								"sa", "database");
 			}
 			System.out.println("Opened database successfully");
@@ -125,6 +125,8 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		data_new = new DataValues[totalPoints];
 		for ( int i=0; i< totalPoints;i++){
 			//Plan p = obj.getNativePlan_84(i);
+			if(i % 10000 == 0)
+				System.out.println("Currently at "+i);
 			Plan p = obj.getNativePlan(i);
 			double cost = p.getCost();
 			int p_no = p.getPlanNo();
@@ -362,23 +364,23 @@ public void clearCache(){
 			// get the property value and print it out
 			apktPath = prop.getProperty("apktPath");
 			qtName = prop.getProperty("qtName");
-			varyingJoins = prop.getProperty("varyingJoins");
-
-			JS_multiplier = new double[dimension];
-			for(int d=0;d<dimension;d++){
-				String multiplierStr = new String("JS_multiplier"+(d+1));
-				JS_multiplier[d] = Double.parseDouble(prop.getProperty(multiplierStr));
-			}
+//			varyingJoins = prop.getProperty("varyingJoins");
+//
+//			JS_multiplier = new double[dimension];
+//			for(int d=0;d<dimension;d++){
+//				String multiplierStr = new String("JS_multiplier"+(d+1));
+//				JS_multiplier[d] = Double.parseDouble(prop.getProperty(multiplierStr));
+//			}
 
 			//Settings:Note dont forget to put analyze here
 			//query = "explain analyze FPC(\"lineitem\") (\"104949\")  select	supp_nation,	cust_nation,	l_year,	volume from	(select n1.n_name as supp_nation, n2.n_name as cust_nation, 	DATE_PART('YEAR',l_shipdate) as l_year,	l_extendedprice * (1 - l_discount) as volume	from	supplier, lineitem, orders, 	customer, nation n1,	nation n2 where s_suppkey = l_suppkey	and o_orderkey = l_orderkey and c_custkey = o_custkey		and s_nationkey = n1.n_nationkey and c_nationkey = n2.n_nationkey	and  c_acctbal<=10000 and l_extendedprice<=22560 ) as temp";
 			//query = "explain analyze FPC(\"catalog_sales\")  (\"150.5\") select ca_zip, cs_sales_price from catalog_sales,customer,customer_address,date_dim where cs_bill_customer_sk = c_customer_sk and c_current_addr_sk = ca_address_sk and cs_sold_date_sk = d_date_sk and ca_gmt_offset <= -7.0   and d_year <= 1900  and cs_list_price <= 150.5";
-			query = prop.getProperty("query");
-			query_opt_spill = prop.getProperty("query_opt_spill");
+//			query = prop.getProperty("query");
+//			query_opt_spill = prop.getProperty("query_opt_spill");
 			select_query = prop.getProperty("select_query");
 			predicates= prop.getProperty("predicates");
 
-			cardinalityPath = prop.getProperty("cardinalityPath");
+//			cardinalityPath = prop.getProperty("cardinalityPath");
 
 
 			int from_clause_int_val = Integer.parseInt(prop.getProperty("FROM_CLAUSE"));
@@ -517,27 +519,27 @@ public Plan getNativePlan_84(int loc) throws SQLException {
 			exp_query = "explain " + exp_query ;
 			//String exp_query = new String(query_opt_spill);
 			//System.out.println(exp_query);
-			stmt.execute("set work_mem = '100MB'");
-			//NOTE,Settings: 4GB for DS and 1GB for H
-			if(database_conn==0){
-				stmt.execute("set effective_cache_size='1GB'");
-			}
-			else{
-				stmt.execute("set effective_cache_size='4GB'");
-			}
+//			stmt.execute("set work_mem = '100MB'");
+//			//NOTE,Settings: 4GB for DS and 1GB for H
+//			if(database_conn==0){
+//				stmt.execute("set effective_cache_size='1GB'");
+//			}
+//			else{
+//				stmt.execute("set effective_cache_size='4GB'");
+//			}
 
 			//NOTE,Settings: need not set the page cost's
-			stmt.execute("set  enable_hashjoin = off");
-			//stmt.execute("set  enable_mergejoin = off");
-			stmt.execute("set  enable_nestloop = off");
-			stmt.execute("set  enable_indexscan = off");
-			stmt.execute("set  enable_bitmapscan = off");
+//			stmt.execute("set  enable_hashjoin = off");
+//			//stmt.execute("set  enable_mergejoin = off");
+//			stmt.execute("set  enable_nestloop = off");
+//			stmt.execute("set  enable_indexscan = off");
+//			stmt.execute("set  enable_bitmapscan = off");
 			//stmt.execute("set  enable_seqscan = off");
-			stmt.execute("set  seq_page_cost = 1");
-			stmt.execute("set  random_page_cost=4");
-			stmt.execute("set cpu_operator_cost=0.0025");
-			stmt.execute("set cpu_index_tuple_cost=0.005");
-			stmt.execute("set cpu_tuple_cost=0.01");
+//			stmt.execute("set  seq_page_cost = 1");
+//			stmt.execute("set  random_page_cost=4");
+//			stmt.execute("set cpu_operator_cost=0.0025");
+//			stmt.execute("set cpu_index_tuple_cost=0.005");
+//			stmt.execute("set cpu_tuple_cost=0.01");
 			
 			ResultSet rs = stmt.executeQuery(exp_query);
 			//System.out.println("coming here");
@@ -575,34 +577,39 @@ public Plan getNativePlan_84(int loc) throws SQLException {
 		//if(PicassoConstants.saveExtraPlans == false ||  PicassoConstants.topkquery == false)
 		SwapSORTChilds(plan);
 		
+		boolean directoryComparison = false;
 		
-		//Write temp_plan
 		String path = apktPath+"planStructure_new/tempPlan.txt";
 		File fnative=new File(path);
-		try {
+		//Write temp_plan
+		if(directoryComparison) {
 			
-			FileWriter fw = new FileWriter(fnative, false);   //overwrites if the file already exists
-			for(int n=0;n<plan.getSize();n++){
-				Node node = plan.getNode(n);
-				if(node!=null && node.getId()>=0)
-					fw.write(node.getId()+","+node.getParentId()+","+node.getName()+","+node.getPredicate()+"\n");
-			}
-
-
-			fw.close();
 			
+			try {
 
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} 
+				FileWriter fw = new FileWriter(fnative, false);   //overwrites if the file already exists
+				for(int n=0;n<plan.getSize();n++){
+					Node node = plan.getNode(n);
+					if(node!=null && node.getId()>=0)
+						fw.write(node.getId()+","+node.getParentId()+","+node.getName()+","+node.getPredicate()+"\n");
+				}
+
+
+				fw.close();
+
+
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} 
+		}
 //		if(loc==17478)
 //			System.out.println("interesting");
 File plansFile = new File(apktPath+"planStructure_new");
 		
 		String[] myFiles;  
 		int nativePlan = -1;
-		boolean directoryComparison = false;
+		
 		if(plansFile.isDirectory() && directoryComparison){
 			myFiles = plansFile.list();
 			for (int hi=0; hi<myFiles.length; hi++) {

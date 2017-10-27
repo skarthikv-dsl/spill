@@ -71,6 +71,7 @@ public class dimensionReduction {
 	static boolean DEBUG = true;
 	static boolean READSLOPE = false;
 	static boolean WRITESLOPE = false;
+	static boolean WRITESLOPE_TO_FILE = false;
 	static boolean CheckAllPlan = true;
 	public static void main(String[] args) throws IOException, SQLException, PicassoException {
 	
@@ -146,7 +147,7 @@ public class dimensionReduction {
 			for(int dim=0; dim<old_dims; dim++){
 				//			if(dim!=2)
 				//				continue;
-				obj.CostSlopeRatio_synthetic(dim,coor,1000, Operators.None);
+				obj.CostSlopeRatio_synthetic(dim,coor,10000, Operators.None);
 			}
 		}
 		
@@ -545,15 +546,16 @@ public void CostSlopeRatio_synthetic(int varyDim,  int otherDims[], int res, Ope
 		
 		double[] prevratio = new double[al.size()+1];
 		double[] currratio = new double[al.size()+1];
+		double[] intercept = new double[al.size()+1];
 		double[] violatioCnt = new double[al.size()+1];
 		double[] violatioCnt10 = new double[al.size()+1];
- 		PrintWriter writer; 
- 		PrintWriter writer_slope;
- 		if(op.equals(Operators.None)){
+ 		PrintWriter writer = null; 
+ 		PrintWriter writer_slope = null;
+ 		if(op.equals(Operators.None) && WRITESLOPE_TO_FILE){
  			writer = new PrintWriter(apktPath+"plots/cost_"+old_qtname+"-dim"+varyDim+".txt", "UTF-8");
  			writer_slope = new PrintWriter(apktPath+"plots/slope_"+old_qtname+"-dim"+varyDim+".txt", "UTF-8");
  		}
- 		else{
+ 		else if(WRITESLOPE_TO_FILE){
  			writer = new PrintWriter(apktPath+"plots/cost_"+old_qtname+"_"+op.toString()+"-dim"+varyDim+".txt", "UTF-8");
  			writer_slope = new PrintWriter(apktPath+"plots/slope_"+old_qtname+"_"+op.toString()+"-dim"+varyDim+".txt", "UTF-8");
  		}
@@ -562,37 +564,44 @@ public void CostSlopeRatio_synthetic(int varyDim,  int otherDims[], int res, Ope
 			for(int i=0;i<resolution;i++){
 				
 				//arr[varyDim] = i;
-				if(i==0){
-					writer.print("selectivity");
-					writer_slope.print("selectivity");
-					for(int plan=0; plan<al.keySet().size(); plan++){
-						writer.print("\t"+"plan"+plan);
-						writer_slope.print("\t"+"plan"+plan);
+				if(WRITESLOPE_TO_FILE) {
+					if(i==0){
+						writer.print("selectivity");
+						writer_slope.print("selectivity");
+						for(int plan=0; plan<al.keySet().size(); plan++){
+							writer.print("\t"+"plan"+plan);
+							writer_slope.print("\t"+"plan"+plan);
+						}
+						if(op.equals(Operators.None)){
+							writer.println("\t"+"Optimal Plan");
+							writer_slope.println("\t"+"Optimal Plan");
+						}
 					}
-					if(op.equals(Operators.None)){
-						writer.println("\t"+"Optimal Plan");
-						writer_slope.println("\t"+"Optimal Plan");
-					}
+
+					writer.print(selectivity[i]);
+
+					if(i>0)
+						writer_slope.print(selectivity[i]);
 				}
-				  
-				writer.print(selectivity[i]);
-				if(i>0)
-				writer_slope.print(selectivity[i]);
 				for(int plan=0; plan<=al.keySet().size(); plan++){
 					
 					if(plan == al.keySet().size() && !op.equals(Operators.None))
 						continue;
 					
-					writer.print("\t"+cost[plan][i]);
+					if(WRITESLOPE_TO_FILE)
+						writer.print("\t"+cost[plan][i]);
 					//if(i==0){
+					//Here ratio means slope
 					if(i<=1){
 						prevratio[plan] = 1;
 						//writer_slope.print("\t"+"1");
 					}
 					else{
-						//currratio[plan] = ((cost[plan][i] - cost[plan][i-1]) < 10) ? prevratio[plan] : (cost[plan][i] - cost[plan][i-1])/(selectivity[i] - selectivity[i-1]);
-						currratio[plan] = ((cost[plan][i] - cost[plan][i-2]) < 10) ? prevratio[plan] : (cost[plan][i] - cost[plan][i-2])/(2*(selectivity[i] - selectivity[i-1]));
-						writer_slope.print("\t"+((currratio[plan])<=0 ? 1 : currratio[plan]));
+						intercept[plan] =  (selectivity[1]*cost[plan][0] - selectivity[0]*cost[plan][1])/(selectivity[1] - selectivity[0]);
+						currratio[plan] = ((cost[plan][i] - cost[plan][i-1]) < 10) ? prevratio[plan] : (cost[plan][i] - cost[plan][i-1])/(selectivity[i] - selectivity[i-1]);
+						//currratio[plan] = ((cost[plan][i] - cost[plan][i-2]) < 10) ? prevratio[plan] : (cost[plan][i] - cost[plan][i-2])/(2*(selectivity[i] - selectivity[i-1]));
+						if(WRITESLOPE_TO_FILE)
+							writer_slope.print("\t"+((currratio[plan])<=0 ? 1 : currratio[plan]));
 					}
 				
 					if((prevratio[plan]*1.01 < currratio[plan]) &&(prevratio[plan] >0) && (i >1)){
@@ -611,12 +620,18 @@ public void CostSlopeRatio_synthetic(int varyDim,  int otherDims[], int res, Ope
 					prevratio[plan] = currratio[plan];
 					
 				}	
-				writer.print("\n");
-				writer_slope.println();
+				if(WRITESLOPE_TO_FILE) {
+					writer.print("\n");
+					writer_slope.println();
+				}
 			}
+			
+			
 		}
-		writer.close();
-		writer_slope.close();
+		if(WRITESLOPE_TO_FILE) {
+			writer.close();
+			writer_slope.close();
+		}
 		
 		if(DEBUG){
 			
@@ -636,7 +651,18 @@ public void CostSlopeRatio_synthetic(int varyDim,  int otherDims[], int res, Ope
 					System.out.print("\t"+violatioCnt10[plan]);
 				}
 				System.out.println();
+				
+				System.out.println("\n the intercepts at origin are ");
+				for(int plan=0; plan<al.keySet().size(); plan++){
+					if(plan == al.keySet().size())
+						continue;
+					System.out.print("\t"+intercept[plan]);
+				}
+				System.out.println();
+
 		}
+		
+		
 		
 		for(int i=0;i<al.size();i++){
 			for(int j=i+1;j<al.size();j++){

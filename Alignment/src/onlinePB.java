@@ -43,6 +43,7 @@ import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 
@@ -76,6 +77,7 @@ public class onlinePB {
 	static float[] actual_sel_pb; 
 	static int num_of_usable_threads;
 	HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
+	static HashMap<Integer,Integer> plans_dist = new HashMap<Integer,Integer>();
 	static 	HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
 	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
 	static ArrayList<Float> outermost_dimension_sel;
@@ -91,13 +93,15 @@ public class onlinePB {
 	static boolean DEBUG_LEVEL_1 = false;
 	static boolean visualisation_2D = false;
 	static boolean enhancement = true; //toggling between last_dim1 and last_dim2
-	static boolean enhancement_end_contour = true; //
+	static boolean enhancement_end_contour = false; //
 	static boolean memoization = true;
 	static float cost_error = 0.12f;
+	static float float_error = 0.00001f;
 	static boolean contoursReadFromFile = false;
 	static boolean cg_contoursReadFromFile = false;
 	static boolean writeMapstoFile = false;
 	static boolean singleThread = false;
+	static boolean trie = true;
 
 	static Jdbc3PoolingDataSource source;
 	Connection conn = null;
@@ -107,17 +111,19 @@ public class onlinePB {
 	int opt_call = 0;
 	int fpc_call = 0;
 	int location_hits = 0;
+	float slope_time =0f;
+	float location_finding_time = 0f;
 	//the following two are required for min. and max. selectivity to varying across outermost dimension
 	int min_cc_sel_idx = 0;//comes into picture during parallelization 
 	int max_cc_sel_idx ;
 	ArrayList<location> contour_points = new ArrayList<location>();
 	ArrayList<location> non_contour_points = new ArrayList<location>();
 	String XMLPath = null;
-
+	static online_vertex root;
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException, ClassNotFoundException {
 	
-		int threads = (int) ( Runtime.getRuntime().availableProcessors()*1);
+		int threads = (int) ( Runtime.getRuntime().availableProcessors() - 1);
 		num_of_usable_threads = threads;
 		//set the program arguments
 		if(args.length > 0){
@@ -229,7 +235,6 @@ public class onlinePB {
 			}
 
 
-			
 			obj.qrun_sel = new float[dimension];
 			obj.qrun_sel_rev = new float[dimension];
 			for(int d=0;d<dimension;d++){
@@ -266,6 +271,9 @@ public class onlinePB {
 			obj.max_cc_sel_idx = outermost_dimension_sel.size() - 1 ; 
 			assert(obj.max_cc_sel_idx > 0): "outermostdimension is empty";
 
+			//add the root vertex to graph which is used for membership testing of locations
+			obj.root = new online_vertex(-1,false,null);
+			
 			
 			obj.setXMLPath();
 			//clear the contents of onlinePB Planstructure directory
@@ -328,7 +336,7 @@ public class onlinePB {
 				}
 
 
-					//if(writeMapstoFile)
+					if(writeMapstoFile)
 						obj.writeContourPointstoFile(i);
 				System.out.println("The running optimization calls are "+obj.opt_call);
 				System.out.println("The running FPC calls are "+obj.fpc_call);
@@ -336,12 +344,28 @@ public class onlinePB {
 				if(!singleThread){
 					obj.conn = source.getConnection();
 				}
+				
 				for(location l: obj.contour_points){
 					l.set_contour_no(i);
-					l.conn = obj.conn;
-					l.setPlanNumber();
+					if(l.get_plan_no() == -1){
+						l.conn = obj.conn;
+						l.setPlanNumber();
+					}
+					if(l.get_plan_no() >= 67 && l.get_plan_no() <= 69 )
+						System.out.println("interesting");
+					obj.addLocationtoGraph(l);
 				}
 				
+				for(location l: obj.non_contour_points){
+					if(l.get_plan_no() == -1){
+						l.conn = obj.conn;
+						l.setPlanNumber();
+					}
+					if(l.get_plan_no() >= 67 && l.get_plan_no() <= 69 )
+						System.out.println("interesting");
+					obj.addLocationtoGraph(l);
+				}
+
 				if (obj.conn != null && !singleThread) {
 					try { obj.conn.close(); } catch (SQLException e) {}
 				}
@@ -354,19 +378,17 @@ public class onlinePB {
 
 				non_ContourPointsMap.put(i, new ArrayList<location>(obj.non_contour_points)); //storing the contour points
 
-				
-
 				System.out.println("Size of contour: "+size_of_contour );
 				System.out.println("Size of non-contour: "+size_of_non_contour );
 
 				cost *=2;
 				i++;
-
 			}
 			System.out.println("the number of optimization calls are "+obj.opt_call);
 			System.out.println("the number of FPC calls are "+obj.fpc_call);
 			System.out.println("location hits "+obj.location_hits);
-
+			System.out.println("slope function time "+obj.slope_time);
+			System.out.println("location finding time "+obj.location_finding_time);
 
 			long endTime = System.nanoTime();
 			System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
@@ -380,7 +402,9 @@ public class onlinePB {
 			try { obj.conn.close(); } catch (SQLException e) {}
 		}		
 		
-		System.exit(0);
+		obj.printPlanDistribution();
+		//System.exit(0);
+		
 		File fl_red =  new File(apktPath+"online_contours/Red_Contours.map");
 		if(cg_contoursReadFromFile && fl_red.exists()){		
 			
@@ -394,10 +418,7 @@ public class onlinePB {
 					assert(p.get_contour_no() == key.intValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
 				}
 			}
-			
-			
 			//System.exit(0);
-			
 		}
 		else
 			obj.ContourCentricCostGreedy(-1);
@@ -415,7 +436,7 @@ public class onlinePB {
 	public onlinePB(onlinePB obj){
 
 		//to just make sure that static variables are already assigned values
-		assert((dimension == obj.dimension) && (resolution == obj.resolution) && (Math.abs(beta - obj.beta) < 0.0001) && select_query.equals(obj.select_query) && (outermost_dimension_sel.size() == obj.outermost_dimension_sel.size()) ) : "static variables are not set at onlinePB obj initialization";
+		assert((dimension == obj.dimension) && (resolution == obj.resolution) && (Math.abs(beta - obj.beta) < float_error) && select_query.equals(obj.select_query) && (outermost_dimension_sel.size() == obj.outermost_dimension_sel.size()) ) : "static variables are not set at onlinePB obj initialization";
 		this.conn = null;
 		this.learntDim = new ArrayList<Integer>();
 		this.qrun_sel = new float[dimension];
@@ -431,6 +452,36 @@ public class onlinePB {
 	public onlinePB() {
 		
 	}
+
+	
+public void printPlanDistribution() {
+		
+		
+		Iterator itr = ContourPointsMap.keySet().iterator();
+		while(itr.hasNext()){
+			Integer key = (Integer)itr.next();
+			for(int pt =0;pt<ContourPointsMap.get(key.intValue()).size();pt++){
+				location p = ContourPointsMap.get(key.intValue()).get(pt);
+				Integer freq = plans_dist.get(p.get_plan_no());
+				plans_dist.put(p.get_plan_no(), (freq == null ? 1 : freq + 1));
+			}
+		}
+		
+		itr = non_ContourPointsMap.keySet().iterator();
+		while(itr.hasNext()){
+			Integer key = (Integer)itr.next();
+			for(int pt =0;pt<non_ContourPointsMap.get(key.intValue()).size();pt++){
+				location p = non_ContourPointsMap.get(key.intValue()).get(pt);
+				Integer freq = plans_dist.get(p.get_plan_no());
+				plans_dist.put(p.get_plan_no(), (freq == null ? 1 : freq + 1));
+			}
+		}
+		
+		System.out.println("The plans distributions are");
+		System.out.println(plans_dist);
+		//System.exit(0);
+	}
+
 
 	public void runPlanBouquetAlgo() throws SQLException {
 		
@@ -877,13 +928,13 @@ public class onlinePB {
 	   	 			pw_cs.print(p.get_dimension(d) + "\t"+p.get_cost()+"\n");
 	    }
 
-//	    for(location p : non_contour_points) {		 
-//	    	for(int d=0; d < dimension; d++)
-//	   	 		if(d < dimension -1)
-//	   	 		pw_contour.print(p.get_dimension(d) + "\t");
-//	   	 		else
-//	   	 		pw_contour.print(p.get_dimension(d) + "\n");
-//		 }
+	    for(location p : non_contour_points) {		 
+	    	for(int d=0; d < dimension; d++)
+	   	 		if(d < dimension -1)
+	   	 		pw_contour.print(p.get_dimension(d) + "\t");
+	   	 		else
+	   	 		pw_contour.print(p.get_dimension(d) + "\n");
+		 }
 	    
 	    pw_cs.close();
 	    writer_cs.close();
@@ -1138,7 +1189,12 @@ public class onlinePB {
 			
 			
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = minimum_selectivity;
-			if((loc1 =locationAlreadyExist(qrun_sel)) == null){
+			
+			if(trie)
+				loc1 =searchLocationInGraph(qrun_sel);
+			else
+				loc1 =locationAlreadyExist(qrun_sel);
+			if(loc1 == null){
 				loc1 = new location(qrun_sel,this);
 				non_contour_points.add(loc1);
 				opt_call++;
@@ -1149,7 +1205,12 @@ public class onlinePB {
 			
 			
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = 1.0f;
-			if((loc2 = locationAlreadyExist(qrun_sel)) == null){
+			if(trie)
+				loc2 = searchLocationInGraph(qrun_sel);
+			else
+				loc2 = locationAlreadyExist(qrun_sel);
+			
+			if(loc2 == null){
 				loc2 = new location(qrun_sel,this);
 				non_contour_points.add(loc2);
 				opt_call++;
@@ -1179,7 +1240,11 @@ public class onlinePB {
 				qrun_sel[last_dim1] = minimum_selectivity;
 				location loc;
 				
-				if((loc = locationAlreadyExist(qrun_sel)) == null){
+				if(trie)
+					loc = searchLocationInGraph(qrun_sel);
+				else
+					loc = locationAlreadyExist(qrun_sel);
+				if(loc == null){
 					loc = new location(qrun_sel, this);
 					non_contour_points.add(loc);
 					opt_call++;
@@ -1202,7 +1267,12 @@ public class onlinePB {
 						qrun_sel_rev[i] = qrun_sel[i];																					
 				}
 				
-				if((loc = locationAlreadyExist(qrun_sel_rev)) == null){
+				if(trie)
+					loc = searchLocationInGraph(qrun_sel_rev);
+				else
+					loc = locationAlreadyExist(qrun_sel_rev);
+				
+				if(loc == null){
 					loc = new location(qrun_sel_rev, this);
 					non_contour_points.add(loc);
 					opt_call++;
@@ -1251,7 +1321,7 @@ public class onlinePB {
 					while((qrun_copy[last_dim2] > minimum_selectivity) && (target_cost1 <= opt_cost_copy))
 					{
 						
-						if((Math.abs(qrun_copy[0] - 0.01219) < 0.0001f) && (Math.abs(qrun_copy[1] - 0.00621) < 0.0001f) && (Math.abs(qrun_copy[2] - 1.0) < 0.0001f)  )
+						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )
 							System.out.println("intereseting");
 						
 						
@@ -1294,8 +1364,12 @@ public class onlinePB {
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+old_sel/(qrun_copy[last_dim2]*beta));
 						
+						if(trie)
+							loc = searchLocationInGraph(qrun_copy);
+						else
+							loc = locationAlreadyExist(qrun_copy);
 						
-						if((loc = locationAlreadyExist(qrun_copy)) == null){
+						if(loc == null){
 							loc = new location(qrun_copy, this);
 							non_contour_points.add(loc);
 							//counting the optimization calls
@@ -1342,7 +1416,7 @@ public class onlinePB {
 					while((qrun_copy[last_dim1] < 1.0f) && (opt_cost_copy <= target_cost3))
 					{
 
-						if((Math.abs(qrun_copy[0] - 0.01219) < 0.000001f) && (Math.abs(qrun_copy[1] - 0.00621) < 0.000001f) && (Math.abs(qrun_copy[2] - 1.0) < 0.00001f)  )
+						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )
 							System.out.println("intereseting");
 
 						came_inside_dim1_loop = true;
@@ -1350,7 +1424,12 @@ public class onlinePB {
 						if (opt_cost_copy >=  target_cost2){
 							//found a covering contour point
 							
-							if((loc = locationAlreadyExist(qrun_copy)) == null){
+							if(trie)
+								loc = searchLocationInGraph(qrun_copy);
+							else
+								loc = locationAlreadyExist(qrun_copy);
+							
+							if(loc == null){
 								loc = new location(qrun_copy, this);
 							}
 							if(!ContourLocationAlreadyExist(loc.dim_values))
@@ -1367,13 +1446,18 @@ public class onlinePB {
 								temp_qrun[last_dim2] = minimum_selectivity;
 								
 								location temp_loc;
-								if((temp_loc = locationAlreadyExist(temp_qrun)) == null){
+								if(trie)
+									temp_loc = searchLocationInGraph(temp_qrun);
+								else
+									temp_loc = locationAlreadyExist(temp_qrun);
+								
+								if(temp_loc == null){
 									temp_loc = new location(temp_qrun, this);
 									non_contour_points.add(temp_loc);
 								}
 								
-								assert(temp_loc.get_cost() < loc.get_cost()) : "cost of the covering location is not higher than that of its boundary location";
-								if(temp_loc.get_cost() > cost) {
+								//assert(temp_loc.get_cost() <= loc.get_cost()*(1+cost_error)) : "cost of the covering location is not higher than that of its boundary location";
+								if(temp_loc.get_cost() >= cost) {
 									contour_done = true;
 									return;
 								}
@@ -1403,10 +1487,10 @@ public class onlinePB {
 							}
 						}	
 						
-						if((Math.abs(qrun_copy[0] - 0.006726) < 0.000001f) && (Math.abs(qrun_copy[1] - 0.001189) < 0.000001f) && (Math.abs(qrun_copy[2] - 0.031114) < 0.000001f) && (Math.abs(qrun_copy[3] - 1.0) < 0.000001f) )
-							System.out.println("intereseting");
+//						if((Math.abs(qrun_copy[0] - 0.006726) < float_error) && (Math.abs(qrun_copy[1] - 0.001189) < float_error) && (Math.abs(qrun_copy[2] - 0.031114) < float_error) && (Math.abs(qrun_copy[3] - 1.0) < float_error) )
+//							System.out.println("intereseting");
 
-						// the argument for calculate jump size is the dimension along which we need to traverse				
+						// the second argument for calculate jump size is the dimension along which we need to traverse				
 						double forward_jump = calculateJumpSize(qrun_copy,last_dim1,opt_cost_copy);
 
 						if(DEBUG_LEVEL_2)
@@ -1431,7 +1515,12 @@ public class onlinePB {
 						if(qrun_copy[last_dim1] >= 1.0f){
 							
 							qrun_copy[last_dim1] = 1.0f;
-							if((loc = locationAlreadyExist(qrun_copy)) == null){
+							if(trie)
+								loc = searchLocationInGraph(qrun_copy);
+							else
+								loc = locationAlreadyExist(qrun_copy);
+							
+							if(loc == null){
 								loc = new location(qrun_copy, this);
 								opt_call++;
 							}
@@ -1451,7 +1540,12 @@ public class onlinePB {
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+qrun_copy[last_dim1]/(old_sel*beta));
 						
-						if((loc = locationAlreadyExist(qrun_copy)) == null){
+						if(trie)
+							loc = searchLocationInGraph(qrun_copy);
+						else
+							loc = locationAlreadyExist(qrun_copy);
+						
+						if(loc == null){
 							loc = new location(qrun_copy, this);
 							non_contour_points.add(loc);
 							//counting the optimization calls
@@ -1481,8 +1575,8 @@ public class onlinePB {
 					}
 					
 					
-					if(came_inside_dim1_loop)
-						assert(opt_cost_copy <= target_cost3*(1+cost_error) && (1+cost_error)*opt_cost_copy >= target_cost2) : "dim1 is not in the range: opt_cost = "+opt_cost_copy+" target_cost2 = "+ target_cost2+ " target_cost3 = "+target_cost3; 
+//					if(came_inside_dim1_loop)
+//						assert(opt_cost_copy <= target_cost3*(1+cost_error) && (1+cost_error)*opt_cost_copy >= target_cost2) : "dim1 is not in the range: opt_cost = "+opt_cost_copy+" target_cost2 = "+ target_cost2+ " target_cost3 = "+target_cost3; 
 						
 					
 					//
@@ -1538,8 +1632,6 @@ public class onlinePB {
 			boolean flag = false;
 			
 			if(curDim == order.get(0)) {
-				if(Math.abs(qrun_sel[curDim]-4.01E-4) < 0.00001 && cost > 4306630)
-					System.out.println("Interesting");
 				qrun_sel[curDim] = outermost_dimension_sel.get(itr);
 				if(itr == max_cc_sel_idx){
 					flag = true;
@@ -1623,6 +1715,8 @@ public class onlinePB {
 	            	output.non_contour_locs_parallel = new ArrayList<location>(input.obj.non_contour_points);
             		output.opt_call_count = input.obj.opt_call;
             		output.fpc_call_count = input.obj.fpc_call;
+            		output.slope_time = input.obj.slope_time;
+            		output.location_finding_time = input.obj.location_finding_time;
             		output.location_hits = input.obj.location_hits;
             		//assert(input.obj.fpc_call > 0 || input.obj.opt_call > 0): "fpc calls or opt calls are zero even after contor generation";
 	            	
@@ -1636,8 +1730,10 @@ public class onlinePB {
 	     //System.out.println("after shutdown of service"); 
 	     //3. aggregating the results back
 	     contour_points.clear();
+	     non_contour_points.clear();
+	     float max_slope_time = 0f;
+	     float max_location_search_time = 0f;
 	     for (Future<CoveringContourOutputParamStruct> future : futures) {
-	    	 
 		    	try {
 		    		CoveringContourOutputParamStruct output = future.get();
 					contour_points.addAll(output.contour_locs_parallel);
@@ -1645,10 +1741,18 @@ public class onlinePB {
 					fpc_call += output.fpc_call_count;
 					opt_call += output.opt_call_count;
 					location_hits += output.location_hits;
+					if(output.slope_time > max_slope_time)
+						max_slope_time = output.slope_time;
+					
+					if(output.location_finding_time > max_location_search_time)
+						max_location_search_time = output.location_finding_time;
+					
 				} catch (InterruptedException | ExecutionException e) {	
 					e.printStackTrace();
 				}
 	     }
+	     slope_time += max_slope_time;
+	     location_finding_time += max_location_search_time;
 	     //System.out.println("after aggregation");
 	     
 	     if (conn != null) {
@@ -1668,6 +1772,9 @@ public class onlinePB {
 	
 	private location locationAlreadyExist(float[] arr) {
 		
+		long startTime = System.nanoTime();
+		long endTime;
+		
 		String funName = "locationAlreadyExist";
 		if(DEBUG_LEVEL_1)
 			System.out.println("Entered function "+funName);
@@ -1680,7 +1787,7 @@ public class onlinePB {
 				flag = true;
 				for(int i=0;i<dimension;i++){
 					//if(loc.get_dimension(i) != arr[i]){
-					if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
+					if(Math.abs(loc.get_dimension(i) - arr[i]) > float_error){
 						flag = false;
 						break;
 					}
@@ -1690,6 +1797,9 @@ public class onlinePB {
 					
 					//create a new location since it might exist as part of an older contour
 					location loc_temp = new location(loc);
+					
+					endTime = System.nanoTime();
+					location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
 					return loc_temp;
 				}
 			}
@@ -1698,16 +1808,22 @@ public class onlinePB {
 				flag = true;
 				for(int i=0;i<dimension;i++){
 					//if(loc.get_dimension(i) != arr[i]){
-					if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
+					if(Math.abs(loc.get_dimension(i) - arr[i]) > float_error){
 						flag = false;
 						break;
 					}
 				}
 				if(flag==true) {
 					location_hits ++;
+					
+					endTime = System.nanoTime();
+					location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
 					return loc;				}
 			}
 		}
+		
+		endTime = System.nanoTime();
+		location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
 		return null;
 	}
 
@@ -1717,7 +1833,7 @@ public class onlinePB {
 		for(location loc: contour_points){
 			flag = true;
 			for(int i=0;i<dimension;i++){
-				if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.00001){
+				if(Math.abs(loc.get_dimension(i) - arr[i]) > float_error){
 					flag = false;
 					break;
 				}
@@ -1733,6 +1849,8 @@ public class onlinePB {
 	
 	private double calculateJumpSize(float[] qrun_copy, int dim, double base_cost) throws SQLException {
 
+		long startTime = System.nanoTime();
+		
 		getFPCCost(qrun_copy, -3); //to just dump the xml optimal plan at qrun_copy for slope calculations
 		float delta[] = {0.1f,0.3f};
 			float sum_slope = 0, divFactor =0;
@@ -1777,7 +1895,13 @@ public class onlinePB {
 				System.out.println("jump size is "+jump_size);
 			
 			fpc_call ++;
+			
+			long endTime = System.nanoTime();
+			
+			
+			slope_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
 			return jump_size;
+			
 		}
 
 
@@ -2471,7 +2595,89 @@ public class onlinePB {
 		return gdp;
 	}
 
+	void addLocationtoGraph(location loc){
 
+		online_vertex crawl = root;
+
+		// Traverse through all characters of given word
+		for( int level = 0; level < dimension; level++)
+		{
+			HashMap<Integer,online_vertex> child = crawl.getChildern();
+			double power = 1/float_error;
+			int val = (int)(roundToDouble(loc.dim_values[level])*power);
+
+			// If there is no such child for current character of given word
+			if( (child == null) || !child.containsKey(val)){ // create a child
+				
+				online_vertex temp;
+
+				if(level == dimension - 1) //then this is a leaf node
+                    temp = new online_vertex(val, true, loc);
+                else
+                    temp = new online_vertex(val, false, null);
+				
+				if(child == null)
+					child = new HashMap<Integer,online_vertex>();
+				
+				child.put( val, temp );
+				
+				if(crawl.getChildern() == null)
+					crawl.setChildern(child);
+				
+				crawl = temp;
+			}
+			else   
+			{	
+				crawl = child.get(val);
+			}
+		}
+	}
+	
+	location searchLocationInGraph(float [] arr){
+
+		long startTime = System.nanoTime();
+		long endTime;
+		assert(arr.length == dimension) : "location dim values not matching";
+		
+		online_vertex crawl = root;
+
+		// Traverse through all characters of given word
+		for( int level = 0; level < dimension; level++)
+		{
+			HashMap<Integer,online_vertex> child = crawl.getChildern();
+			double power = 1/float_error;
+			arr[level] = arr[level];
+			int val = (int)(roundToDouble(arr[level])*power);
+			
+			if(child == null){
+				endTime = System.nanoTime();
+				location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+				return null;
+			}
+			
+			for(int itr = val-1; itr <=val+1; itr++){
+				// If there is already a child for current character of given word
+				if( child.containsKey(itr)){
+					crawl = child.get(itr);
+					break;
+				}
+				else   
+				{
+					if(itr == val+1){
+						endTime = System.nanoTime();
+						location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+						return null;
+					}
+				}
+			}
+	}
+		assert(crawl.loc != null): "crawl.loc is null which should not be the case";
+		location_hits ++;
+		endTime = System.nanoTime();
+		location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+		return crawl.loc;
+	}
+	
 }
 
 class CoveringContourinputParamStruct {
@@ -2514,6 +2720,8 @@ class CoveringContourinputParamStruct {
 			conn = source.getConnection();
 			obj.fpc_call =0;
 			obj.opt_call =0;
+			obj.slope_time = 0f;
+			obj.location_finding_time = 0f;
 			obj.location_hits =0;
 			obj.min_cc_sel_idx = min_index;
 			obj.max_cc_sel_idx = max_index;
@@ -2694,6 +2902,8 @@ class CoveringContourinputParamStruct {
 		int fpc_call_count = 0;
 		int opt_call_count = 0;
 		int location_hits = 0;
+		float slope_time=0f;
+		float location_finding_time =0f;
 	}
 	
 class location implements Serializable
@@ -2706,11 +2916,11 @@ class location implements Serializable
 	static String select_query;
 	ArrayList<Double> fpc_plan_cost;
 	double fpc_cost = Double.MAX_VALUE;
-	int opt_plan_no;
+	int opt_plan_no = -1;
 	double opt_cost;
 	static String apktPath;
 	int idx;
-	static int leafid=0;
+	int leafid=0;
 	float [] dim_values;
 	static Vector<Plan> plans_vector = new Vector<Plan>();
 	static int decimalPrecision;
@@ -2850,6 +3060,15 @@ class location implements Serializable
 	
 	public void getPlan() throws PicassoException, IOException, SQLException {
 
+		if((Math.abs(dim_values[0] - 0.258116) < 0.00001f) && (Math.abs(dim_values[1] - 0.001162) < 0.00001f) && (Math.abs(dim_values[2] - 0.000194) < 0.00001f)  )
+			System.out.println("intereseting");
+
+		if((Math.abs(dim_values[0] - 0.258116) < 0.00001f) && (Math.abs(dim_values[1] - 0.001579) < 0.00001f) && (Math.abs(dim_values[2] - 0.000194) < 0.00001f)  )
+			System.out.println("intereseting");
+
+		if((Math.abs(dim_values[0] - 0.325206) < 0.00001f) && (Math.abs(dim_values[1] - 0.0001) < 0.00001f) && (Math.abs(dim_values[2] - 0.198425) < 0.00001f)  )
+			System.out.println("intereseting");
+
 		Vector textualPlan = new Vector();
 		String cost_str = null;
 		
@@ -2924,18 +3143,20 @@ class location implements Serializable
 		//if(PicassoConstants.saveExtraPlans == false ||  PicassoConstants.topkquery == false)
 		SwapSORTChilds(plan);
 		 
-		
 		int planNumber = -1;
 		//plan = database.getPlan(newQuery,query);
 		String planDiffLevel = "SUB-OPERATOR";
 			plan.computeHash(planDiffLevel);
-			
+		
+			//System.out.println(dim_values[0]+","+dim_values[2]+","+dim_values[2]+" hash value = "+plan.getHash());	
 		//in order to save space clear the plan tree that is saved in plan/node
 		plan.nodes.clear();	
 		assert(plan.getHash() != 0): "plan hash value not computed";
 	}
 			
 	void setPlanNumber() throws PicassoException{		
+		
+		assert(this.opt_plan_no == -1) : "already assinged a plan number";
 		
 		StringBuilder XML_Plan = new StringBuilder();
 		assert(plan.getHash() != 0): "plan hash value not computed";
@@ -2968,20 +3189,20 @@ class location implements Serializable
 				}
 				exp_query = exp_query + select_query;
 				String xml_query = "explain (format xml) "+ exp_query ;
-				stmt.execute("set work_mem = '100MB'");
-				//NOTE,Settings: 4GB for DS and 1GB for H
-				if(database_conn==0){
-					stmt.execute("set effective_cache_size='1GB'");
-				}
-				else{
-					stmt.execute("set effective_cache_size='4GB'");
-				}
-
-				stmt.execute("set  seq_page_cost = 1");
-				stmt.execute("set  random_page_cost=4");
-				stmt.execute("set cpu_operator_cost=0.0025");
-				stmt.execute("set cpu_index_tuple_cost=0.005");
-				stmt.execute("set cpu_tuple_cost=0.01");					
+//				stmt.execute("set work_mem = '100MB'");
+//				//NOTE,Settings: 4GB for DS and 1GB for H
+//				if(database_conn==0){
+//					stmt.execute("set effective_cache_size='1GB'");
+//				}
+//				else{
+//					stmt.execute("set effective_cache_size='4GB'");
+//				}
+//
+//				stmt.execute("set  seq_page_cost = 1");
+//				stmt.execute("set  random_page_cost=4");
+//				stmt.execute("set cpu_operator_cost=0.0025");
+//				stmt.execute("set cpu_index_tuple_cost=0.005");
+//				stmt.execute("set cpu_tuple_cost=0.01");					
 				
 				ResultSet rs_xml = stmt.executeQuery(xml_query);
 				while(rs_xml.next())  {
@@ -3179,4 +3400,70 @@ class location implements Serializable
 	}
 
 	
+}
+
+class online_vertex {
+
+	int value;
+	HashMap<Integer,online_vertex> children;
+	boolean isLeaf = false;
+	location loc;
+	
+	public online_vertex(int val, boolean iL, location lc) {
+		value = val;
+		isLeaf = iL;
+		loc = lc;
+	}
+	
+	online_vertex(){
+		
+	}
+	
+	public void setValue(int value){
+		this.value = value;
+	}
+	
+	HashMap<Integer,online_vertex> getChildern(){
+		return children;
+	}
+	
+	void setChildern(HashMap<Integer,online_vertex> hm){
+		children = hm;
+	}
+}
+
+class Edge {
+	online_vertex source;
+	online_vertex target;
+	public Edge(online_vertex s, online_vertex t) {
+		source = s;
+		target = t;
+	}
+	
+	@Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = prime * source.hashCode();
+        result += prime * target.hashCode();
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        Edge other = (Edge) obj;
+        if (!source.equals(other.source) || !target.equals(other.target))
+            return false;
+        return true;
+    }
+    
+    @Override
+    public String toString() {
+        return "("+source+":"+target+")";
+    }
 }
