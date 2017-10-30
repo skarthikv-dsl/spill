@@ -77,6 +77,7 @@ public class onlinePB {
 	static float[] actual_sel_pb; 
 	static int num_of_usable_threads;
 	HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
+	HashMap<Long,Integer> planHashMap = new HashMap<Long,Integer>();
 	static HashMap<Integer,Integer> plans_dist = new HashMap<Integer,Integer>();
 	static 	HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
 	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
@@ -93,10 +94,10 @@ public class onlinePB {
 	static boolean DEBUG_LEVEL_1 = false;
 	static boolean visualisation_2D = false;
 	static boolean enhancement = true; //toggling between last_dim1 and last_dim2
-	static boolean enhancement_end_contour = false; //
+	static boolean enhancement_end_contour = false; //if you are enabling this add opt++ in code
 	static boolean memoization = true;
 	static float cost_error = 0.12f;
-	static float float_error = 0.00001f;
+	static float float_error ;
 	static boolean contoursReadFromFile = false;
 	static boolean cg_contoursReadFromFile = false;
 	static boolean writeMapstoFile = false;
@@ -108,22 +109,32 @@ public class onlinePB {
 	ArrayList<Integer> learntDim = new ArrayList<Integer>();
 	float qrun_sel[];
 	float qrun_sel_rev[];
+	
+	//----------------used for profiling code------------------------//
 	int opt_call = 0;
 	int fpc_call = 0;
 	int location_hits = 0;
 	float slope_time =0f;
 	float location_finding_time = 0f;
+	float opt_plan_path_time = 0f;
+	int forward_jumps = 0;
+	int backward_jumps = 0;
+	int jump_size_10 = 0;
+	int jump_size_1 = 0;
+	//----------------used for profiling code------------------------//
+	
 	//the following two are required for min. and max. selectivity to varying across outermost dimension
 	int min_cc_sel_idx = 0;//comes into picture during parallelization 
 	int max_cc_sel_idx ;
 	ArrayList<location> contour_points = new ArrayList<location>();
 	ArrayList<location> non_contour_points = new ArrayList<location>();
-	String XMLPath = null;
-	static online_vertex root;
-	
+	static online_vertex map_root;
+	online_vertex contour_root;
+	online_vertex non_contour_root;
+	int fpc_slope_count =0;
 	public static void main(String[] args) throws IOException, SQLException, PicassoException, ClassNotFoundException {
 	
-		int threads = (int) ( Runtime.getRuntime().availableProcessors() - 1);
+		int threads = (int) ( Runtime.getRuntime().availableProcessors()*0.9);
 		num_of_usable_threads = threads;
 		//set the program arguments
 		if(args.length > 0){
@@ -132,6 +143,7 @@ public class onlinePB {
 			//writeMapstoFile = false;
 		}
 		
+		float_error = (float)Math.pow(10, -1*decimalPrecision);
 		long startTime = System.nanoTime();
 		onlinePB obj = new onlinePB();  
 		obj.loadPropertiesFile();
@@ -197,6 +209,7 @@ public class onlinePB {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 		
+		
 		File ContoursFile = new File(apktPath+"online_contours/Contours.map");
 
 		if(contoursReadFromFile && ContoursFile.exists()){
@@ -231,7 +244,7 @@ public class onlinePB {
 				
 				for(int d=0;d<dimension;d++)
 					obj.qrun_sel[d] = minimum_selectivity;
-				min_cost = obj.getFPCCost(obj.qrun_sel, -1);
+				min_cost = obj.getFPCCost(obj.qrun_sel, -1, null);
 			}
 
 
@@ -272,15 +285,17 @@ public class onlinePB {
 			assert(obj.max_cc_sel_idx > 0): "outermostdimension is empty";
 
 			//add the root vertex to graph which is used for membership testing of locations
-			obj.root = new online_vertex(-1,false,null);
+			map_root = new online_vertex(-1,false,null);
+			obj.contour_root = new online_vertex(-1,false,null);
+			obj.non_contour_root = new online_vertex(-1,false,null);
 			
-			
-			obj.setXMLPath();
 			//clear the contents of onlinePB Planstructure directory
 			File dir = new File(apktPath+"onlinePB/planStructureXML/");
-			for(File file: dir.listFiles()) 
-			    if (!file.isDirectory()) 
+			for(File file: dir.listFiles())  
 			        file.delete();
+			
+			dir = new File(apktPath+"onlinePB/subContourPlans/");
+				obj.recursiveDelete(dir);
 			
 			//System.exit(0);
 			//reset the values to -1 for the rest of the code 
@@ -336,7 +351,7 @@ public class onlinePB {
 				}
 
 
-					if(writeMapstoFile)
+					//if(writeMapstoFile)
 						obj.writeContourPointstoFile(i);
 				System.out.println("The running optimization calls are "+obj.opt_call);
 				System.out.println("The running FPC calls are "+obj.fpc_call);
@@ -351,9 +366,8 @@ public class onlinePB {
 						l.conn = obj.conn;
 						l.setPlanNumber();
 					}
-					if(l.get_plan_no() >= 67 && l.get_plan_no() <= 69 )
-						System.out.println("interesting");
-					obj.addLocationtoGraph(l);
+					if(trie)
+						obj.addLocationtoGraph(l,0);
 				}
 				
 				for(location l: obj.non_contour_points){
@@ -361,9 +375,8 @@ public class onlinePB {
 						l.conn = obj.conn;
 						l.setPlanNumber();
 					}
-					if(l.get_plan_no() >= 67 && l.get_plan_no() <= 69 )
-						System.out.println("interesting");
-					obj.addLocationtoGraph(l);
+					if(trie)
+						obj.addLocationtoGraph(l,0);
 				}
 
 				if (obj.conn != null && !singleThread) {
@@ -389,7 +402,13 @@ public class onlinePB {
 			System.out.println("location hits "+obj.location_hits);
 			System.out.println("slope function time "+obj.slope_time);
 			System.out.println("location finding time "+obj.location_finding_time);
-
+			System.out.println("optimal plan path time "+obj.opt_plan_path_time);
+			System.out.println("fpc slope count "+obj.fpc_slope_count);
+			System.out.println("forward jumps count "+obj.forward_jumps);
+			System.out.println("backward jumps count "+obj.backward_jumps);
+			System.out.println("jump size with 1% count "+obj.jump_size_1);
+			System.out.println("jump size with 10% count "+obj.jump_size_10);
+			
 			long endTime = System.nanoTime();
 			System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
 			
@@ -403,7 +422,7 @@ public class onlinePB {
 		}		
 		
 		obj.printPlanDistribution();
-		//System.exit(0);
+		System.exit(0);
 		
 		File fl_red =  new File(apktPath+"online_contours/Red_Contours.map");
 		if(cg_contoursReadFromFile && fl_red.exists()){		
@@ -418,7 +437,10 @@ public class onlinePB {
 					assert(p.get_contour_no() == key.intValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
 				}
 			}
+			
+			
 			//System.exit(0);
+			
 		}
 		else
 			obj.ContourCentricCostGreedy(-1);
@@ -454,7 +476,24 @@ public class onlinePB {
 	}
 
 	
-public void printPlanDistribution() {
+	public void recursiveDelete(File file) {
+        //to end the recursive loop
+        if (!file.exists())
+            return;
+         
+        //if directory, go inside and call recursively
+        if (file.isDirectory()) {
+            for (File f : file.listFiles()) {
+                //call recursively
+                recursiveDelete(f);
+            }
+        }
+        //call delete to delete files and empty directory
+        file.delete();
+//        System.out.println("Deleted file/folder: "+file.getAbsolutePath());
+    }
+	
+	public void printPlanDistribution() {
 		
 		
 		Iterator itr = ContourPointsMap.keySet().iterator();
@@ -479,7 +518,7 @@ public void printPlanDistribution() {
 		
 		System.out.println("The plans distributions are");
 		System.out.println(plans_dist);
-		//System.exit(0);
+		System.exit(0);
 	}
 
 
@@ -499,11 +538,11 @@ public void printPlanDistribution() {
 		float[] q_sel = new float[dimension];
 		for(int d=0;d<dimension;d++)
 			q_sel[d] = minimum_selectivity;
-		min_cost = getFPCCost(q_sel, -1);
+		min_cost = getFPCCost(q_sel, -1, null);
 		
 		for(int d=0;d<dimension;d++)
 			q_sel[d] = 1.0f;
-		h_cost = getFPCCost(q_sel, -1);
+		h_cost = getFPCCost(q_sel, -1, null);
 		
 		double[] subOpt = new double[max_point];
 		
@@ -517,8 +556,6 @@ public void printPlanDistribution() {
 			
 			double algo_cost = 0;
 			SO =0;
-			
-			
 
 			double cost = min_cost;
 			initialize(j);
@@ -529,7 +566,7 @@ public void printPlanDistribution() {
 			
 			// TODO: not required for(int d=0;d<dimension;d++) actual_sel_pb[d] = findNearestSelectivity(actual_sel_pb[d]);
 			
-			double cost_act_sel_pb = getFPCCost(actual_sel_pb, -1);
+			double cost_act_sel_pb = getFPCCost(actual_sel_pb, -1, null);
 			if(cost_act_sel_pb < (double)10000)
 				continue;
 			
@@ -956,6 +993,10 @@ public void printPlanDistribution() {
 			FileOutputStream fos;
 			ObjectOutputStream oos;
 
+			File path_dir  = new File(apktPath+"online_contours/");
+			if(!path_dir.exists())
+				path_dir.mkdirs();
+			
 			//for writing the contours map
 			if(!CG_Done)
 				path = new String (apktPath+"online_contours/Contours.map");
@@ -1156,8 +1197,8 @@ public void printPlanDistribution() {
 		{ 
 			int last_dim1=-1, last_dim2=-1;
 			
-			if((opt_call % 500) ==0 )
-				System.out.println("running optimiation for debug along thread  ["+min_cc_sel_idx+"-"+max_cc_sel_idx+"] opt_call = "+opt_call+" fpc call = "+fpc_call+" location hits = "+location_hits);
+//			if((opt_call % 500) ==0 )
+//				System.out.println("running optimiation for debug along thread  ["+min_cc_sel_idx+"-"+max_cc_sel_idx+"] opt_call = "+opt_call+" fpc call = "+fpc_call+" location hits = "+location_hits);
 			
 			for(int i=0;i<dimension;i++)
 			{
@@ -1190,13 +1231,19 @@ public void printPlanDistribution() {
 			
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = minimum_selectivity;
 			
-			if(trie)
-				loc1 =searchLocationInGraph(qrun_sel);
+			if(trie){
+				loc1 = searchLocationInGraph(qrun_sel,0);
+				if(loc1 == null){
+					loc1 = searchLocationInGraph(qrun_sel,2);
+				}
+			}
 			else
-				loc1 =locationAlreadyExist(qrun_sel);
+				loc1 = locationAlreadyExist(qrun_sel);
 			if(loc1 == null){
 				loc1 = new location(qrun_sel,this);
 				non_contour_points.add(loc1);
+				if(trie)
+					addLocationtoGraph(loc1, 2);
 				opt_call++;
 			}
 			
@@ -1205,20 +1252,27 @@ public void printPlanDistribution() {
 			
 			
 			qrun_sel[last_dim1] = qrun_sel[last_dim2] = 1.0f;
-			if(trie)
-				loc2 = searchLocationInGraph(qrun_sel);
+			if(trie){
+				loc2 = searchLocationInGraph(qrun_sel,0);
+				if(loc2 == null){
+					loc2 = searchLocationInGraph(qrun_sel,2);
+				}
+
+			}
 			else
 				loc2 = locationAlreadyExist(qrun_sel);
 			
 			if(loc2 == null){
 				loc2 = new location(qrun_sel,this);
 				non_contour_points.add(loc2);
+				if(trie)
+					addLocationtoGraph(loc2, 2);
 				opt_call++;
 			}
 			
 			assert(loc2 !=null): "loc2 is null";
 			double optimization_cost_high = loc2.get_cost();
-			non_contour_points.add(loc2);
+			//non_contour_points.add(loc2);
 			
 			assert(optimization_cost_low <= optimization_cost_high): "violation of PCM";
 			//check if the origin of this 2D slice is greater cost
@@ -1240,13 +1294,19 @@ public void printPlanDistribution() {
 				qrun_sel[last_dim1] = minimum_selectivity;
 				location loc;
 				
-				if(trie)
-					loc = searchLocationInGraph(qrun_sel);
+				if(trie){
+					loc = searchLocationInGraph(qrun_sel,0);
+					if(loc == null){
+						loc = searchLocationInGraph(qrun_sel,2);
+					}
+				}
 				else
 					loc = locationAlreadyExist(qrun_sel);
 				if(loc == null){
 					loc = new location(qrun_sel, this);
 					non_contour_points.add(loc);
+					if(trie)
+						addLocationtoGraph(loc, 2);
 					opt_call++;
 				}
 				assert(loc != null): "location is null";
@@ -1267,14 +1327,20 @@ public void printPlanDistribution() {
 						qrun_sel_rev[i] = qrun_sel[i];																					
 				}
 				
-				if(trie)
-					loc = searchLocationInGraph(qrun_sel_rev);
+				if(trie){
+					loc = searchLocationInGraph(qrun_sel_rev,0);
+					if(loc == null){
+						loc = searchLocationInGraph(qrun_sel_rev,2);
+					}
+				}
 				else
 					loc = locationAlreadyExist(qrun_sel_rev);
 				
 				if(loc == null){
 					loc = new location(qrun_sel_rev, this);
 					non_contour_points.add(loc);
+					if(trie)
+						addLocationtoGraph(loc, 2);
 					opt_call++;
 				}
 				
@@ -1321,8 +1387,8 @@ public void printPlanDistribution() {
 					while((qrun_copy[last_dim2] > minimum_selectivity) && (target_cost1 <= opt_cost_copy))
 					{
 						
-						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )
-							System.out.println("intereseting");
+//						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )
+//							System.out.println("intereseting");
 						
 						
 						came_inside_dim2_loop = true;
@@ -1364,16 +1430,24 @@ public void printPlanDistribution() {
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+old_sel/(qrun_copy[last_dim2]*beta));
 						
-						if(trie)
-							loc = searchLocationInGraph(qrun_copy);
+						if(trie){
+							loc = searchLocationInGraph(qrun_copy,0);
+							if(loc == null){
+								loc = searchLocationInGraph(qrun_copy,2);
+							}
+
+						}
 						else
 							loc = locationAlreadyExist(qrun_copy);
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
 							non_contour_points.add(loc);
+							if(trie)
+								addLocationtoGraph(loc, 2);
 							//counting the optimization calls
 							opt_call++;
+							backward_jumps ++;
 						}
 						
 						//non_contour_points.add(loc);
@@ -1416,44 +1490,61 @@ public void printPlanDistribution() {
 					while((qrun_copy[last_dim1] < 1.0f) && (opt_cost_copy <= target_cost3))
 					{
 
-						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )
-							System.out.println("intereseting");
+//						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )
+//							System.out.println("intereseting");
 
 						came_inside_dim1_loop = true;
 						
 						if (opt_cost_copy >=  target_cost2){
 							//found a covering contour point
 							
-							if(trie)
-								loc = searchLocationInGraph(qrun_copy);
+							if(trie){
+								loc = searchLocationInGraph(qrun_copy,0);
+								if(loc == null){
+									loc = searchLocationInGraph(qrun_copy,1);
+								}
+							}
 							else
 								loc = locationAlreadyExist(qrun_copy);
 							
 							if(loc == null){
 								loc = new location(qrun_copy, this);
+								opt_call ++;
+								forward_jumps ++;
 							}
-							if(!ContourLocationAlreadyExist(loc.dim_values))
+	
+							
+//							if(!ContourLocationAlreadyExist(loc.dim_values))
 								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
 									contour_points.add(new location(loc.dim_values,this));
 								else 
 									contour_points.add(loc);
-							
-							if(enhancement_end_contour){
+								if(trie)
+									addLocationtoGraph(loc, 1);
 								
+								
+							if(enhancement_end_contour){	
 								for(int d=0; d < dimension; d++)
 									temp_qrun[d] = qrun_copy[d];
 								
 								temp_qrun[last_dim2] = minimum_selectivity;
 								
 								location temp_loc;
-								if(trie)
-									temp_loc = searchLocationInGraph(temp_qrun);
+								if(trie){
+									temp_loc = searchLocationInGraph(temp_qrun,0);
+									if(temp_loc == null){
+										temp_loc = searchLocationInGraph(temp_qrun,2);
+									}
+
+								}
 								else
 									temp_loc = locationAlreadyExist(temp_qrun);
 								
 								if(temp_loc == null){
 									temp_loc = new location(temp_qrun, this);
 									non_contour_points.add(temp_loc);
+									if(trie)
+										addLocationtoGraph(temp_loc, 2);
 								}
 								
 								//assert(temp_loc.get_cost() <= loc.get_cost()*(1+cost_error)) : "cost of the covering location is not higher than that of its boundary location";
@@ -1507,28 +1598,40 @@ public void printPlanDistribution() {
 						if(qrun_copy[last_dim1]/(old_sel*beta) < 1.0f)
 							qrun_copy[last_dim1] = old_sel*beta;
 						
+						if(qrun_copy[last_dim1]/old_sel < 1.01*beta)
+							jump_size_1 ++;
+						else if(qrun_copy[last_dim1]/old_sel < 1.1*beta)
+							jump_size_10 ++;
+						
 						//just rounding up the float value
 						qrun_copy[last_dim1] = roundToDouble(qrun_copy[last_dim1]); 
-						
+						//System.out.println("The jumps sizes are "+(qrun_copy[last_dim1]/old_sel)+" against "+beta);
 						assert(qrun_copy[last_dim1] >= old_sel) : "selectivity not increasing, even if it has to";
 						
 						if(qrun_copy[last_dim1] >= 1.0f){
 							
 							qrun_copy[last_dim1] = 1.0f;
-							if(trie)
-								loc = searchLocationInGraph(qrun_copy);
+							if(trie){
+								loc = searchLocationInGraph(qrun_copy,0);
+								if(loc == null){
+									loc = searchLocationInGraph(qrun_copy,1);
+								}
+							}
 							else
 								loc = locationAlreadyExist(qrun_copy);
 							
 							if(loc == null){
 								loc = new location(qrun_copy, this);
 								opt_call++;
+								forward_jumps ++;
 							}
-							if(!ContourLocationAlreadyExist(loc.dim_values))
+//							if(!ContourLocationAlreadyExist(loc.dim_values))
 								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
 									contour_points.add(new location(loc.dim_values,this));
 								else 
 									contour_points.add(loc);
+								if(trie)
+									addLocationtoGraph(loc, 1);
 							// check to see if the terminus point is reached for the 2D slice 
 							if(qrun_copy[last_dim2] >= 1.0f)
 								return; 
@@ -1540,16 +1643,23 @@ public void printPlanDistribution() {
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+qrun_copy[last_dim1]/(old_sel*beta));
 						
-						if(trie)
-							loc = searchLocationInGraph(qrun_copy);
+						if(trie){
+							loc = searchLocationInGraph(qrun_copy,0);
+							if(loc == null){
+								loc = searchLocationInGraph(qrun_copy,2);
+							}
+						}
 						else
 							loc = locationAlreadyExist(qrun_copy);
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
 							non_contour_points.add(loc);
+							if(trie)
+								addLocationtoGraph(loc, 2);
 							//counting the optimization calls
 							opt_call++;
+							forward_jumps ++;
 						}
 						
 						//non_contour_points.add(loc);
@@ -1709,7 +1819,7 @@ public void printPlanDistribution() {
 	            	input.doGenerateContours();
 	            	//System.out.println("after getting the connection");
 	            	
-	    			assert(input.obj.contour_points.size() > 0 || input.obj.non_contour_points.size() > 0): "empty contour or non_contour points";
+	    			//assert(input.obj.contour_points.size() > 0 || input.obj.non_contour_points.size() > 0): "empty contour or non_contour points";
 	            	
 	    			output.contour_locs_parallel = new ArrayList<location>(input.obj.contour_points);
 	            	output.non_contour_locs_parallel = new ArrayList<location>(input.obj.non_contour_points);
@@ -1849,60 +1959,68 @@ public void printPlanDistribution() {
 	
 	private double calculateJumpSize(float[] qrun_copy, int dim, double base_cost) throws SQLException {
 
-		long startTime = System.nanoTime();
 		
-		getFPCCost(qrun_copy, -3); //to just dump the xml optimal plan at qrun_copy for slope calculations
-		float delta[] = {0.1f,0.3f};
-			float sum_slope = 0, divFactor =0;
-			float sel[] = new float[dimension];
-			for(float del: delta){
-				
 
-				for(int d=0; d<dimension;d++)
-					sel[d] = qrun_copy[d];
+		String opt_path = getOptimalPlanPath(qrun_copy);
+		//getFPCCost(qrun_copy, -3, null); // -3 argument is to just dump the xml optimal plan at qrun_copy for slope calculations
+		
+		long startTime = System.nanoTime();
+		float delta[] = {0.1f,0.2f,0.3f};
+		float sum_slope = 0, divFactor =0;
+		float sel[] = new float[dimension];
+		for(float del: delta){
 
-				sel[dim] = sel[dim]*(1+del);
-				double fpc_cost = 0;
-				fpc_cost = getFPCCost(sel, -2);
-				
-				//to remove the effects of jumps but this satisfies the concavity assumption
-				if(fpc_cost >=  (1+del)*base_cost)
-					fpc_cost = (1+del)*base_cost;
-				
-				float sel_diff = del*(sel[dim]/(1+del));
-				
-				if(fpc_cost > base_cost){
-					sum_slope += (fpc_cost - base_cost)/(sel_diff);
-					divFactor ++;
-				}
-				
-				if(DEBUG_LEVEL_2)
-				{
-					System.out.println("Dim = "+dim+" fpc = "+(fpc_cost)+" base cost = "+base_cost+" neighbour location = "+sel[dim]+" base location = "+sel[dim]/(1+del));
-				}
-				
+			for(int d=0; d<dimension;d++)
+				sel[d] = qrun_copy[d];
+
+			sel[dim] = sel[dim]*(1+del);
+			double fpc_cost = 0;
+			fpc_cost = getFPCCost(sel, -2, opt_path);
+			
+			fpc_slope_count++;
+			//to remove the effects of jumps but this satisfies the concavity assumption
+			if(fpc_cost >=  (1+del)*base_cost)
+				fpc_cost = (1+del)*base_cost;
+
+			float sel_diff = del*(sel[dim]/(1+del));
+
+			if(fpc_cost > base_cost){
+				sum_slope += (fpc_cost - base_cost)/(sel_diff);
+				divFactor ++;
 			}
-			
-			double avg_slope =1;double jump_size = minimum_selectivity;
-			if(divFactor >0 ){
-				 avg_slope = sum_slope/divFactor; 			 //TODO: really need to do something else for it!
-				 
-					//now return the jump_size which is cost/slope or F/m;
-				 jump_size = base_cost/avg_slope;
-			}			
 
-			if(DEBUG_LEVEL_1)
-				System.out.println("jump size is "+jump_size);
-			
-			fpc_call ++;
-			
-			long endTime = System.nanoTime();
-			
-			
-			slope_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
-			return jump_size;
-			
+			//System.out.println("Dim = "+dim+" fpc = "+(fpc_cost)+" base cost = "+base_cost+" neighbour location = "+sel[dim]+" base location = "+sel[dim]/(1+del)+" plan = "+opt_path);
+			if(DEBUG_LEVEL_2)
+			{
+				System.out.println("Dim = "+dim+" fpc = "+(fpc_cost)+" base cost = "+base_cost+" neighbour location = "+sel[dim]+" base location = "+sel[dim]/(1+del));
+			}
+
 		}
+
+		//to just check the boundary conditions
+//		sel[dim] = minimum_selectivity;
+//		double origin_cost = getFPCCost(sel, -2, opt_path);
+//		System.out.println("Dim = "+dim+" origin cost  = "+(origin_cost)+" at sel = "+sel[dim]+" plan = "+opt_path);
+		double avg_slope =1;double jump_size = minimum_selectivity;
+		if(divFactor >0 ){
+			avg_slope = sum_slope/divFactor; 			 //TODO: really need to do something else for it!
+
+			//now return the jump_size which is cost/slope or F/m;
+			jump_size = base_cost/avg_slope;
+		}			
+
+		if(DEBUG_LEVEL_1)
+			System.out.println("jump size is "+jump_size);
+
+		fpc_call ++;
+
+		long endTime = System.nanoTime();
+
+
+		slope_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+		return jump_size;
+
+	}
 
 
 //	public void concavityValidation(boolean useFPC, boolean optimalPlan, int fpc_plan) throws SQLException{
@@ -2041,6 +2159,60 @@ public void printPlanDistribution() {
 //	System.exit(0);
 //}
 //
+
+	public String getOptimalPlanPath(float[] qrun_copy) throws SQLException {
+
+		long startTime = System.nanoTime();
+		location loc;
+		String path;
+		
+		if(trie){
+			loc = searchLocationInGraph(qrun_copy,0);
+			if(loc == null){
+				loc = searchLocationInGraph(qrun_copy,1);
+				if(loc == null)
+					loc = searchLocationInGraph(qrun_copy,2);
+			}
+		}
+		else
+			loc = locationAlreadyExist(qrun_copy);
+
+		if(loc == null)
+			loc = searchLocationInGraph(qrun_copy,2);
+			
+		assert(loc !=null): "location should not be null";
+		
+		if(loc.get_plan_no() >= 0){
+			path = new String(apktPath+"onlinePB/planStructureXML/"+loc.get_plan_no()+".xml");
+			long endTime = System.nanoTime();
+			opt_plan_path_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+			return path;
+		}
+		else{			
+			File dir = new File(apktPath+"onlinePB/subContourPlans/"+(new Integer(min_cc_sel_idx).toString())+(new Integer(max_cc_sel_idx).toString())+"/");
+			if(!dir.exists())
+				dir.mkdirs();
+			assert(dir.exists()): "unable to create the path for subContourPlans";
+			
+			Long plan_hash = new Long(loc.plan.getHash());
+			if(!planHashMap.containsKey(plan_hash)){
+				int plan_number = planHashMap.size();
+				planHashMap.put(plan_hash,plan_number);
+				path = new String(apktPath+"onlinePB/subContourPlans/"+(new Integer(min_cc_sel_idx).toString())+(new Integer(max_cc_sel_idx).toString())+"/"+plan_number+".xml");
+				getFPCCost(qrun_copy, -3, path); //writing the xml plan to file
+				long endTime = System.nanoTime();
+				opt_plan_path_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+				return path;
+			}
+			else{
+				int plan_number = planHashMap.get(plan_hash);
+				path = new String(apktPath+"onlinePB/subContourPlans/"+(new Integer(min_cc_sel_idx).toString())+(new Integer(max_cc_sel_idx).toString())+"/"+plan_number+".xml");
+				long endTime = System.nanoTime();
+				opt_plan_path_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+				return path;
+			}
+		}
+	}
 
 	private void ContourCentricCostGreedy(int contour_no) throws SQLException
 	{
@@ -2326,8 +2498,11 @@ public void printPlanDistribution() {
 	     assert (returning_locs.size() == contour_locs.size()) : "returning locs is same size as contour locs";
 	     return returning_locs;//for safety check
 	} 
-
-	public double getFPCCost(float selectivity[], int p_no) throws SQLException{
+//the first argument denotes the selectivity injected
+// the second argument denotes the plan number to be forced, -1 for the optimial plan
+// the third argument denotes the path of the plan to be forced, if this is null then the path is constructed using plan_no
+	
+	public double getFPCCost(float selectivity[], int p_no, String path) throws SQLException{
 		//Get the path to p_no.xml
 		String funName = "getFPCCost";
 		
@@ -2335,9 +2510,17 @@ public void printPlanDistribution() {
 			System.out.println("Enterred "+funName);
 		}
 		
-		String xml_path = apktPath+"/onlinePB/planStructureXML/"+p_no+".xml";
+		if(p_no == -2 || p_no == -3)
+			assert(path != null): "this situation cannot happen";
+
+		String xml_path;
+		if(path == null)
+			xml_path = new String(apktPath+"/onlinePB/planStructureXML/"+p_no+".xml");
+		else
+			xml_path = path;
 		
-		 String regx;
+		
+		String regx;
 	     Pattern pattern;
 	     Matcher matcher;
 	     double execCost=-1;
@@ -2352,31 +2535,35 @@ public void printPlanDistribution() {
 				
 				
 				Statement stmt = conn.createStatement();
-				String exp_query = new String("Selectivity ( "+predicates+ ") (");
+				
+				String exp_query_inj = new String("Selectivity ( "+predicates+ ") (");
 				for(int i=0;i<dimension;i++){
 					if(i !=dimension-1){
-						exp_query = exp_query + (selectivity[i])+ ", ";
+						exp_query_inj = exp_query_inj + (selectivity[i])+ ", ";
 					}
 					else{
-						exp_query = exp_query + (selectivity[i]) + " )";
+						exp_query_inj = exp_query_inj + (selectivity[i]) + " )";
 					}
 				}
 				//this is for selectivity injection plus fpc
-				exp_query = exp_query + select_query;
+				exp_query_inj = exp_query_inj + select_query;
 				String xml_query = null;
+				String exp_query = null;
 				//this is for pure fpc
 				//exp_query = select_query;
-				if((p_no == -2 || p_no == -3) && XMLPath!=null){
-					exp_query = "explain " + exp_query + " fpc "+XMLPath;
-					xml_query = new String("explain (format xml) "+ select_query) ;
+				if((p_no == -2 || p_no == -3) && xml_path!=null){
+					exp_query = "explain " + exp_query_inj + " fpc "+xml_path;
+					xml_query = "explain (format xml) "+ exp_query_inj+ " fpc "+xml_path;
+					//assert(xml_path.contains("subContourPlans")): "subContour plans are not there in xmlPath";
 				}
 				else if(p_no ==-1){
-					exp_query = "explain " + exp_query ;
-					xml_query = new String("explain (format xml) "+ select_query) ;
+					exp_query = "explain " + exp_query_inj ;
+					xml_query = "explain (format xml) "+ exp_query_inj;
 				}
 				else {
 					assert(p_no >=0): "plan number is less than zero";
-					exp_query = "explain " + exp_query + " fpc "+xml_path;
+					assert(xml_path.contains("planStructureXML")): "planStructureXML are not there in xmlPath";
+					exp_query = "explain " + exp_query_inj + " fpc "+xml_path;
 				}
 					
 				//exp_query = new String("explain Selectivity ( customer_demographics.cd_demo_sk = catalog_sales.cs_bill_cdemo_sk and date_dim.d_date_sk = catalog_sales.cs_sold_date_sk  and item.i_item_sk = catalog_sales.cs_item_sk and promotion.p_promo_sk = catalog_sales.cs_promo_sk) (0.005, 0.99, 0.001, 0.00005 ) select i_item_id,  avg(cs_quantity) , avg(cs_list_price) ,  avg(cs_coupon_amt) ,  avg(cs_sales_price)  from catalog_sales, customer_demographics, date_dim, item, promotion where cs_sold_date_sk = d_date_sk and cs_item_sk = i_item_sk and   cs_bill_cdemo_sk = cd_demo_sk and   cs_promo_sk = p_promo_sk and cd_gender = 'F' and  cd_marital_status = 'U' and  cd_education_status = 'Unknown' and  (p_channel_email = 'N' or p_channel_event = 'N') and  d_year = 2002 and i_current_price <= 100 group by i_item_id order by i_item_id  fpc /home/lohitkrishnan/ssd256g/data/DSQT264DR20_E/planStructureXML/3.xml");
@@ -2409,11 +2596,12 @@ public void printPlanDistribution() {
 					while(rs_xml.next())  {
 						xplan.append(rs_xml.getString(1)); 
 					}
+					assert(xml_path.contains("subContour")): "subContour plans are not there in xmlPath";
 					rs_xml.close();
 					if(xplan!=null){
 						
 						try{
-							FileWriter fw_xml = new FileWriter(XMLPath, false); 
+							FileWriter fw_xml = new FileWriter(xml_path, false); 
 							fw_xml.write(xplan.toString());
 							fw_xml.close();
 						}
@@ -2469,7 +2657,8 @@ public void printPlanDistribution() {
 	public  float roundToDouble(float d) {
         BigDecimal bd = new BigDecimal(Float.toString(d));
         bd = bd.setScale(decimalPrecision, BigDecimal.ROUND_HALF_UP);
-        return bd.floatValue();
+        float f = bd.floatValue(); 
+        return f;
     }
 	
 	double getOptimalCost(int index)
@@ -2479,7 +2668,11 @@ public void printPlanDistribution() {
 
 	void setXMLPath(){
 		assert(min_cc_sel_idx >=0 && max_cc_sel_idx <= outermost_dimension_sel.size() && outermost_dimension_sel.size() > 0) : "min and max outerdimensionselectivity index is not set correctly";
-		XMLPath = new String(apktPath+"onlinePB/forcingPlans/"+(new Integer(min_cc_sel_idx).toString())+(new Integer(max_cc_sel_idx).toString())+".xml");
+		
+		File path_dir  = new File(apktPath+"onlinePB/forcingPlans/");
+		if(!path_dir.exists())
+			path_dir.mkdirs();		
+		//XMLPath = new String(apktPath+"onlinePB/forcingPlans/"+(new Integer(min_cc_sel_idx).toString())+(new Integer(max_cc_sel_idx).toString())+".xml");
 	}
 	
 	public void loadPropertiesFile() {
@@ -2594,17 +2787,31 @@ public void printPlanDistribution() {
 		}
 		return gdp;
 	}
+	// option=0 for map, option=1 for contour, option=2 for non_contour
+	void addLocationtoGraph(location loc, int option){
 
-	void addLocationtoGraph(location loc){
-
-		online_vertex crawl = root;
+		online_vertex crawl;
+		
+		if(option == 0)
+			crawl = map_root;
+		else if(option == 1)
+			crawl = contour_root;
+		else if(option == 2)
+			crawl = non_contour_root;
+		else
+			crawl = null;
+		
+		if((Math.abs(loc.dim_values[0] - 0.0001) < 0.00001f) && (Math.abs(loc.dim_values[1] - 0.019691) < 0.00001f) && (Math.abs(loc.dim_values[2] - 1.0) < 0.00001f)  )
+			System.out.println("intereseting");
 
 		// Traverse through all characters of given word
 		for( int level = 0; level < dimension; level++)
 		{
 			HashMap<Integer,online_vertex> child = crawl.getChildern();
-			double power = 1/float_error;
-			int val = (int)(roundToDouble(loc.dim_values[level])*power);
+			float power = (float)Math.pow(10, decimalPrecision);
+			//the value 11 is chosen to combat the imprecision in the float and decimal representation
+			// moreover it will add a value < 1 which would eventually get rounded due to int'f floor
+			int val = (int)(roundToDouble(loc.dim_values[level])*power*(1+Math.pow(11,-1*decimalPrecision)));
 
 			// If there is no such child for current character of given word
 			if( (child == null) || !child.containsKey(val)){ // create a child
@@ -2633,21 +2840,33 @@ public void printPlanDistribution() {
 		}
 	}
 	
-	location searchLocationInGraph(float [] arr){
+	location searchLocationInGraph(float [] arr, int option){
 
 		long startTime = System.nanoTime();
 		long endTime;
 		assert(arr.length == dimension) : "location dim values not matching";
 		
-		online_vertex crawl = root;
+		online_vertex crawl;
+		
+		if(option == 0)
+			crawl = map_root;
+		else if(option == 1)
+			crawl = contour_root;
+		else if(option == 2)
+			crawl = non_contour_root;
+		else
+			crawl = null;
 
 		// Traverse through all characters of given word
 		for( int level = 0; level < dimension; level++)
 		{
+			if(crawl == null)
+				System.out.println("null crawl");
 			HashMap<Integer,online_vertex> child = crawl.getChildern();
-			double power = 1/float_error;
-			arr[level] = arr[level];
-			int val = (int)(roundToDouble(arr[level])*power);
+			float power = (float)Math.pow(10, decimalPrecision);
+			//the value 11 is chosen to combat the imprecision in the float and decimal representation
+			// moreover it will add a value < 1 which would eventually get rounded due to int'f floor
+			int val = (int)(roundToDouble(arr[level])*power*(1+Math.pow(11,-1*decimalPrecision)));
 			
 			if(child == null){
 				endTime = System.nanoTime();
@@ -2655,22 +2874,34 @@ public void printPlanDistribution() {
 				return null;
 			}
 			
-			for(int itr = val-1; itr <=val+1; itr++){
-				// If there is already a child for current character of given word
-				if( child.containsKey(itr)){
-					crawl = child.get(itr);
-					break;
-				}
-				else   
-				{
-					if(itr == val+1){
-						endTime = System.nanoTime();
-						location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
-						return null;
-					}
-				}
+			if( child.containsKey(val))
+				crawl = child.get(val);
+			else   // Else create a child
+			{
+				endTime = System.nanoTime();
+				location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+				return null;
 			}
+
+//			for(int itr = val; itr <=val; itr++){
+//				// If there is already a child for current character of given word
+//				if( child.containsKey(itr)){
+//					crawl = child.get(itr);
+//					break;
+//				}
+//				else   
+//				{
+//					if(itr == val+1){
+//						endTime = System.nanoTime();
+//						location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+//						return null;
+//					}
+//				}
+//			}
 	}
+		if(crawl.loc == null){
+			System.out.println("the crawl location is null");
+		}
 		assert(crawl.loc != null): "crawl.loc is null which should not be the case";
 		location_hits ++;
 		endTime = System.nanoTime();
@@ -2725,18 +2956,18 @@ class CoveringContourinputParamStruct {
 			obj.location_hits =0;
 			obj.min_cc_sel_idx = min_index;
 			obj.max_cc_sel_idx = max_index;
-			obj.setXMLPath();
-			assert(obj.XMLPath != null && obj.XMLPath.contains(new Integer(min_index).toString())): "some issue with setting the XMLPath variable";
 			obj.conn = conn;
 			obj.contour_points.clear();
 			obj.non_contour_points.clear();
+			obj.contour_root = new online_vertex(-1,false,null);
+			obj.non_contour_root = new online_vertex(-1,false,null);
 			
 			assert(order.size() == dimension): "size of order not matching with dimensions";
 			assert(cost > 0): "contour searching cost is less than or equal to 0";
 
 			obj.generateCoveringContours(order, cost);
 			
-			assert(obj.contour_points.size() > 0 || obj.non_contour_points.size() > 0): "empty contour or non_contour points";
+			//assert(obj.contour_points.size() > 0 || obj.non_contour_points.size() > 0): "empty contour or non_contour points";
 			
 			//assert(obj.fpc_call > 0 || obj.opt_call > 0): "fpc calls or opt calls are zero even after contor generation";
 
@@ -2819,12 +3050,10 @@ class CoveringContourinputParamStruct {
 					}
 					//this is for selectivity injection plus fpc
 					exp_query = exp_query + select_query;
-					String xml_query = null;
 					//this is for pure fpc
 					//exp_query = select_query;
 					if(p_no ==-1){
 						exp_query = "explain " + exp_query ;
-						xml_query = new String("explain (format xml) "+ select_query) ;
 					}
 					else {
 						assert(p_no >=0): "plan number is less than zero";
