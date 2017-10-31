@@ -120,7 +120,7 @@ public class OfflinePB
 	static boolean MSOCalculation = true;
 	static boolean memoization = true;
 	static Connection conn = null;
-
+	static float beta;
 	static ArrayList<Integer> remainingDim;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
 	 static ArrayList<location> all_contour_points = new ArrayList<location>();
@@ -142,10 +142,16 @@ public class OfflinePB
 
 	 static double areaSpace =0,totalEstimatedArea = 0;
 	 
+	 static onlinePB opb = new onlinePB(); 
 	 //parameters to set
 	 static boolean visualisation_2D = false;
 	 static int decimalPrecision = 6;
-	 static boolean contoursReadFromFile = true;
+	 static float alpha = 2;
+	 static boolean contoursReadFromFile = false;
+	 static boolean nexus_bcg = true;
+	 static float minimum_selectivity = 0.0001f;
+	 static int location_hits =0;
+	 static int explore_seed_count =0;
 	 
 	public static void main(String args[]) throws IOException, SQLException, PicassoException, ClassNotFoundException
 	{
@@ -178,7 +184,11 @@ public class OfflinePB
 		//obj.findingNativeMSO();
 		
 		obj.loadPropertiesFile();
-		obj.loadSelectivity();
+		
+		if(nexus_bcg)
+			obj.loadSelectivity_nexus_bcg();
+		else
+			obj.loadSelectivity();
 
 		
 		try{
@@ -274,6 +284,8 @@ public class OfflinePB
 			}
 			long endTime = System.nanoTime();
 			System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
+			System.out.println("The location hits are "+location_hits);
+			System.out.println("The explore see count hits are "+explore_seed_count);
 			System.exit(0);
 
 		}
@@ -618,6 +630,7 @@ public class OfflinePB
 				if(seedInfo == null){
 					seedInfo =  new location(convertIndextoSelectivity(candidate2_coords),this);
 					opt_calls++;
+					explore_seed_count ++;
 				}
 				int newSeed = getIndex(convertSelectivitytoIndex(seedInfo.dim_values),resolution);
 
@@ -641,12 +654,14 @@ public class OfflinePB
 			if(cand1Info == null){
 				cand1Info = new location(convertIndextoSelectivity(candidate1_coords), this);
 				opt_calls ++;
+				explore_seed_count ++;
 			}
 			
 			cand2Info = locationAlreadyExist(convertIndextoSelectivity(candidate2_coords));
 			if(cand2Info == null){
 				cand2Info = new location(convertIndextoSelectivity(candidate2_coords),this);
 				opt_calls ++;
+				explore_seed_count ++;
 			}
 			
 			location seedInfo;
@@ -1350,13 +1365,15 @@ public void initialize(int location) {
 			for(location loc: ContourPointsMap.get(c)){
 				flag = true;
 				for(int i=0;i<dimension;i++){
-					if(loc.get_dimension(i)!= arr[i]){
+					if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.0001){
 						flag = false;
 						break;
 					}
 				}
-				if(flag==true)
+				if(flag==true) {
+					location_hits ++;
 					return loc;
+				}
 			}
 		}
 		return null;
@@ -1469,6 +1486,39 @@ public void initialize(int location) {
 			return AllPlanCosts[plan][index];
 		}
 
+	 
+	 void loadSelectivity_nexus_bcg() {
+		 
+				String funName = "loadSelectivity_nexus_bcg: ";
+				beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
+				float var = minimum_selectivity;
+				ArrayList<Float> sel_arr = new ArrayList<Float>();
+				boolean flag = false;
+				int step =0;
+				while(true) {
+					flag = false;
+					step ++;
+					if(var >= 1.0f) {
+						var = 1.0f;
+						sel_arr.add(var);
+						flag = true;
+					}
+					if(flag)
+						break;
+					sel_arr.add(var);
+					opb.decimalPrecision = decimalPrecision;
+					var = opb.roundToDouble(var * beta);
+				}
+				
+				assert(step == sel_arr.size()) : "not matching array sizes";
+				resolution = step;
+				System.out.println(funName+" Resolution = "+resolution);
+				
+				selectivity = new float [resolution];
+				
+				for(int i =0; i < sel_arr.size(); i++)
+						selectivity[i] = opb.roundToDouble(sel_arr.get(i));		                              
+	 }
 	//-------------------------------------------------------------------------------------------------------------------
 		/*
 		 * Populates the selectivity Matrix according to the input given
