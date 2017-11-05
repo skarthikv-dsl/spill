@@ -7,10 +7,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.TimeUnit;
 
 public class test {
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws InterruptedException {
 		// TODO Auto-generated method stub
 
 		
@@ -26,7 +27,9 @@ public class test {
 		float zero = 1.0f;
 		
 		
-		obj.TimeforExecuteStatements();
+		//obj.arrayListMemoryTest();
+		obj.staticMemoryTest();
+		//obj.TimeforExecuteStatements();
 		//obj.memoryTest();
 		//obj.HashMapTest();
 		
@@ -56,6 +59,38 @@ public class test {
  
 	}
 	
+	public void staticMemoryTest() throws InterruptedException {
+		
+	String funName = "arrayListMemoryTest";
+		
+		ArrayList<test_class> l1 = new ArrayList<test_class>();
+		ArrayList<test_class> l2 = new ArrayList<test_class>();
+		for(int i = 0; i < 2000; i++) {
+			test_class l = new test_class(); 
+			l1.add(l);
+			//in the test class if we make the array as static, then only one instance of the array is allocated for any object of the location
+			
+		}
+		TimeUnit.SECONDS.sleep(10);
+		
+		
+	}
+
+	public void arrayListMemoryTest() throws InterruptedException {
+		
+		String funName = "arrayListMemoryTest";
+		
+		ArrayList<location> l1 = new ArrayList<location>();
+		ArrayList<location> l2 = new ArrayList<location>();
+		for(int i = 0; i < 30000000; i++) {
+			location l = new location();
+			l1.add(l);
+			//l2.add(l); //it will only add the size of pointers, for instance 120 MB for 30000000
+		}
+		TimeUnit.SECONDS.sleep(10);
+		
+	}
+
 	private void TimeforExecuteStatements() {
 		System.out.println("entered DB tpcds");
 		Connection conn = null;
@@ -194,4 +229,12 @@ public class test {
     }
 
 
+	
+}
+
+ class test_class{
+	static  double arr[] = new double[1000000];
+	test_class() {
+		
+	}
 }

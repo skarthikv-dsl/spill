@@ -134,7 +134,7 @@ public class onlinePB {
 	int fpc_slope_count =0;
 	public static void main(String[] args) throws IOException, SQLException, PicassoException, ClassNotFoundException {
 	
-		int threads = (int) ( Runtime.getRuntime().availableProcessors()*0.9);
+		int threads = (int) ( Runtime.getRuntime().availableProcessors()*0.5);
 		num_of_usable_threads = threads;
 		//set the program arguments
 		if(args.length > 0){
@@ -240,7 +240,7 @@ public class onlinePB {
 					obj.qrun_sel[d] = 1.0f;
 				location loc_terminus = new location(obj.qrun_sel,obj);
 				h_cost = loc_terminus.get_cost(); 
-				obj.contour_points.add(loc_terminus);
+				//obj.contour_points.add(loc_terminus);
 				
 				for(int d=0;d<dimension;d++)
 					obj.qrun_sel[d] = minimum_selectivity;
@@ -1828,6 +1828,10 @@ public class onlinePB {
             		output.slope_time = input.obj.slope_time;
             		output.location_finding_time = input.obj.location_finding_time;
             		output.location_hits = input.obj.location_hits;
+            		output.forward_jumps_count = input.obj.forward_jumps;
+            		output.backward_jumps_count = input.obj.backward_jumps;
+            		output.jump_size_1 = input.obj.jump_size_1;
+            		output.jump_size_10 = input.obj.jump_size_10;
             		//assert(input.obj.fpc_call > 0 || input.obj.opt_call > 0): "fpc calls or opt calls are zero even after contor generation";
 	            	
         			return output;
@@ -1851,6 +1855,10 @@ public class onlinePB {
 					fpc_call += output.fpc_call_count;
 					opt_call += output.opt_call_count;
 					location_hits += output.location_hits;
+					forward_jumps += output.forward_jumps_count;
+					backward_jumps += output.backward_jumps_count;
+					jump_size_1 += output.jump_size_1;
+					jump_size_10 += output.jump_size_10;
 					if(output.slope_time > max_slope_time)
 						max_slope_time = output.slope_time;
 					
@@ -2716,30 +2724,34 @@ public class onlinePB {
 		totalPlans = gdp.getMaxPlanNumber();
 		dimension = gdp.getDimension();
 		resolution = gdp.getMaxResolution();
-		data = gdp.getData();
-		totalPoints = (int) Math.pow(resolution, dimension);
-		//System.out.println("\nthe total plans are "+totalPlans+" with dimensions "+dimension+" and resolution "+resolution);
+		
+		return;
+		
+//		data = gdp.getData();
+//		totalPoints = (int) Math.pow(resolution, dimension);
+//		System.out.println("\nthe total plans are "+totalPlans+" with dimensions "+dimension+" and resolution "+resolution);
 
-		assert (totalPoints==data.length) : "Data length and the resolution didn't match !";
-
-		plans = new int [data.length];
-		OptimalCost = new double [data.length]; 
-		for (int i = 0;i < data.length;i++)
-		{
-			this.OptimalCost[i]= data[i].getCost();
-			this.plans[i] = data[i].getPlanNumber();
-
-		}
-
-		//To get the number of points for each plan
-		int  [] plan_count = new int[totalPlans];
-		for(int p=0;p<data.length;p++){
-			plan_count[plans[p]]++;
-		}
-		//printing the above
-		for(int p=0;p<plan_count.length;p++){
-			System.out.println("Plan "+p+" has "+plan_count[p]+" points");
-		}
+		
+//		assert (totalPoints==data.length) : "Data length and the resolution didn't match !";
+//
+//		plans = new int [data.length];
+//		OptimalCost = new double [data.length]; 
+//		for (int i = 0;i < data.length;i++)
+//		{
+//			this.OptimalCost[i]= data[i].getCost();
+//			this.plans[i] = data[i].getPlanNumber();
+//
+//		}
+//
+//		//To get the number of points for each plan
+//		int  [] plan_count = new int[totalPlans];
+//		for(int p=0;p<data.length;p++){
+//			plan_count[plans[p]]++;
+//		}
+//		//printing the above
+//		for(int p=0;p<plan_count.length;p++){
+//			System.out.println("Plan "+p+" has "+plan_count[p]+" points");
+//		}
 
 	}
 	
@@ -3133,6 +3145,10 @@ class CoveringContourinputParamStruct {
 		int location_hits = 0;
 		float slope_time=0f;
 		float location_finding_time =0f;
+		int forward_jumps_count = 0;
+		int backward_jumps_count = 0;
+		int jump_size_1 = 0;
+		int jump_size_10 = 0;
 	}
 	
 class location implements Serializable
@@ -3144,7 +3160,7 @@ class location implements Serializable
 	
 	static String select_query;
 	ArrayList<Double> fpc_plan_cost;
-	double fpc_cost = Double.MAX_VALUE;
+//	double fpc_cost = Double.MAX_VALUE;
 	int opt_plan_no = -1;
 	double opt_cost;
 	static String apktPath;
@@ -3173,7 +3189,7 @@ class location implements Serializable
 		else
 			this.fpc_plan_cost = new ArrayList<Double>();
 		
-		this.fpc_cost = loc.fpc_cost;
+//		this.fpc_cost = loc.fpc_cost;
 		this.opt_plan_no = loc.opt_plan_no;
 		this.opt_cost = loc.opt_cost;
 		this.decimalPrecision = loc.decimalPrecision;
@@ -3261,13 +3277,13 @@ class location implements Serializable
 	}
 	
 
-	double getfpc_cost(){
-		return this.fpc_cost;
-	}
-	
-	void putfpc_cost(double cost){
-		this.fpc_cost=cost;
-	}
+//	double getfpc_cost(){
+//		return this.fpc_cost;
+//	}
+//	
+//	void putfpc_cost(double cost){
+//		this.fpc_cost=cost;
+//	}
 
 	public int get_no_of_dimension(){
 		return dimension;
