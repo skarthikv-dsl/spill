@@ -21,14 +21,20 @@ public class test {
 		else
 			System.out.println("there is NOTHING in the argument");
 		
-		
+		System.out.println("max integer = "+Integer.MAX_VALUE+" min value = "+Integer.MIN_VALUE);
 		test obj = new test();
-		float old_val = obj.roundToDouble(1.5555555f, 3);
-		float zero = 1.0f;
+		float old_val = obj.roundToDouble(1.5555555f, 6);
+		float zero = 1.0E-4f;
+		float  val1 = (zero * 10000);
+		int val2 = (int) val1;
 		
 		
 		//obj.arrayListMemoryTest();
 		obj.staticMemoryTest();
+
+		//obj.longHashMap();
+		
+		//obj.timeForSearchingThroughList();
 		//obj.TimeforExecuteStatements();
 		//obj.memoryTest();
 		//obj.HashMapTest();
@@ -59,6 +65,18 @@ public class test {
  
 	}
 	
+	private void longHashMap() {
+		
+		HashMap<Long, Integer> hm = new HashMap<Long, Integer>();
+		hm.put(23L, 1);
+		hm.put(230000000L, 2);
+		
+		long l1 = 23L;
+		long l2 = 230000000L;
+		System.out.println(hm.get(l1)+" "+hm.get(l2));
+		
+	}
+	
 	public void staticMemoryTest() throws InterruptedException {
 		
 	String funName = "arrayListMemoryTest";
@@ -76,6 +94,13 @@ public class test {
 		
 	}
 
+	private void HashMapFloat(){
+		HashMap<Float, Integer> hm = new HashMap<Float, Integer>();
+		hm.put(1.4f, 1);
+		hm.put(1.434244f, 2);
+		hm.put(1.0f, 3);
+	}
+
 	public void arrayListMemoryTest() throws InterruptedException {
 		
 		String funName = "arrayListMemoryTest";
@@ -89,6 +114,32 @@ public class test {
 		}
 		TimeUnit.SECONDS.sleep(10);
 		
+	}
+
+	private void timeForSearchingThroughList() {
+		
+		ArrayList<location> loc_al = new ArrayList<location>();
+		
+		for(int i=0; i< 1000000;i++){
+			location loc = new location();
+			loc.dim_values = new float[5];
+			loc_al.add(loc);
+		}
+		
+		long startTime = System.nanoTime();
+		
+		int k =0;
+		while(k<1){
+		for(int i=0; i< 1000000;i++){
+			location loc = loc_al.get(i);
+			for(int j =0;j< 5; j++)
+				loc.dim_values[j] ++;
+		}
+		k++;
+		}
+		
+		long endTime = System.nanoTime();
+		System.out.println("Took "+(float)((endTime*1.0f - startTime*1.0f)/1000000000f) + " sec");
 	}
 
 	private void TimeforExecuteStatements() {

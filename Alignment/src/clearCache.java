@@ -26,14 +26,14 @@ public class clearCache {
 			
 			double QDIST_SKEW_10 = 2.0;
 			double QDIST_SKEW_30 = 1.33;
-			double QDIST_SKEW_100 = 1.027;
+			double QDIST_SKEW_100 = 1.1;
 			double QDIST_SKEW_300 = 1.027;
 			double QDIST_SKEW_1000 = 1.00808;
 			
 			/*parameters to change*/
 			int option=1;
 			int resolution = 100;
-			double startpoint = 0.00001;
+			double startpoint = 0.0001;
 			double endpoint = 1.0;
 			/*---------------------*/
 			
