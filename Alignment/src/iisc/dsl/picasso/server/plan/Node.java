@@ -129,7 +129,7 @@ public class Node implements Serializable {
 			while(it.hasNext())
 				hash += i++ * ((String)it.next()).hashCode();
 		}
-		hash = id*(parentId+1)*hash;
+		hash = (id)*(parentId+1)*hash;
 		return hash;
 	}
 	/*

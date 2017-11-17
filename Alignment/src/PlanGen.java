@@ -28,9 +28,15 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Properties;
 import java.util.StringTokenizer;
 import java.util.Vector;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -64,12 +70,14 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 	static String cardinalityPath;
 	static int sel_distribution; 
 	static boolean FROM_CLAUSE;
-	static Connection conn = null;
+	Connection conn = null;
 	static int database_conn=1;
 	static double h_cost;
-	static int leafid=0;
+	int leafid=0;
 	static plan[] plans_list;
 	static boolean planstructure_format = true;
+	static boolean single_thread = false;
+	static int num_of_usable_threads;
 	//static DataValues [] data = new DataValues[totalPoints];
 	
 	public static void main(String[] args) throws IOException, PicassoException, SQLException {
@@ -80,8 +88,8 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		
 		
 		obj.loadPropertiesFile();
-		String pktPath = apktPath + qtName + ".apkt" ;
-		String pktPath_new = apktPath + qtName + "_new9.4.apkt";
+		String pktPath = apktPath + qtName + "_new9.4_megh.apkt" ;
+		String pktPath_new = apktPath + qtName + "_new9.4_parallel.apkt";
 		//obj.validateApktFiles(pktPath, pktPath_new);
 		//System.exit(1);
 		//System.out.println("Query Template: "+QTName);
@@ -91,28 +99,51 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		dimension = gdp.getDimension();
 		resolution = gdp.getMaxResolution();
 		totalPoints = (int) Math.pow(resolution, dimension);
-		//obj.readpkt(gdp, false);
+		obj.readpkt(gdp, false);
 		obj.loadPropertiesFile();
 		obj.loadSelectivity();
 		
-		
+		num_of_usable_threads = (int) ( Runtime.getRuntime().availableProcessors()*1.0);
 		try{
 			System.out.println("entered DB conn1");
-			Class.forName("org.postgresql.Driver");
-
+			source = new Jdbc3PoolingDataSource();
+			source.setDataSourceName("A Data Source");
+			File f_marwa = new File("/home/dsladmin/marwa");
+			
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
-				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
-								"sa", "database");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+//								"sa", "database");
 			}
 			else{
+			
+				if(f_marwa.exists() && !f_marwa.isDirectory()) { 
+					System.out.println("entered DB tpcds");
+//					conn = DriverManager
+//							.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
+//									"sa", "database");
+					source.setServerName("localhost:5431");
+					source.setDatabaseName("tpcds-ai");
+				}
+				else{
 				System.out.println("entered DB tpcds");
-				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
-								"sa", "database");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+//								"sa", "database");
+				source.setServerName("localhost:5432");
+				source.setDatabaseName("tpcds-ai");
+				}
 			}
+			source.setUser("sa");
+			source.setPassword("database");
+			
+			if(single_thread)
+				source.setMaxConnections(1);
+			else
+				source.setMaxConnections(num_of_usable_threads);
+			
 			System.out.println("Opened database successfully");
 		}
 		catch ( Exception e ) {
@@ -123,19 +154,30 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 //			if(p==0 || p == 2 || p==7 || p ==29 || p == 30 || p==78 || p ==154 || p==169)
 //				obj.getOptimalLocationsforPlan(p);
 		data_new = new DataValues[totalPoints];
-		for ( int i=0; i< totalPoints;i++){
-			//Plan p = obj.getNativePlan_84(i);
-			if(i % 10000 == 0)
-				System.out.println("Currently at "+i);
-			Plan p = obj.getNativePlan(i);
-			double cost = p.getCost();
-			int p_no = p.getPlanNo();
-			//Put into the apkt packet.
-			data_new[i] = new DataValues();
-			data_new[i].setCost(cost);
-			data_new[i].setPlanNumber(p_no);
+		
+		if(single_thread){
+			obj.conn = source.getConnection();
+			
+			for ( int i=0; i< totalPoints;i++){
+				//Plan p = obj.getNativePlan_84(i);
+				Plan p = obj.getNativePlan(i);
+				double cost = p.getCost();
+				int p_no = p.getPlanNo();
+				//Put into the apkt packet.
+				data_new[i] = new DataValues();
+				data_new[i].setCost(cost);
+				data_new[i].setPlanNumber(p_no);
+				System.out.println(i+","+(int)cost+","+p.getHash());
+			}
+			
+			if (obj.conn != null) {
+				try { obj.conn.close(); } catch (SQLException e) {}
+			}
 		}
-		gdp.setMaxPlanNumber(plans_vector.size());
+		else{
+			obj.getPlanGenParallel();
+		}
+		gdp.setMaxPlanNumber(totalPlans);
 		gdp.setDataPoints(data_new);
 		//Write the new apkt file
 		//ADP.setPlans(plans);
@@ -143,7 +185,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		try
 		{
 //			String fName = PicassoConstants.SAVE_PATH + "packets"+ System.getProperty("file.separator")	+ sqp.getQueryName() + ".apkt";
-			String fName = apktPath + qtName  + "_new9.4.apkt";		
+			String fName = apktPath + qtName  + "_new9.4_parallel.apkt";		
 			FileOutputStream fis = new FileOutputStream (fName);
 			ObjectOutputStream ois;				
 			ois = new ObjectOutputStream (fis);			
@@ -156,6 +198,9 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 			System.out.println(ex.getMessage());
 			ex.printStackTrace();
 		}		
+		
+		ADiagramPacket gdp_new = obj.getGDP(new File(pktPath_new));
+		obj.readpkt(gdp_new, false);
 		/*
 		int nativeplan = obj.getNativePlan();
 		obj.clearCache();
@@ -181,6 +226,103 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 	}
 
+	public void getPlanGenParallel() throws SQLException {
+
+		
+		System.out.println("Number of Usable threads are : "+num_of_usable_threads + " with contour locs size "+totalPoints);
+		
+		// 1. Divide the contour_locs into usable threads-1
+		
+		int step_size = totalPoints/num_of_usable_threads;
+		int cur_min_val = 0;
+		int cur_max_val =  0;
+		
+		ArrayList<PlanGeninputParamStruct> inputs = new ArrayList<PlanGeninputParamStruct>();
+		for (int j = 0; j < num_of_usable_threads ; ++j) {
+
+			cur_min_val = cur_max_val;
+			cur_max_val = cur_min_val + step_size ;
+			
+			if(j==num_of_usable_threads-1 || (totalPoints < num_of_usable_threads))
+				cur_max_val = totalPoints;
+
+			PlanGeninputParamStruct input = new PlanGeninputParamStruct(source, cur_min_val, cur_max_val - 1,this);
+			inputs.add(input);
+			
+			System.out.println(cur_min_val+"-"+(cur_max_val-1));
+			
+			if(totalPoints < num_of_usable_threads)
+				break;
+		}
+		
+		//System.out.println("after spltting");
+		// 2. execute them in parallel
+		ExecutorService service = Executors.newFixedThreadPool(num_of_usable_threads);
+	    ArrayList<Future<PlanGenOutputParamStruct>> futures = new ArrayList<Future<PlanGenOutputParamStruct>>();
+	    		
+	     for (final PlanGeninputParamStruct input : inputs) {
+	        Callable<PlanGenOutputParamStruct> callable = new Callable<PlanGenOutputParamStruct>() {
+	            public PlanGenOutputParamStruct call() throws Exception {
+	            	PlanGenOutputParamStruct output = new PlanGenOutputParamStruct();
+	            	//System.out.println("before getting the connection");
+	            	
+	            	input.getLocationDetails(apktPath, qtName, select_query, predicates, dimension, database_conn);
+	            	
+	            	//System.out.println("after getting the connection");
+	            	output.hm = input.hm;
+            		return output;
+	            }
+	        };
+		       futures.add(service.submit(callable));			   
+			    
+		}
+	     service.shutdown();
+	     //System.out.println("after shutdown of service"); 
+	     //3. aggregating the results back
+	     ArrayList<location> returning_locs = new ArrayList<location>();
+	     HashMap<Long, Integer> planHashMap = new HashMap<Long, Integer>();
+	     for (Future<PlanGenOutputParamStruct> future : futures) {
+	    	 
+		    	try {
+		    		PlanGenOutputParamStruct output = future.get();
+		    		
+		    		for(int key : output.hm.keySet()){
+		    			long hash_val = output.hm.get(key).hash_val;
+		    			int plan_number = -1;
+						if(!planHashMap.containsKey(hash_val)){
+//							if(true){
+								plan_number = planHashMap.size();
+								planHashMap.put(hash_val,plan_number);
+						}
+						else{
+								plan_number = planHashMap.get(hash_val);
+							}
+						data_new[key] = new DataValues();
+						data_new[key].setCost(output.hm.get(key).cost);
+						data_new[key].setPlanNumber(plan_number);
+						//System.out.println("Location = "+key+" with cost = "+output.hm.get(key).cost+" plan no = "+plan_number);
+		    		}
+
+				} catch (InterruptedException | ExecutionException e) {
+					
+					e.printStackTrace();
+				}
+		    	
+		    	
+	     }
+	     
+	     totalPlans = planHashMap.size();
+	     //System.out.println("after aggregation");
+	     
+	     if (conn != null) {
+				try { conn.close(); } catch (SQLException e) {}
+			}
+	     
+	  
+	     return ;//for safety check
+	} 
+
+	
 	public  void getOptimalLocationsforPlan(int p) {
 	
 		int loc = plans_list[p].plan_locs.get(0);
@@ -364,23 +506,11 @@ public void clearCache(){
 			// get the property value and print it out
 			apktPath = prop.getProperty("apktPath");
 			qtName = prop.getProperty("qtName");
-//			varyingJoins = prop.getProperty("varyingJoins");
-//
-//			JS_multiplier = new double[dimension];
-//			for(int d=0;d<dimension;d++){
-//				String multiplierStr = new String("JS_multiplier"+(d+1));
-//				JS_multiplier[d] = Double.parseDouble(prop.getProperty(multiplierStr));
-//			}
 
-			//Settings:Note dont forget to put analyze here
-			//query = "explain analyze FPC(\"lineitem\") (\"104949\")  select	supp_nation,	cust_nation,	l_year,	volume from	(select n1.n_name as supp_nation, n2.n_name as cust_nation, 	DATE_PART('YEAR',l_shipdate) as l_year,	l_extendedprice * (1 - l_discount) as volume	from	supplier, lineitem, orders, 	customer, nation n1,	nation n2 where s_suppkey = l_suppkey	and o_orderkey = l_orderkey and c_custkey = o_custkey		and s_nationkey = n1.n_nationkey and c_nationkey = n2.n_nationkey	and  c_acctbal<=10000 and l_extendedprice<=22560 ) as temp";
-			//query = "explain analyze FPC(\"catalog_sales\")  (\"150.5\") select ca_zip, cs_sales_price from catalog_sales,customer,customer_address,date_dim where cs_bill_customer_sk = c_customer_sk and c_current_addr_sk = ca_address_sk and cs_sold_date_sk = d_date_sk and ca_gmt_offset <= -7.0   and d_year <= 1900  and cs_list_price <= 150.5";
-//			query = prop.getProperty("query");
-//			query_opt_spill = prop.getProperty("query_opt_spill");
+
 			select_query = prop.getProperty("select_query");
 			predicates= prop.getProperty("predicates");
 
-//			cardinalityPath = prop.getProperty("cardinalityPath");
 
 
 			int from_clause_int_val = Integer.parseInt(prop.getProperty("FROM_CLAUSE"));
@@ -493,9 +623,9 @@ public Plan getNativePlan_84(int loc) throws SQLException {
 }
 	
 	
-	public Plan getNativePlan(int loc) throws PicassoException, IOException {
+	public Plan getNativePlan(int loc) throws PicassoException, IOException, SQLException {
 
-
+		
 
 		Vector textualPlan = new Vector();
 		StringBuilder XML_Plan = new StringBuilder();
@@ -534,7 +664,7 @@ public Plan getNativePlan_84(int loc) throws SQLException {
 //			stmt.execute("set  enable_nestloop = off");
 //			stmt.execute("set  enable_indexscan = off");
 //			stmt.execute("set  enable_bitmapscan = off");
-			//stmt.execute("set  enable_seqscan = off");
+//			//stmt.execute("set  enable_seqscan = off");
 //			stmt.execute("set  seq_page_cost = 1");
 //			stmt.execute("set  random_page_cost=4");
 //			stmt.execute("set cpu_operator_cost=0.0025");
@@ -577,39 +707,34 @@ public Plan getNativePlan_84(int loc) throws SQLException {
 		//if(PicassoConstants.saveExtraPlans == false ||  PicassoConstants.topkquery == false)
 		SwapSORTChilds(plan);
 		
-		boolean directoryComparison = false;
 		
+		//Write temp_plan
 		String path = apktPath+"planStructure_new/tempPlan.txt";
 		File fnative=new File(path);
-		//Write temp_plan
-		if(directoryComparison) {
+		try {
 			
+			FileWriter fw = new FileWriter(fnative, false);   //overwrites if the file already exists
+			for(int n=0;n<plan.getSize();n++){
+				Node node = plan.getNode(n);
+				if(node!=null && node.getId()>=0)
+					fw.write(node.getId()+","+node.getParentId()+","+node.getName()+","+node.getPredicate()+"\n");
+			}
+
+
+			fw.close();
 			
-			try {
 
-				FileWriter fw = new FileWriter(fnative, false);   //overwrites if the file already exists
-				for(int n=0;n<plan.getSize();n++){
-					Node node = plan.getNode(n);
-					if(node!=null && node.getId()>=0)
-						fw.write(node.getId()+","+node.getParentId()+","+node.getName()+","+node.getPredicate()+"\n");
-				}
-
-
-				fw.close();
-
-
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} 
-		}
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} 
 //		if(loc==17478)
 //			System.out.println("interesting");
 File plansFile = new File(apktPath+"planStructure_new");
 		
 		String[] myFiles;  
 		int nativePlan = -1;
-		
+		boolean directoryComparison = false;
 		if(plansFile.isDirectory() && directoryComparison){
 			myFiles = plansFile.list();
 			for (int hi=0; hi<myFiles.length; hi++) {
@@ -643,7 +768,6 @@ File plansFile = new File(apktPath+"planStructure_new");
 		else{
 			 planNumber = nativePlan;
 		}
-		
 			
 		plan.setPlanNo(planNumber);
 		if(planNumber == -1) {
@@ -1219,9 +1343,8 @@ File plansFile = new File(apktPath+"planStructure_new");
 		{
 			plans_list[i]=new plan(i);
 		}
-
-
 	}
+	
 	void readpkt(ADiagramPacket gdp, boolean allPlanCost) throws IOException
 	{
 		String funName="readpkt";
@@ -1231,33 +1354,20 @@ File plansFile = new File(apktPath+"planStructure_new");
 		resolution = gdp.getMaxResolution();
 		data = gdp.getData();
 		totalPoints = (int) Math.pow(resolution, dimension);
-		//System.out.println("\nthe total plans are "+totalPlans+" with dimensions "+dimension+" and resolution "+resolution);
-		int plan_no;
-		this.loadPlans();
+		System.out.println("\nthe total plans are "+totalPlans+" with dimensions "+dimension+" and resolution "+resolution);
 
+		
 		assert (totalPoints==data.length) : "Data length and the resolution didn't match !";
 
-		this.plans = new int [data.length];
-		this.OptimalCost = new double [data.length]; 
-		//	this.points_list = new point[resolution][resolution];
-		int [] index = new int[dimension];
-
-
-
-
+		plans = new int [data.length];
+		OptimalCost = new double [data.length]; 
 		for (int i = 0;i < data.length;i++)
 		{
-			index=getCoordinates(dimension,resolution,i);
-			//			points_list[index[0]][index[1]] = new point(index[0],index[1],data[i].getPlanNumber(),remainingDim);
-			//			points_list[index[0]][index[1]].putopt_cost(data[i].getCost());
 			this.OptimalCost[i]= data[i].getCost();
 			this.plans[i] = data[i].getPlanNumber();
-			plan_no = data[i].getPlanNumber();
-			plans_list[plan_no].addPoint(i);
-
-			//cat = plans_list[plan_no].getcategory(remainingDim);
 		}
-		
+
+		//To get the number of points for each plan
 		int  [] plan_count = new int[totalPlans];
 		for(int p=0;p<data.length;p++){
 			plan_count[plans[p]]++;
@@ -1265,39 +1375,6 @@ File plansFile = new File(apktPath+"planStructure_new");
 		//printing the above
 		for(int p=0;p<plan_count.length;p++){
 			System.out.println("Plan "+p+" has "+plan_count[p]+" points");
-		}
-		
-
-
-
-		//			minIndex = new double[dimension];
-		//			maxIndex = new double[dimension];
-
-		// ------------------------------------- Read pcst files
-		
-		nPlans = totalPlans;
-		if(allPlanCost){
-			AllPlanCosts = new double[nPlans][totalPoints];
-			//costBouquet = new double[total_points];
-
-			int x,y;
-			for (int i = 0; i < nPlans; i++) {
-				try {
-
-					ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath + i + ".pcst")));
-					double[] cost = (double[]) ip.readObject();
-					for (int j = 0; j < totalPoints; j++)
-					{
-
-						AllPlanCosts[i][j] = cost[j];
-					}
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
-
-
-
 		}
 
 
@@ -1410,26 +1487,49 @@ File plansFile = new File(apktPath+"planStructure_new");
 		if(resolution==100){
 
 			if(sel_distribution == 1){
-				selectivity[0] = 0.000064; 	selectivity[1] = 0.000093; 	selectivity[2] = 0.000126; 	selectivity[3] = 0.000161; 	selectivity[4] = 0.000198;
-				selectivity[5] = 0.000239; 	selectivity[6] = 0.000284; 	selectivity[7] = 0.000332; 	selectivity[8] = 0.000384; 	selectivity[9] = 0.000440;
-				selectivity[10] = 0.000501; 	selectivity[11] = 0.000567; 	selectivity[12] = 0.000638; 	selectivity[13] = 0.000716; 	selectivity[14] = 0.000800;
-				selectivity[15] = 0.000890; 	selectivity[16] = 0.000989; 	selectivity[17] = 0.001095; 	selectivity[18] = 0.001211; 	selectivity[19] = 0.001335;
-				selectivity[20] = 0.001471; 	selectivity[21] = 0.001617; 	selectivity[22] = 0.001776; 	selectivity[23] = 0.001948; 	selectivity[24] = 0.002134;
-				selectivity[25] = 0.002335; 	selectivity[26] = 0.002554; 	selectivity[27] = 0.002790; 	selectivity[28] = 0.003046; 	selectivity[29] = 0.003323;
-				selectivity[30] = 0.003624; 	selectivity[31] = 0.003949; 	selectivity[32] = 0.004301; 	selectivity[33] = 0.004683; 	selectivity[34] = 0.005096;
-				selectivity[35] = 0.005543; 	selectivity[36] = 0.006028; 	selectivity[37] = 0.006552; 	selectivity[38] = 0.007121; 	selectivity[39] = 0.007736;
-				selectivity[40] = 0.008403; 	selectivity[41] = 0.009125; 	selectivity[42] = 0.009907; 	selectivity[43] = 0.010753; 	selectivity[44] = 0.011670;
-				selectivity[45] = 0.012663; 	selectivity[46] = 0.013739; 	selectivity[47] = 0.014904; 	selectivity[48] = 0.016165; 	selectivity[49] = 0.017531;
-				selectivity[50] = 0.019011; 	selectivity[51] = 0.020613; 	selectivity[52] = 0.022348; 	selectivity[53] = 0.024228; 	selectivity[54] = 0.026263;
-				selectivity[55] = 0.028467; 	selectivity[56] = 0.030854; 	selectivity[57] = 0.033440; 	selectivity[58] = 0.036240; 	selectivity[59] = 0.039272;
-				selectivity[60] = 0.042556; 	selectivity[61] = 0.046113; 	selectivity[62] = 0.049965; 	selectivity[63] = 0.054136; 	selectivity[64] = 0.058654;
-				selectivity[65] = 0.063547; 	selectivity[66] = 0.068845; 	selectivity[67] = 0.074584; 	selectivity[68] = 0.080799; 	selectivity[69] = 0.087530;
-				selectivity[70] = 0.094819; 	selectivity[71] = 0.102714; 	selectivity[72] = 0.111263; 	selectivity[73] = 0.120523; 	selectivity[74] = 0.130550;
-				selectivity[75] = 0.141411; 	selectivity[76] = 0.153172; 	selectivity[77] = 0.165910; 	selectivity[78] = 0.179705; 	selectivity[79] = 0.194645;
-				selectivity[80] = 0.210825; 	selectivity[81] = 0.228348; 	selectivity[82] = 0.247325; 	selectivity[83] = 0.267877; 	selectivity[84] = 0.290136;
-				selectivity[85] = 0.314241; 	selectivity[86] = 0.340348; 	selectivity[87] = 0.368621; 	selectivity[88] = 0.399241; 	selectivity[89] = 0.432403;
-				selectivity[90] = 0.468316; 	selectivity[91] = 0.507211; 	selectivity[92] = 0.549334; 	selectivity[93] = 0.594953; 	selectivity[94] = 0.644359;
-				selectivity[95] = 0.697865; 	selectivity[96] = 0.755812; 	selectivity[97] = 0.818569; 	selectivity[98] = 0.886535; 	selectivity[99] = 0.990142;
+//				this was used for spillbound				
+//				selectivity[0] = 0.000064; 	selectivity[1] = 0.000093; 	selectivity[2] = 0.000126; 	selectivity[3] = 0.000161; 	selectivity[4] = 0.000198;
+//				selectivity[5] = 0.000239; 	selectivity[6] = 0.000284; 	selectivity[7] = 0.000332; 	selectivity[8] = 0.000384; 	selectivity[9] = 0.000440;
+//				selectivity[10] = 0.000501; 	selectivity[11] = 0.000567; 	selectivity[12] = 0.000638; 	selectivity[13] = 0.000716; 	selectivity[14] = 0.000800;
+//				selectivity[15] = 0.000890; 	selectivity[16] = 0.000989; 	selectivity[17] = 0.001095; 	selectivity[18] = 0.001211; 	selectivity[19] = 0.001335;
+//				selectivity[20] = 0.001471; 	selectivity[21] = 0.001617; 	selectivity[22] = 0.001776; 	selectivity[23] = 0.001948; 	selectivity[24] = 0.002134;
+//				selectivity[25] = 0.002335; 	selectivity[26] = 0.002554; 	selectivity[27] = 0.002790; 	selectivity[28] = 0.003046; 	selectivity[29] = 0.003323;
+//				selectivity[30] = 0.003624; 	selectivity[31] = 0.003949; 	selectivity[32] = 0.004301; 	selectivity[33] = 0.004683; 	selectivity[34] = 0.005096;
+//				selectivity[35] = 0.005543; 	selectivity[36] = 0.006028; 	selectivity[37] = 0.006552; 	selectivity[38] = 0.007121; 	selectivity[39] = 0.007736;
+//				selectivity[40] = 0.008403; 	selectivity[41] = 0.009125; 	selectivity[42] = 0.009907; 	selectivity[43] = 0.010753; 	selectivity[44] = 0.011670;
+//				selectivity[45] = 0.012663; 	selectivity[46] = 0.013739; 	selectivity[47] = 0.014904; 	selectivity[48] = 0.016165; 	selectivity[49] = 0.017531;
+//				selectivity[50] = 0.019011; 	selectivity[51] = 0.020613; 	selectivity[52] = 0.022348; 	selectivity[53] = 0.024228; 	selectivity[54] = 0.026263;
+//				selectivity[55] = 0.028467; 	selectivity[56] = 0.030854; 	selectivity[57] = 0.033440; 	selectivity[58] = 0.036240; 	selectivity[59] = 0.039272;
+//				selectivity[60] = 0.042556; 	selectivity[61] = 0.046113; 	selectivity[62] = 0.049965; 	selectivity[63] = 0.054136; 	selectivity[64] = 0.058654;
+//				selectivity[65] = 0.063547; 	selectivity[66] = 0.068845; 	selectivity[67] = 0.074584; 	selectivity[68] = 0.080799; 	selectivity[69] = 0.087530;
+//				selectivity[70] = 0.094819; 	selectivity[71] = 0.102714; 	selectivity[72] = 0.111263; 	selectivity[73] = 0.120523; 	selectivity[74] = 0.130550;
+//				selectivity[75] = 0.141411; 	selectivity[76] = 0.153172; 	selectivity[77] = 0.165910; 	selectivity[78] = 0.179705; 	selectivity[79] = 0.194645;
+//				selectivity[80] = 0.210825; 	selectivity[81] = 0.228348; 	selectivity[82] = 0.247325; 	selectivity[83] = 0.267877; 	selectivity[84] = 0.290136;
+//				selectivity[85] = 0.314241; 	selectivity[86] = 0.340348; 	selectivity[87] = 0.368621; 	selectivity[88] = 0.399241; 	selectivity[89] = 0.432403;
+//				selectivity[90] = 0.468316; 	selectivity[91] = 0.507211; 	selectivity[92] = 0.549334; 	selectivity[93] = 0.594953; 	selectivity[94] = 0.644359;
+//				selectivity[95] = 0.697865; 	selectivity[96] = 0.755812; 	selectivity[97] = 0.818569; 	selectivity[98] = 0.886535; 	selectivity[99] = 0.990142;
+
+				//this is used for onlinePB
+				selectivity[0] = 0.0001035f; 	selectivity[1] = 0.0001111f; 	selectivity[2] = 0.0001194f; 	selectivity[3] = 0.0001286f; 	selectivity[4] = 0.0001387f; 	
+				selectivity[5] = 0.0001499f; 	selectivity[6] = 0.0001621f; 	selectivity[7] = 0.0001756f; 	selectivity[8] = 0.0001904f; 	selectivity[9] = 0.0002067f; 	
+				selectivity[10] = 0.0002246f; 	selectivity[11] = 0.0002443f; 	selectivity[12] = 0.0002660f; 	selectivity[13] = 0.0002899f; 	selectivity[14] = 0.0003161f; 	
+				selectivity[15] = 0.0003450f; 	selectivity[16] = 0.0003767f; 	selectivity[17] = 0.0004117f; 	selectivity[18] = 0.0004501f; 	selectivity[19] = 0.0004924f; 	
+				selectivity[20] = 0.0005389f; 	selectivity[21] = 0.0005900f; 	selectivity[22] = 0.0006463f; 	selectivity[23] = 0.0007081f; 	selectivity[24] = 0.0007762f; 	
+				selectivity[25] = 0.0008511f; 	selectivity[26] = 0.0009334f; 	selectivity[27] = 0.0010240f; 	selectivity[28] = 0.0011237f; 	selectivity[29] = 0.0012333f; 	
+				selectivity[30] = 0.0013539f; 	selectivity[31] = 0.0014866f; 	selectivity[32] = 0.0016325f; 	selectivity[33] = 0.0017930f; 	selectivity[34] = 0.0019695f; 	
+				selectivity[35] = 0.0021638f; 	selectivity[36] = 0.0023774f; 	selectivity[37] = 0.0026124f; 	selectivity[38] = 0.0028709f; 	selectivity[39] = 0.0031552f; 	
+				selectivity[40] = 0.0034680f; 	selectivity[41] = 0.0038121f; 	selectivity[42] = 0.0041905f; 	selectivity[43] = 0.0046068f; 	selectivity[44] = 0.0050648f; 	
+				selectivity[45] = 0.0055685f; 	selectivity[46] = 0.0061226f; 	selectivity[47] = 0.0067321f; 	selectivity[48] = 0.0074026f; 	selectivity[49] = 0.0081401f; 	
+				selectivity[50] = 0.0089514f; 	selectivity[51] = 0.0098438f; 	selectivity[52] = 0.0108254f; 	selectivity[53] = 0.0119052f; 	selectivity[54] = 0.0130930f; 	
+				selectivity[55] = 0.0143996f; 	selectivity[56] = 0.0158368f; 	selectivity[57] = 0.0174177f; 	selectivity[58] = 0.0191567f; 	selectivity[59] = 0.0210696f; 	
+				selectivity[60] = 0.0231739f; 	selectivity[61] = 0.0254885f; 	selectivity[62] = 0.0280346f; 	selectivity[63] = 0.0308353f; 	selectivity[64] = 0.0339161f; 	
+				selectivity[65] = 0.0373050f; 	selectivity[66] = 0.0410328f; 	selectivity[67] = 0.0451333f; 	selectivity[68] = 0.0496439f; 	selectivity[69] = 0.0546055f; 	
+				selectivity[70] = 0.0600633f; 	selectivity[71] = 0.0660669f; 	selectivity[72] = 0.0726709f; 	selectivity[73] = 0.0799352f; 	selectivity[74] = 0.0879260f; 	
+				selectivity[75] = 0.0967158f; 	selectivity[76] = 0.1063847f; 	selectivity[77] = 0.1170204f; 	selectivity[78] = 0.1287197f; 	selectivity[79] = 0.1415889f; 	
+				selectivity[80] = 0.1557451f; 	selectivity[81] = 0.1713168f; 	selectivity[82] = 0.1884458f; 	selectivity[83] = 0.2072876f; 	selectivity[84] = 0.2280136f; 	
+				selectivity[85] = 0.2508122f; 	selectivity[86] = 0.2758907f; 	selectivity[87] = 0.3034770f; 	selectivity[88] = 0.3338220f; 	selectivity[89] = 0.3672014f; 	
+				selectivity[90] = 0.4039188f; 	selectivity[91] = 0.4443080f; 	selectivity[92] = 0.4887360f; 	selectivity[93] = 0.5376069f; 	selectivity[94] = 0.5913649f; 	
+				selectivity[95] = 0.6504986f; 	selectivity[96] = 0.7155457f; 	selectivity[97] = 0.7870975f; 	selectivity[98] = 0.8658045f; 	selectivity[99] = 0.9523823f; 	
 
 			}
 			else if(sel_distribution == 0){
@@ -1728,5 +1828,68 @@ File plansFile = new File(apktPath+"planStructure_new");
 
 }
 
+class CostHashValue{
+		double cost;
+		long hash_val;
+		
+		CostHashValue(double cost, long hv){
+			this.cost = cost;
+			this.hash_val = hv;
+		}
+}
+	
+	
+	class PlanGeninputParamStruct {
+		
+		Jdbc3PoolingDataSource source;
+		String apktPath, qtName, select_query, predicates;
+		HashMap<Integer,CostHashValue> hm = new HashMap<Integer,CostHashValue>();
+		int dimension, database_conn;
+		int min_val, max_val;
+		 Connection conn;
+		 PlanGen pg;
+		 
+		public PlanGeninputParamStruct( Jdbc3PoolingDataSource source, int min_val, int max_val, PlanGen obj) throws SQLException {
+			this.source = source;
+			this.min_val = min_val;
+			this.max_val = max_val;
+			pg = obj;
+		}
+		
+		public void getLocationDetails(String apktPath, String qtName, String select_query, String predicates, int dimension, int database_conn) throws SQLException, IOException, PicassoException{
+			if(apktPath!= null && qtName!= null && predicates!= null && select_query!=null){ 
+				this.apktPath = apktPath;
+				this.qtName = qtName;
+				this.select_query = select_query;
+				this.predicates = predicates;
+				this.dimension = dimension;
+				this.database_conn = database_conn;
+			}
+				
+			conn = source.getConnection();
+			
+			for(int i =min_val; i<= max_val; i++) {
+				
+				int sel_int_arr [] =  pg.getCoordinates(dimension, pg.resolution, i);
+				double sel_arr [] = new double[dimension];
+				for(int j=0; j < dimension; j++)
+					sel_arr[j] = pg.selectivity[sel_int_arr[j]];
+				location loc = new location(sel_arr, pg, conn);
+				CostHashValue chv = new CostHashValue(loc.opt_cost,loc.plan.getHash());
+				System.out.println(i+","+(int)chv.cost+","+chv.hash_val);
+				hm.put(i, chv);
+			}
+			
+			if (conn != null) {
+				try { conn.close(); } catch (SQLException e) {}
+			}
+		}
+		
+		
+	}
+	
+	class PlanGenOutputParamStruct {
+		HashMap<Integer,CostHashValue> hm;
+	}
 
 
