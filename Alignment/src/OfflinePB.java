@@ -108,6 +108,7 @@ public class OfflinePB
 	static String select_query;
 	static String predicates;
 	static int database_conn=1;
+	static boolean loadAllPlanCosts = true;
 	
 	static Vector<Plan> plans_vector = new Vector<Plan>();
 	
@@ -129,7 +130,7 @@ public class OfflinePB
 	 static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	 static HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
 	 static HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
-	 static HashMap<Integer,Double> minContourCostMap = new HashMap<Integer,Double>();
+	 static HashMap<Integer,Float> minContourCostMap = new HashMap<Integer,Float>();
 	 static double learning_cost = 0;
 	 static boolean done = false;
 
@@ -148,10 +149,14 @@ public class OfflinePB
 	 static int decimalPrecision = 6;
 	 static float alpha = 2;
 	 static boolean contoursReadFromFile = false;
-	 static boolean nexus_bcg = true;
+	 static boolean nexus_bcg = false;
 	 static float minimum_selectivity = 0.0001f;
 	 static int location_hits =0;
 	 static int explore_seed_count =0;
+	 static boolean using_packets = true;
+	 static float lambda = 20;
+	 static boolean trie = false;
+	 static online_vertex root;
 	 
 	public static void main(String args[]) throws IOException, SQLException, PicassoException, ClassNotFoundException
 	{
@@ -162,15 +167,15 @@ public class OfflinePB
 		//String pktPath = apktPath + qtName + ".apkt" ;
 		System.out.println("Query Template: "+qtName);
 		
-		
+		File f_marwa = new File("/home/dsladmin/marwa");
 		ADiagramPacket gdp = obj.getGDP(new File(pktPath));
 		
-		
-
 		//ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
 
 		//Settings
 		//Populate the OptimalCost Matrix.
+		
+		root = new online_vertex(-1,false,null);
 		
 		obj.readpkt(gdp);
 		
@@ -203,10 +208,18 @@ public class OfflinePB
 								"sa", "database");
 			}
 			else{
+				if(f_marwa.exists() && !f_marwa.isDirectory()) { 
 				System.out.println("entered DB tpcds");
 				conn = DriverManager
-						.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+						.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
 								"sa", "database");
+				}
+				else{
+					System.out.println("entered DB tpcds");
+					conn = DriverManager
+							.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+									"sa", "database");
+				}
 			}
 			System.out.println("Opened database successfully");
 		}
@@ -215,6 +228,15 @@ public class OfflinePB
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 
+		//just to initialize the static variable of location object
+		location loc = new location();
+		loc.dimension = obj.dimension;
+		loc.select_query = new String(obj.select_query);
+		loc.predicates  = new String(obj.predicates);
+		loc.database_conn = obj.database_conn;
+		loc.apktPath = obj.apktPath;
+		loc.decimalPrecision = obj.decimalPrecision;
+		
 		int i;
 		double h_cost, min_cost; 
 		
@@ -223,10 +245,15 @@ public class OfflinePB
 			int [] h_loc_arr = {resolution-1,resolution-1};
 			location h_loc = new location(obj.convertIndextoSelectivity(h_loc_arr),obj);
 			h_cost = h_loc.get_cost();
+			if(trie)
+				obj.addLocationtoGraph(h_loc);
 			
 			int [] l_loc_arr = {0,0};
 			location l_loc = new location(obj.convertIndextoSelectivity(l_loc_arr),obj);
 			min_cost = l_loc.get_cost();
+			if(trie)
+				obj.addLocationtoGraph(l_loc);
+
 		}
 		else{
 			int [] h_loc_arr = new int[obj.dimension];
@@ -236,12 +263,18 @@ public class OfflinePB
 				l_loc_arr[d] = 0;
 			}
 			location h_loc = new location(obj.convertIndextoSelectivity(h_loc_arr),obj);
+			if(trie)
+				obj.addLocationtoGraph(h_loc);
 			h_cost = h_loc.get_cost();
 						
 			location l_loc = new location(obj.convertIndextoSelectivity(l_loc_arr),obj);
+			if(trie)
+				obj.addLocationtoGraph(l_loc);
 			min_cost = l_loc.get_cost();
 		}
 			
+		
+		
 		double ratio = h_cost/min_cost;
 	//	System.out.println("-------------------------  ------\n"+qtName+"    alpha="+alpha+"\n-------------------------  ------"+"\n"+"Highest Cost ="+h_cost+", \nRatio of highest cost to lowest cost ="+ratio);
 		System.out.println("the ratio of C_max/c_min is "+ratio);
@@ -258,12 +291,10 @@ public class OfflinePB
 		if(contoursReadFromFile && ContoursFile.exists()){
 			obj.readContourPointsFromFile(false);
 		}
-
 		else
 		{	
 			while(cost < 2*h_cost)
 			{
-
 				if(cost>h_cost)
 					cost = h_cost;
 				System.out.println("---------------------------------------------------------------------------------------------\n");
@@ -272,7 +303,18 @@ public class OfflinePB
 				all_contour_points.clear();
 
 				obj.nexusAlgoContour(cost); 
+				
+				for(location l: all_contour_points){
+					if(minContourCostMap.containsKey(i) && l.get_cost()<minContourCostMap.get(i)){
+						minContourCostMap.remove(i);
+						minContourCostMap.put(i, l.get_cost());
+					}
+					else if(!minContourCostMap.containsKey(i))
+						minContourCostMap.put(i, l.get_cost());
 
+					l.set_contour_no(i);
+				}
+				
 				if(visualisation_2D)
 					writeContourPointstoFile(i);
 				System.out.println("The running optimization calls are "+opt_calls);
@@ -286,9 +328,14 @@ public class OfflinePB
 			System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
 			System.out.println("The location hits are "+location_hits);
 			System.out.println("The explore see count hits are "+explore_seed_count);
-			System.exit(0);
+			
 
 		}
+		
+		obj.ContourCentricCostGreedy(-1);
+		
+		System.exit(0);
+		
 		/*
 		 * running the plan bouquet algorithm 
 		 */
@@ -503,19 +550,23 @@ public class OfflinePB
 		 * had the same plan. If so, no need to open the .../predicateOrder/plan.txt again
 		 */
 
-		leftInfo = locationAlreadyExist(convertIndextoSelectivity(left));
+		leftInfo = locationAlreadyExist(left);
 		
 		if(leftInfo == null){
 			leftInfo = new location(convertIndextoSelectivity(left),this);
+			if(trie)
+				addLocationtoGraph(leftInfo);
 			opt_calls++;
 		}
 		double leftCost = leftInfo.get_cost();
 		
 		
-		rightInfo = locationAlreadyExist(convertIndextoSelectivity(right));
+		rightInfo = locationAlreadyExist(right);
 		
 		if(rightInfo == null){
 			rightInfo = new location(convertIndextoSelectivity(right),this);
+			if(trie)
+				addLocationtoGraph(rightInfo);
 			opt_calls++;
 		}
 		double rightCost = rightInfo.get_cost(); 
@@ -528,9 +579,11 @@ public class OfflinePB
 			leftCost = rightCost;
 			right[--d] = resolution-1;
 
-			rightInfo = locationAlreadyExist(convertIndextoSelectivity(right));			
+			rightInfo = locationAlreadyExist(right);			
 			if(rightInfo == null){
 				rightInfo = new location(convertIndextoSelectivity(right),this);
+				if(trie)
+					addLocationtoGraph(rightInfo);
 				opt_calls++;
 			}
 			rightCost = rightInfo.get_cost(); 
@@ -550,10 +603,12 @@ public class OfflinePB
 			}
 			else
 			{
-				midInfo = locationAlreadyExist(convertIndextoSelectivity(mid));
+				midInfo = locationAlreadyExist(mid);
 				
 				if(midInfo == null){
 					midInfo = new location(convertIndextoSelectivity(mid),this);
+					if(trie)
+						addLocationtoGraph(midInfo);
 					opt_calls++;
 				}
 				midCost = midInfo.get_cost();
@@ -626,9 +681,11 @@ public class OfflinePB
 			{					
 				location seedInfo;
 				
-				seedInfo = locationAlreadyExist(convertIndextoSelectivity(candidate2_coords));
+				seedInfo = locationAlreadyExist(candidate2_coords);
 				if(seedInfo == null){
 					seedInfo =  new location(convertIndextoSelectivity(candidate2_coords),this);
+					if(trie)
+						addLocationtoGraph(seedInfo);
 					opt_calls++;
 					explore_seed_count ++;
 				}
@@ -650,16 +707,20 @@ public class OfflinePB
 
 			// get cost of candidate locations
 			location cand1Info, cand2Info;
-			cand1Info = locationAlreadyExist(convertIndextoSelectivity(candidate1_coords));
+			cand1Info = locationAlreadyExist(candidate1_coords);
 			if(cand1Info == null){
 				cand1Info = new location(convertIndextoSelectivity(candidate1_coords), this);
+				if(trie)
+					addLocationtoGraph(cand1Info);
 				opt_calls ++;
 				explore_seed_count ++;
 			}
 			
-			cand2Info = locationAlreadyExist(convertIndextoSelectivity(candidate2_coords));
+			cand2Info = locationAlreadyExist(candidate2_coords);
 			if(cand2Info == null){
 				cand2Info = new location(convertIndextoSelectivity(candidate2_coords),this);
+				if(trie)
+					addLocationtoGraph(cand2Info);
 				opt_calls ++;
 				explore_seed_count ++;
 			}
@@ -1269,7 +1330,8 @@ private float[] convertIndextoSelectivity(int[] point_Index) {
 		point_selec[d] = selectivity[point_Index[d]];
 	return point_selec;
 }
-private int[] convertSelectivitytoIndex (float[] point_sel) {
+
+public int[] convertSelectivitytoIndex (float[] point_sel) {
 	
 	String funName = "convertSelectivitytoIndex";
 	
@@ -1285,11 +1347,6 @@ public void initialize(int location) {
 
 	String funName = "intialize";
 
-	//updating the remaining dimensions data structure
-	remainingDim.clear();
-	for(int i=0;i<dimension;i++)
-		remainingDim.add(i);
-	
 	learning_cost = 0;
 	done = false;
 	//updating the actual selectivities for each of the dimensions
@@ -1298,12 +1355,7 @@ public void initialize(int location) {
 	actual_sel = new float[dimension];
 	for(int i=0;i<dimension;i++){
 		actual_sel[i] = selectivity[index[i]];
-	}
-	
-	
-	//sanity check conditions
-	assert(remainingDim.size() == dimension): funName+"ERROR: mismatch in remaining Dimensions";
-	
+	}	
 	
 }
 
@@ -1341,8 +1393,6 @@ public void initialize(int location) {
 	}
 
 	
-	
-	
 	private location planVisited(int plan_no) {
 
 		String funName = "planVisited";
@@ -1355,17 +1405,20 @@ public void initialize(int location) {
 		return null;
 	}
 
-	private location locationAlreadyExist(float[] arr) {
+	private location locationAlreadyExist(int[] arr) {
 		//TODO: need to test this
 		if(!memoization)
 			return null;
 
+		if(trie)
+			return searchLocationInGraph(arr);
+		
 		boolean flag = false;
 		for(int c = 1; c<=ContourPointsMap.keySet().size(); c++){
 			for(location loc: ContourPointsMap.get(c)){
 				flag = true;
 				for(int i=0;i<dimension;i++){
-					if(Math.abs(loc.get_dimension(i) - arr[i]) > 0.0001){
+					if(Math.abs(loc.get_dimension(i) - selectivity[arr[i]]) > 0.00001){
 						flag = false;
 						break;
 					}
@@ -1378,7 +1431,106 @@ public void initialize(int location) {
 		}
 		return null;
 }
+	
 
+	void addLocationtoGraph(location loc){
+
+		//System.out.println("["+min_cc_sel_idx+"-"+max_cc_sel_idx+"]");
+		online_vertex crawl = root;
+		
+		// Traverse through all characters of given word
+		for( int level = 0; level < dimension; level++)
+		{
+			HashMap<Integer,online_vertex> child = crawl.getChildern();
+
+			int val = findNearestPoint(loc.dim_values[level]);
+
+			// If there is no such child for current character of given word
+			if( (child == null) || !child.containsKey(val)){ // create a child
+				
+				online_vertex temp;
+
+				if(level == dimension - 1) //then this is a leaf node
+                    temp = new online_vertex(val, true, loc);
+                else
+                    temp = new online_vertex(val, false, null);
+				
+				if(child == null)
+					child = new HashMap<Integer,online_vertex>();
+				
+				child.put( val, temp );
+				
+				if(crawl.getChildern() == null)
+					crawl.setChildern(child);
+				
+				crawl = temp;
+			}
+			else   
+			{	
+				crawl = child.get(val);
+			}
+		}
+	}
+	
+	location searchLocationInGraph(int [] arr){
+
+		long startTime = System.nanoTime();
+		long endTime;
+		assert(arr.length == dimension) : "location dim values not matching";
+		
+		online_vertex crawl;
+		
+		crawl = root;
+
+//		if((Math.abs(arr[0] - 0.004033) < 0.000001f) && (Math.abs(arr[1] - 3.77E-4) < 0.000001f) && (Math.abs(arr[2] - 1.0) < 0.00001f)  )
+//			System.out.println("Option = "+option+" [ "+min_cc_sel_idx+"-"+max_cc_sel_idx+"]"+arr[0]+","+arr[1]+","+arr[2]+" searching location from graph");
+
+		// Traverse through all characters of given word
+		for( int level = 0; level < dimension; level++)
+		{
+			if(crawl == null)
+				System.out.println("null crawl");
+			HashMap<Integer,online_vertex> child = crawl.getChildern();
+			
+			int val = arr[level];
+			
+			if(child == null){
+				endTime = System.nanoTime();
+				return null;
+			}
+			
+			if( child.containsKey(val))
+				crawl = child.get(val);
+			else   // Else create a child
+			{
+				endTime = System.nanoTime();
+				return null;
+			}
+
+//			for(int itr = val; itr <=val; itr++){
+//				// If there is already a child for current character of given word
+//				if( child.containsKey(itr)){
+//					crawl = child.get(itr);
+//					break;
+//				}
+//				else   
+//				{
+//					if(itr == val+1){
+//						endTime = System.nanoTime();
+//						location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+//						return null;
+//					}
+//				}
+//			}
+	}
+		if(crawl.loc == null){
+			System.out.println("the crawl location is null");
+		}
+		assert(crawl.loc != null): "crawl.loc is null which should not be the case";
+		endTime = System.nanoTime();
+		location_hits ++;
+		return crawl.loc;
+	}
 	
 	
 	// Function which does binary search to find the actual point !!
@@ -1393,7 +1545,7 @@ public void initialize(int location) {
 		for(i=0;i<resolution;i++)
 		{
 			diff = mid - selectivity[i];
-			if(diff <= 0f)
+			if(diff <= 0.00000001f)
 			{
 				return_index = i;
 				break;
@@ -1415,7 +1567,7 @@ public void initialize(int location) {
 			for(i=0;i<resolution;i++)
 			{
 				diff = mid - selectivity[i];
-				if(diff <= 0)
+				if(diff <= 0.00000001f)
 				{
 					return_index = i;
 					break;
@@ -1465,7 +1617,28 @@ public void initialize(int location) {
 			for(int p=0;p<plan_count.length;p++){
 				System.out.println("Plan "+p+" has "+plan_count[p]+" points");
 			}
+			
+			if(loadAllPlanCosts){
+				// ------------------------------------- Read pcst files
+				nPlans = totalPlans;
+				AllPlanCosts = new double[nPlans][totalPoints];
+				//costBouquet = new double[total_points];
+				for (int i = 0; i < nPlans; i++) {
+					try {
 
+						ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"pcstFiles/"+ i + ".pcst")));
+						double[] cost = (double[]) ip.readObject();
+						for (int j = 0; j < totalPoints; j++)
+						{
+
+							AllPlanCosts[i][j] = cost[j];
+						}
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				}
+
+			}
 		}
 
 	
@@ -1769,6 +1942,220 @@ public void initialize(int location) {
 		int index = getIndex(arr,resolution);
 		return plans[index];
 	}
+	
+	
+	private void ContourCentricCostGreedy(int contour_no) throws SQLException
+	{
+		ArrayList<location> contour_locs = new ArrayList<location>();
+		
+		if(contour_no == -1){
+			//get all the location of all the contours
+			
+			for(int i=1; i<=ContourPointsMap.size();i++) {
+					if(ContourPointsMap.containsKey(i))
+				contour_locs.addAll(ContourPointsMap.get(i));
+					
+					//intensionally not trying to cover non_contour points because 
+					//1. costgreedy is taking time as no. of fpc calls are |contour_locs|*|plans|
+					//2. |contour_locs| drastically if it is just covering contour
+					//3. quality of reduction also might improve
+					
+//					if(non_ContourPointsMap.containsKey(i))
+//				contour_locs.addAll(non_ContourPointsMap.get(i));
+			}
+		}
+		else{
+			contour_locs.addAll(ContourPointsMap.get(contour_no));
+//			contour_locs.addAll(non_ContourPointsMap.get(contour_no));
+		}
+		
+		int[] index = new int[dimension];
+		
+		//get the POSP count for the query
+		int originalPlanCnt = new File(apktPath+"planStructureXML").listFiles().length ;
+		int plansArray[] = new int[originalPlanCnt];
+		HashSet<Integer> chosenPlanSet = new HashSet<Integer>();
+		int remainingSpace = 0;
+
+		Iterator iter;
+		int ix;
+
+		System.out.println(" < contour plans reduction > ");
+
+		ix = 0;
+		while(ix < originalPlanCnt)
+		{
+			plansArray[ix] = ix;
+			ix++;
+		}
+
+		iter = contour_locs.iterator();
+		while(iter.hasNext())
+		{
+			location loc = (location)iter.next();
+			loc.is_within_threshold = new boolean[originalPlanCnt];
+			loc.reduced_planNumber = -1;
+			remainingSpace++;
+		}
+
+		String newQuery;
+		Plan plan = null;
+		int countCoverageLocations[];
+		int total = remainingSpace;int outerForLoopCnt =0;
+		int maxCoverage = -1;
+		iter = contour_locs.iterator();
+		
+		while(remainingSpace > 0)
+		{
+			countCoverageLocations = new int[originalPlanCnt];
+
+			outerForLoopCnt++;
+			
+			iter = contour_locs.iterator();
+			while(iter.hasNext())
+			{	
+				location objContourPt = (location) iter.next();
+				if(objContourPt.reduced_planNumber != -1)
+					continue;
+				
+//				conn = source.getConnection();
+				for (int i=0; i<originalPlanCnt; i++)
+				{
+					int cnt = 0;
+					
+					assert(objContourPt.reduced_planNumber == -1) : "should not come here";
+						
+					
+					double foreign_cost = fpc_cost_generic(convertSelectivitytoIndex(objContourPt.dim_values), i);
+					
+					assert(foreign_cost > 0): "getFPCParallel is not working: less than zero cost";
+					
+//					double cst = getFPCCost(objContourPt.dim_values, i);
+//					assert(Math.abs(foreign_cost - cst) < 0.000001 ) : "getFPCParallel is not working: not same cost: foreign_cost = "+foreign_cost+" cst = "+cst;
+
+					if(foreign_cost < (1 + (lambda/100.0)) * objContourPt.opt_cost)
+					{
+						objContourPt.is_within_threshold[i] = true;
+						countCoverageLocations[i] += 1;
+						if(maxCoverage < countCoverageLocations[i])
+						{
+							maxCoverage = countCoverageLocations[i];
+							if(contour_no!=-1) {
+								double perc = (((double)maxCoverage/(double)total)*100.0);
+							}
+						}
+					}
+					
+					//objContourPt.fpc_cost = Double.MIN_VALUE;
+				}
+//				 if (conn != null) {
+//						try { conn.close(); } catch (SQLException e) {}
+//					}
+				
+				
+			}
+
+			//System.out.println("Finished step 1");
+			//2.find the plan that covers max area
+			maxCoverage = 0;
+			int maxCoveragePlan = -1;
+			int maxCoveragePlanIndex = -1;
+			
+			for (int i = 0; i < originalPlanCnt; i++)
+			{
+				if(maxCoverage < countCoverageLocations[i])
+				{
+					maxCoverage = countCoverageLocations[i];
+					maxCoveragePlanIndex = i;
+					maxCoveragePlan = plansArray[i];
+				}
+			}
+			if(maxCoveragePlan == -1)
+				break;
+
+			//3.remember the plan that covers max area & update the remaining space
+			chosenPlanSet.add(maxCoveragePlan);
+			remainingSpace -= countCoverageLocations[maxCoveragePlanIndex];			
+
+
+			//4. update reduced plan # of all locations where picked plan is lambda-optimal
+			iter = contour_locs.iterator();
+			while(iter.hasNext())
+			{
+				location objContourPt = (location)iter.next();
+				if(objContourPt.is_within_threshold[maxCoveragePlanIndex] == true)
+				{
+					objContourPt.reduced_planNumber = maxCoveragePlan;	
+				}
+			}
+		}
+		
+			System.out.println("After Reduction:");
+		
+			HashMap<Integer,HashSet<Integer>> contourPlansReduced = new HashMap<Integer,HashSet<Integer>>();
+		// update what plans are in which contour
+			HashSet<Integer> reducedPlansSet = new HashSet<Integer>();
+			
+			if(contour_no == -1){
+				for (int k = 1; k <= ContourPointsMap.size(); k++) {
+					reducedPlansSet.clear();
+					iter = ContourPointsMap.get(k).iterator();
+					while (iter.hasNext()) {
+						location objContourPt = (location) iter.next();
+						if (!reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
+							reducedPlansSet.add(objContourPt.reduced_planNumber);
+						}
+					}
+
+					//				@SuppressWarnings("rawtypes")
+					//				Iterator it = reducedPlansSet.iterator();
+					//				while (it.hasNext()) {
+					//					int p = (Short) it.next();
+					//					contourPlansReduced.get(k).add(p);
+					//				}
+					contourPlansReduced.put(k, reducedPlansSet);
+
+					System.out.println("Contour"+k+" = "+reducedPlansSet.size());
+				}
+			}
+			else{				
+					reducedPlansSet.clear();
+					iter = ContourPointsMap.get(contour_no).iterator();
+					while (iter.hasNext()) {
+						location objContourPt = (location) iter.next();
+						if (!reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
+							reducedPlansSet.add(objContourPt.reduced_planNumber);
+						}
+					}
+					contourPlansReduced.put(contour_no, reducedPlansSet);
+					System.out.println("Contour"+contour_no+" = "+reducedPlansSet.size());
+			}
+			
+			//following snippet required for making sure that certain static variables are fine.
+			location loc  = new location();
+			loc.apktPath = apktPath;
+			loc.select_query = this.select_query;
+			loc.predicates = this.predicates;
+			loc.dimension = this.dimension;
+
+//			if(writeMapstoFile)
+//				writeMaptoFile(true);
+			
+			
+			Iterator itr = ContourPointsMap.keySet().iterator();
+			while(itr.hasNext()){
+				Integer key = (Integer)itr.next();
+				for(int pt =0;pt<ContourPointsMap.get(key).size();pt++){
+					location p = ContourPointsMap.get(key).get(pt);
+					if(p.get_contour_no() != key.intValue())
+						//System.out.println("problem");
+					assert(p.get_contour_no() == key.intValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
+				}
+			}
+			
+		}
+	
+
 	
 	public ADiagramPacket cgFpc(double threshold, ADiagramPacket gdp, String apktPath) throws IOException {
 

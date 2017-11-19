@@ -88,8 +88,8 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		
 		
 		obj.loadPropertiesFile();
-		String pktPath = apktPath + qtName + "_new9.4_megh.apkt" ;
-		String pktPath_new = apktPath + qtName + "_new9.4_parallel.apkt";
+		String pktPath = apktPath + qtName + "_new9.4.apkt" ;
+		String pktPath_new = apktPath + qtName + "_new9.4_R"+resolution+".apkt";
 		//obj.validateApktFiles(pktPath, pktPath_new);
 		//System.exit(1);
 		//System.out.println("Query Template: "+QTName);
@@ -102,6 +102,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		obj.readpkt(gdp, false);
 		obj.loadPropertiesFile();
 		obj.loadSelectivity();
+		totalPoints = (int) Math.pow(resolution, dimension);
 		
 		num_of_usable_threads = (int) ( Runtime.getRuntime().availableProcessors()*1.0);
 		try{
@@ -139,6 +140,13 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 			source.setUser("sa");
 			source.setPassword("database");
 			
+			location loc = new location();
+			loc.dimension = obj.dimension;
+			loc.select_query = new String(obj.select_query);
+			loc.predicates  = new String(obj.predicates);
+			loc.database_conn = obj.database_conn;
+			loc.apktPath = obj.apktPath;
+			
 			if(single_thread)
 				source.setMaxConnections(1);
 			else
@@ -167,7 +175,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 				data_new[i] = new DataValues();
 				data_new[i].setCost(cost);
 				data_new[i].setPlanNumber(p_no);
-				System.out.println(i+","+(int)cost+","+p.getHash());
+				//System.out.println(i+","+(int)cost+","+p.getHash());
 			}
 			
 			if (obj.conn != null) {
@@ -185,7 +193,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		try
 		{
 //			String fName = PicassoConstants.SAVE_PATH + "packets"+ System.getProperty("file.separator")	+ sqp.getQueryName() + ".apkt";
-			String fName = apktPath + qtName  + "_new9.4_parallel.apkt";		
+			String fName = apktPath + qtName + "_new9.4_R"+resolution+".apkt";		
 			FileOutputStream fis = new FileOutputStream (fName);
 			ObjectOutputStream ois;				
 			ois = new ObjectOutputStream (fis);			
@@ -510,8 +518,8 @@ public void clearCache(){
 
 			select_query = prop.getProperty("select_query");
 			predicates= prop.getProperty("predicates");
-
-
+			resolution = Integer.parseInt(prop.getProperty("resolution"));
+			
 
 			int from_clause_int_val = Integer.parseInt(prop.getProperty("FROM_CLAUSE"));
 
@@ -1876,7 +1884,7 @@ class CostHashValue{
 					sel_arr[j] = pg.selectivity[sel_int_arr[j]];
 				location loc = new location(sel_arr, pg, conn);
 				CostHashValue chv = new CostHashValue(loc.opt_cost,loc.plan.getHash());
-				System.out.println(i+","+(int)chv.cost+","+chv.hash_val);
+				//System.out.println(i+","+(int)chv.cost+","+chv.hash_val);
 				hm.put(i, chv);
 			}
 			

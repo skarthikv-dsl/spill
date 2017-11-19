@@ -43,7 +43,6 @@ import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 
@@ -211,6 +210,15 @@ public class onlinePB {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 		
+		location loc = new location();
+		loc.dimension = obj.dimension;
+		loc.select_query = new String(obj.select_query);
+		loc.predicates  = new String(obj.predicates);
+		loc.database_conn = obj.database_conn;
+		loc.apktPath = obj.apktPath;
+		loc.decimalPrecision = obj.decimalPrecision;
+
+		
 		
 		File ContoursFile = new File(apktPath+"online_contours/Contours.map");
 
@@ -317,6 +325,7 @@ public class onlinePB {
 					try { obj.conn.close(); } catch (SQLException e) {}
 				}
 			}
+
 			while(cost < 2*h_cost)
 			{
 				if(cost>h_cost)
@@ -351,7 +360,6 @@ public class onlinePB {
 						try { obj.conn.close(); } catch (SQLException e) {}
 					}
 				}
-
 
 					//if(writeMapstoFile)
 						obj.writeContourPointstoFile(i);
@@ -2448,7 +2456,7 @@ public class onlinePB {
 			
 			//following snippet required for making sure that certain static variables are fine.
 			location loc  = new location();
-			loc.apktPath = apktPath;
+			loc.apktPath = this.apktPath;
 			loc.select_query = this.select_query;
 			loc.predicates = this.predicates;
 			loc.dimension = this.dimension;
@@ -2574,8 +2582,6 @@ public class onlinePB {
 		//create the FPC query : 
 	     //Connection conn = null;
 
-	     
-	     
 	     //System.out.println("Plan No = "+p_no);
 			try{      	
 				
@@ -3251,13 +3257,7 @@ class location implements Serializable
 	
 	location(float arr[],  onlinePB obj) throws  IOException, PicassoException{
 		
-		this.dimension = obj.dimension;
 		this.conn = obj.conn;
-		this.select_query = new String(obj.select_query);
-		this.predicates  = new String(obj.predicates);
-		this.database_conn = obj.database_conn;
-		this.apktPath = obj.apktPath;
-		this.decimalPrecision = obj.decimalPrecision;
 		dim_values = new float[dimension];
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = roundToDouble(arr[i]);
@@ -3275,35 +3275,34 @@ class location implements Serializable
 	
 	location(float arr[], OfflinePB obj) throws  IOException, PicassoException{
 		
-		this.dimension = obj.dimension;
+		
 		this.conn = obj.conn;
-		this.select_query = new String(obj.select_query);
-		this.predicates  = new String(obj.predicates);
-		this.database_conn = obj.database_conn;
-		this.apktPath = obj.apktPath;
-		this.decimalPrecision = obj.decimalPrecision;
 		dim_values = new float[dimension];
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = (arr[i]);
 			//		System.out.print(arr[i]+",");
 		}
 		
-		try {
-			getPlan();
-		} catch (SQLException e) {
+		if(obj.using_packets){
 			
-			e.printStackTrace();
+			int idx = obj.getIndex(obj.convertSelectivitytoIndex(arr), OfflinePB.resolution);
+	        //System.out.println(Arrays.toString(ind)+"  "+idx+"	"+OfflinePB.resolution );
+	        this.opt_cost = (float) obj.OptimalCost[idx];
+	        this.opt_plan_no = obj.plans[idx];
+		}
+		else{
+			try {
+				getPlan();
+			} catch (SQLException e) {
+
+				e.printStackTrace();
+			}
 		}
 	}
 
 	location(double arr[], PlanGen obj, Connection conn) throws  IOException, PicassoException{
 		
-		this.dimension = obj.dimension;
 		this.conn = conn;
-		this.select_query = new String(obj.select_query);
-		this.predicates  = new String(obj.predicates);
-		this.database_conn = obj.database_conn;
-		this.apktPath = obj.apktPath;
 		this.dim_values = new float[obj.dimension];
 		for(int i=0;i<obj.dimension;i++){
 			this.dim_values[i] = (float)(arr[i]);
@@ -3638,11 +3637,7 @@ class location implements Serializable
 			int stindex;            
 			str = (String)text.remove(0);
 
-
-			//  System.out.println("findling_childs");
-
-
-
+			//  System.out.println("finding_childs");
 
 			if (str.indexOf("Plan Type: STABLE")>=0)
 				optFlag = false;

@@ -681,7 +681,7 @@ public void CostSlopeRatio_synthetic(int varyDim,  int otherDims[], int res, Ope
 		loadPropertiesFile();
 	}
 	
-	public HashMap<Integer,Integer> generatePOSPList(int varyDim, int[] arr, int res, 	PlanGen pg, Operators op) throws PicassoException, IOException {
+	public HashMap<Integer,Integer> generatePOSPList(int varyDim, int[] arr, int res, 	PlanGen pg, Operators op) throws PicassoException, IOException, SQLException {
 	
 	
 		
