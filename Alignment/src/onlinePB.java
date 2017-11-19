@@ -2016,10 +2016,14 @@ public class onlinePB {
 		
 		long startTime = System.nanoTime();
 		float delta[] = {0.1f,0.3f};
+		int count = 0;
 		float sum_slope = 0, divFactor =0;
 		float sel[] = new float[dimension];
 		for(float del: delta){
 
+			if(count > 0 && qtName.contains("5D")){
+				continue;
+			}
 			for(int d=0; d<dimension;d++)
 				sel[d] = qrun_copy[d];
 
@@ -2044,7 +2048,7 @@ public class onlinePB {
 			{
 				System.out.println("Dim = "+dim+" fpc = "+(fpc_cost)+" base cost = "+base_cost+" neighbour location = "+sel[dim]+" base location = "+sel[dim]/(1+del));
 			}
-
+			count ++;
 		}
 
 		//to just check the boundary conditions
