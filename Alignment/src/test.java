@@ -1,3 +1,4 @@
+import java.lang.instrument.Instrumentation;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -6,9 +7,12 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.Vector;
 import java.util.concurrent.TimeUnit;
 
+import iisc.dsl.picasso.server.plan.Plan;
+import net.sourceforge.sizeof.SizeOf;
+	
 public class test {
 
 	public static void main(String[] args) throws InterruptedException {
@@ -28,9 +32,11 @@ public class test {
 		float  val1 = (zero * 10000);
 		int val2 = (int) val1;
 		
+		obj.size_of_object();
 		
+		System.exit(0);
 		//obj.arrayListMemoryTest();
-		obj.staticMemoryTest();
+		//obj.staticMemoryTest();
 
 		//obj.longHashMap();
 		
@@ -64,6 +70,16 @@ public class test {
 
  
 	}
+	
+	private void size_of_object() {
+		SizeOf.skipStaticField(false); //java.sizeOf will not compute static fields
+		 SizeOf.skipFinalField(false); //java.sizeOf will not compute final fields
+		 //SizeOf.skipFlyweightObject(false); //java.sizeOf will not compute well-known flyweight objects
+		 //SizeOf.setMinSizeToLog(1024);
+		 System.out.println(SizeOf.humanReadable(SizeOf.deepSizeOf(new test_class())));
+		 
+	}
+	
 	
 	private void longHashMap() {
 		
@@ -283,9 +299,29 @@ public class test {
 	
 }
 
+
+
+
+
  class test_class{
-	static  double arr[] = new double[1000000];
-	test_class() {
-		
-	}
+	//static  double arr[] = new double[1000000];
+	 String predicates;String predicates2;
+//	int i;
+//	int j;
+//	double k;
+//	test_class() {
+//		
+//	}
 }
+ 
+class ObjectSizeFetcher {
+	    private static Instrumentation instrumentation;
+
+	    public static void premain(String args, Instrumentation inst) {
+	        instrumentation = inst;
+	    }
+
+	    public static long getObjectSize(Object o) {
+	        return instrumentation.getObjectSize(o);
+	    }
+	}

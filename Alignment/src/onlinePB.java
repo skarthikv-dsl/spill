@@ -100,7 +100,7 @@ public class onlinePB {
 	static boolean contoursReadFromFile = false;
 	static boolean cg_contoursReadFromFile = false;
 	static boolean writeMapstoFile = false;
-	static boolean singleThread = true;
+	static boolean singleThread = false;
 	static boolean trie = true;
 
 	static Jdbc3PoolingDataSource source;
@@ -399,9 +399,9 @@ public class onlinePB {
 				
 				int size_of_contour = obj.contour_points.size();
 				int size_of_non_contour = obj.non_contour_points.size();
-				ContourPointsMap.put(i, new ArrayList<location>(obj.contour_points)); //storing the contour points
+				//ContourPointsMap.put(i, new ArrayList<location>(obj.contour_points)); //storing the contour points
 
-				non_ContourPointsMap.put(i, new ArrayList<location>(obj.non_contour_points)); //storing the contour points
+				//non_ContourPointsMap.put(i, new ArrayList<location>(obj.non_contour_points)); //storing the contour points
 
 				System.out.println("Size of contour: "+size_of_contour );
 				System.out.println("Size of non-contour: "+size_of_non_contour );
@@ -3229,7 +3229,7 @@ class location implements Serializable
 	boolean is_within_threshold[];
 	int reduced_planNumber;
 	int contour_no = -1;
-	Plan plan = new Plan();
+	//Plan plan = new Plan();
 	Connection conn; //should be non-static at any cost
 	
 	location(){
