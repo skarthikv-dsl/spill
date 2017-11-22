@@ -210,6 +210,8 @@ public class onlinePB {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 		
+		obj.FPCMemoryLeaks();
+		
 		location loc = new location();
 		loc.dimension = obj.dimension;
 		loc.select_query = new String(obj.select_query);
@@ -345,6 +347,7 @@ public class onlinePB {
 //								continue;
 //							}
 
+				System.gc();
 				if(cost < h_cost){
 					if(singleThread)
 						obj.generateCoveringContours(order,cost);
@@ -470,6 +473,50 @@ public class onlinePB {
 		
 	}
 	
+	public  void FPCMemoryLeaks() throws SQLException {
+
+		
+		long startTime = System.nanoTime();
+		long endTime;
+		
+		float arr[] = new float[dimension];
+		for(int i=0; i< dimension; i++) {
+			arr[i] = 0.5f;
+		}
+		for(int k=0; k < 10000000; k++) {
+			if(k == 100000 || (k%1000000 == 0))
+				System.out.println("Currently at "+k);
+			
+			getFPCCost(arr, 3, null);
+			
+			if(k == 1000) {
+			String start = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
+			String stop = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
+			String kill = "pkill -9 postgres";
+			if (conn != null) {
+				try { conn.close(); } catch (SQLException e) {}
+			}
+			
+			try {
+			Process p;
+			Runtime r = Runtime.getRuntime();
+			p = r.exec(kill);
+			p.waitFor();
+			}
+			catch (Exception e) 
+			{
+				e.printStackTrace();
+			}
+			conn = source.getConnection();
+			}
+			
+		}
+		
+		endTime = System.nanoTime();
+		System.out.println((endTime*1.0f - startTime*1.0f)/1000000000f);
+		System.exit(0);
+	}
+
 	public onlinePB(onlinePB obj){
 
 		//to just make sure that static variables are already assigned values
