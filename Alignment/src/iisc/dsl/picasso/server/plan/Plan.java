@@ -50,7 +50,7 @@ public class Plan implements Serializable {
 	
 	public Vector nodes;
 	private int planno;
-	private long hash;
+	public long hash;
 	
 	public Plan()
 	{

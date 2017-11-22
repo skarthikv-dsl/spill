@@ -25,7 +25,7 @@ public class test {
 		else
 			System.out.println("there is NOTHING in the argument");
 		
-		System.out.println("max integer = "+Integer.MAX_VALUE+" min value = "+Integer.MIN_VALUE);
+		System.out.println("max integer = "+Short.MAX_VALUE+" min value = "+Short.MIN_VALUE);
 		test obj = new test();
 		float old_val = obj.roundToDouble(1.5555555f, 6);
 		float zero = 1.0E-4f;
@@ -72,11 +72,11 @@ public class test {
 	}
 	
 	private void size_of_object() {
-		SizeOf.skipStaticField(false); //java.sizeOf will not compute static fields
-		 SizeOf.skipFinalField(false); //java.sizeOf will not compute final fields
+		SizeOf.skipStaticField(true); //java.sizeOf will not compute static fields
+		 SizeOf.skipFinalField(true); //java.sizeOf will not compute final fields
 		 //SizeOf.skipFlyweightObject(false); //java.sizeOf will not compute well-known flyweight objects
 		 //SizeOf.setMinSizeToLog(1024);
-		 System.out.println(SizeOf.humanReadable(SizeOf.deepSizeOf(new test_class())));
+		 System.out.println(SizeOf.humanReadable(SizeOf.deepSizeOf(new location())));
 		 
 	}
 	

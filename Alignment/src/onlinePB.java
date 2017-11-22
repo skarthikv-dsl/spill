@@ -75,11 +75,11 @@ public class onlinePB {
 	static boolean done_pb = false;
 	static float[] actual_sel_pb; 
 	static int num_of_usable_threads;
-	HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
-	HashMap<Long,Integer> planHashMap = new HashMap<Long,Integer>();
-	static HashMap<Integer,Integer> plans_dist = new HashMap<Integer,Integer>();
-	static 	HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
-	static HashMap<Integer,ArrayList<location>> non_ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
+	HashMap<Short,Integer> uniquePlansMap = new HashMap<Short,Integer>();
+	HashMap<Long,Short> planHashMap = new HashMap<Long,Short>();
+	static HashMap<Short,Integer> plans_dist = new HashMap<Short,Integer>();
+	static 	HashMap<Short,ArrayList<location>> ContourPointsMap = new HashMap<Short,ArrayList<location>>();
+	static HashMap<Short,ArrayList<location>> non_ContourPointsMap = new HashMap<Short,ArrayList<location>>();
 	static ArrayList<Float> outermost_dimension_sel;
 	
 	//parameters to set
@@ -135,7 +135,7 @@ public class onlinePB {
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException, ClassNotFoundException {
 	
-		int threads = (int) ( Runtime.getRuntime().availableProcessors()*1.0);
+		int threads = (int) ( Runtime.getRuntime().availableProcessors()*0.95);
 		num_of_usable_threads = threads;
 		//set the program arguments
 		if(args.length > 0){
@@ -326,14 +326,18 @@ public class onlinePB {
 				}
 			}
 
+			obj.contour_points = new ArrayList<location>();			
+			obj.non_contour_points = new ArrayList<location>();
+
 			while(cost < 2*h_cost)
 			{
 				if(cost>h_cost)
 					cost = h_cost;
 				System.out.println("---------------------------------------------------------------------------------------------\n");
 				System.out.println("Contour "+i+" cost : "+cost);
-				obj.contour_points = new ArrayList<location>();			
-				obj.non_contour_points = new ArrayList<location>();
+
+				obj.contour_points.clear();	
+				obj.non_contour_points.clear();
 
 //							if(i > 2){
 //								i++;
@@ -373,10 +377,9 @@ public class onlinePB {
 				}
 				
 				for(location l: obj.contour_points){
-					l.set_contour_no(i);
+					l.set_contour_no((short)i);
 					if(l.get_plan_no() == -1){
-						l.conn = obj.conn;
-						l.setPlanNumber();
+						l.setPlanNumber(obj.conn);
 					}
 					if(trie)
 						obj.addLocationtoGraph(l,0);
@@ -384,8 +387,7 @@ public class onlinePB {
 				
 				for(location l: obj.non_contour_points){
 					if(l.get_plan_no() == -1){
-						l.conn = obj.conn;
-						l.setPlanNumber();
+						l.setPlanNumber(obj.conn);
 					}
 					if(trie)
 						obj.addLocationtoGraph(l,0);
@@ -399,9 +401,9 @@ public class onlinePB {
 				
 				int size_of_contour = obj.contour_points.size();
 				int size_of_non_contour = obj.non_contour_points.size();
-				//ContourPointsMap.put(i, new ArrayList<location>(obj.contour_points)); //storing the contour points
+				//ContourPointsMap.put((short)i, new ArrayList<location>(obj.contour_points)); //storing the contour points
 
-				//non_ContourPointsMap.put(i, new ArrayList<location>(obj.non_contour_points)); //storing the contour points
+				//non_ContourPointsMap.put((short)i, new ArrayList<location>(obj.non_contour_points)); //storing the contour points
 
 				System.out.println("Size of contour: "+size_of_contour );
 				System.out.println("Size of non-contour: "+size_of_non_contour );
@@ -444,10 +446,10 @@ public class onlinePB {
 			
 			Iterator itr = ContourPointsMap.keySet().iterator();
 			while(itr.hasNext()){
-				Integer key = (Integer)itr.next();
-				for(int pt =0;pt<ContourPointsMap.get(key).size();pt++){
-					location p = ContourPointsMap.get(key).get(pt);					
-					assert(p.get_contour_no() == key.intValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
+				Short key = (Short)itr.next();
+				for(int pt =0;pt<ContourPointsMap.get(key.shortValue()).size();pt++){
+					location p = ContourPointsMap.get(key.shortValue()).get(pt);					
+					assert(p.get_contour_no() == key.shortValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
 				}
 			}
 			
@@ -456,7 +458,7 @@ public class onlinePB {
 			
 		}
 		else
-			obj.ContourCentricCostGreedy(-1);
+			obj.ContourCentricCostGreedy((short)-1);
 		
 		obj.conn = source.getConnection();
 		obj.runPlanBouquetAlgo();
@@ -511,9 +513,9 @@ public class onlinePB {
 		
 		Iterator itr = ContourPointsMap.keySet().iterator();
 		while(itr.hasNext()){
-			Integer key = (Integer)itr.next();
-			for(int pt =0;pt<ContourPointsMap.get(key.intValue()).size();pt++){
-				location p = ContourPointsMap.get(key.intValue()).get(pt);
+			Short key = (Short)itr.next();
+			for(int pt =0;pt<ContourPointsMap.get(key.shortValue()).size();pt++){
+				location p = ContourPointsMap.get(key.shortValue()).get(pt);
 				Integer freq = plans_dist.get(p.get_plan_no());
 				plans_dist.put(p.get_plan_no(), (freq == null ? 1 : freq + 1));
 			}
@@ -521,9 +523,9 @@ public class onlinePB {
 		
 		itr = non_ContourPointsMap.keySet().iterator();
 		while(itr.hasNext()){
-			Integer key = (Integer)itr.next();
-			for(int pt =0;pt<non_ContourPointsMap.get(key.intValue()).size();pt++){
-				location p = non_ContourPointsMap.get(key.intValue()).get(pt);
+			Short key = (Short)itr.next();
+			for(int pt =0;pt<non_ContourPointsMap.get(key.shortValue()).size();pt++){
+				location p = non_ContourPointsMap.get(key.shortValue()).get(pt);
 				Integer freq = plans_dist.get(p.get_plan_no());
 				plans_dist.put(p.get_plan_no(), (freq == null ? 1 : freq + 1));
 			}
@@ -599,7 +601,7 @@ public class onlinePB {
 				System.out.println("---------------------------------------------------------------------------------------------\n");
 				System.out.println("Contour "+i+" cost : "+cost+"\n");
 				
-				run_PB_Algo_for_qa(i,cost,cost_act_sel_pb);
+				run_PB_Algo_for_qa((short)i,cost,cost_act_sel_pb);
 				
 				algo_cost = algo_cost+ (learning_cost_pb);
 				System.out.println("The current algo_cost is "+algo_cost);
@@ -646,14 +648,14 @@ public class onlinePB {
 	}
 
 	
-	public void run_PB_Algo_for_qa(int contour_no, float cost, float cost_act_sel_pb) {
+	public void run_PB_Algo_for_qa(Short contour_no, float cost, float cost_act_sel_pb) {
 
 		String funName = "planBouquetAlgo";
 		
 		float last_exec_cost = 0;
 		learning_cost_pb =0;
 		int [] arr = new int[dimension];
-		HashSet<Integer> unique_plans = new HashSet();
+		HashSet<Short> unique_plans = new HashSet();
 		int unique_points =0;
 		float max_cost =0 , min_cost = Float.MAX_VALUE;
 		
@@ -860,10 +862,10 @@ public class onlinePB {
 			ContourPointsMap = obj.getContourMap();
 			Iterator itr = ContourPointsMap.keySet().iterator();
 			while(itr.hasNext()){
-				Integer key = (Integer) itr.next();
+				Short key = (Short) itr.next();
 				
 				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
-				System.out.println("The no. of locations on contour "+(key.intValue())+" is "+ContourPointsMap.get(key).size());
+				System.out.println("The no. of locations on contour "+(key.shortValue())+" is "+ContourPointsMap.get(key.shortValue()).size());
 				System.out.println("--------------------------------------------------------------------------------------");
 				
 			}
@@ -873,20 +875,20 @@ public class onlinePB {
 			non_ContourPointsMap = obj.getContourMap();
 			itr = non_ContourPointsMap.keySet().iterator();
 			while(itr.hasNext()){
-				Integer key = (Integer) itr.next();
+				Short key = (Short) itr.next();
 				
 				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
-				System.out.println("The no. of locations on Non contour "+(key.intValue())+" is "+non_ContourPointsMap.get(key).size());
+				System.out.println("The no. of locations on Non contour "+(key.shortValue())+" is "+non_ContourPointsMap.get(key.shortValue()).size());
 				System.out.println("--------------------------------------------------------------------------------------");
 			}
 
 			
 			if(CG_done){
 				//iterator of 
-				HashMap<Integer,HashSet<Integer>> contourPlansReduced = new HashMap<Integer,HashSet<Integer>>();
+				HashMap<Short,HashSet<Short>> contourPlansReduced = new HashMap<Short,HashSet<Short>>();
 				// update what plans are in which contour
-				HashSet<Integer> reducedPlansSet = new HashSet<Integer>();
-				for (int k = 1; k <= ContourPointsMap.size(); k++) {
+				HashSet<Short> reducedPlansSet = new HashSet<Short>();
+				for (short k = 1; k <= ContourPointsMap.size(); k++) {
 					Iterator iter = ContourPointsMap.get(k).iterator();
 					reducedPlansSet.clear();
 					while (iter.hasNext()) {
@@ -1859,8 +1861,8 @@ public class onlinePB {
 	            	
 	    			//assert(input.obj.contour_points.size() > 0 || input.obj.non_contour_points.size() > 0): "empty contour or non_contour points";
 	            	
-	    			output.contour_locs_parallel = new ArrayList<location>(input.obj.contour_points);
-	            	output.non_contour_locs_parallel = new ArrayList<location>(input.obj.non_contour_points);
+	    			output.contour_locs_parallel = input.obj.contour_points;
+	            	output.non_contour_locs_parallel = input.obj.non_contour_points;
             		output.opt_call_count = input.obj.opt_call;
             		output.fpc_call_count = input.obj.fpc_call;
             		output.slope_time = input.obj.slope_time;
@@ -1891,6 +1893,8 @@ public class onlinePB {
 		    		CoveringContourOutputParamStruct output = future.get();
 					contour_points.addAll(output.contour_locs_parallel);
 					non_contour_points.addAll(output.non_contour_locs_parallel);
+					output.contour_locs_parallel.clear();
+					output.non_contour_locs_parallel.clear();
 					fpc_call += output.fpc_call_count;
 					opt_call += output.opt_call_count;
 					location_hits += output.location_hits;
@@ -1940,7 +1944,7 @@ public class onlinePB {
 			return null;
 		boolean flag = false;
 		assert(ContourPointsMap.keySet().size() == non_ContourPointsMap.keySet().size()) : "sizes mismatch for the contour and non_contoumaps";
-		for(int c = 1; c<=ContourPointsMap.keySet().size(); c++){
+		for(short c = 1; c<=ContourPointsMap.keySet().size(); c++){
 			for(location loc: ContourPointsMap.get(c)){
 				flag = true;
 				for(int i=0;i<dimension;i++){
@@ -2251,10 +2255,10 @@ public class onlinePB {
 				dir.mkdirs();
 			assert(dir.exists()): "unable to create the path for subContourPlans";
 			
-			Long plan_hash = new Long(loc.plan.getHash());
+			Long plan_hash = new Long(loc.plan_hash_val);
 			if(!planHashMap.containsKey(plan_hash)){
 //			if(true){
-				int plan_number = planHashMap.size();
+				short plan_number = (short)planHashMap.size();
 				planHashMap.put(plan_hash,plan_number);
 				path = new String(apktPath+"onlinePB/subContourPlans/"+(new Integer(min_cc_sel_idx).toString())+(new Integer(max_cc_sel_idx).toString())+"/"+plan_number+".xml");
 				getFPCCost(qrun_copy, -3, path); //writing the xml plan to file
@@ -2263,7 +2267,7 @@ public class onlinePB {
 				return path;
 			}
 			else{
-				int plan_number = planHashMap.get(plan_hash);
+				short plan_number = planHashMap.get(plan_hash);
 				path = new String(apktPath+"onlinePB/subContourPlans/"+(new Integer(min_cc_sel_idx).toString())+(new Integer(max_cc_sel_idx).toString())+"/"+plan_number+".xml");
 				long endTime = System.nanoTime();
 				opt_plan_path_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
@@ -2272,14 +2276,14 @@ public class onlinePB {
 		}
 	}
 
-	private void ContourCentricCostGreedy(int contour_no) throws SQLException
+	private void ContourCentricCostGreedy(short contour_no) throws SQLException
 	{
 		ArrayList<location> contour_locs = new ArrayList<location>();
 		
 		if(contour_no == -1){
 			//get all the location of all the contours
 			
-			for(int i=1; i<=ContourPointsMap.size();i++) {
+			for(short i=1; i<=ContourPointsMap.size();i++) {
 					if(ContourPointsMap.containsKey(i))
 				contour_locs.addAll(ContourPointsMap.get(i));
 					
@@ -2299,13 +2303,13 @@ public class onlinePB {
 		
 		int[] index = new int[dimension];
 		
-		int originalPlanCnt = new File(apktPath+"onlinePB/planStructureXML").listFiles().length ;
-		int plansArray[] = new int[originalPlanCnt];
-		HashSet<Integer> chosenPlanSet = new HashSet<Integer>();
+		short originalPlanCnt = (short) new File(apktPath+"onlinePB/planStructureXML").listFiles().length ;
+		short plansArray[] = new short[originalPlanCnt];
+		HashSet<Short> chosenPlanSet = new HashSet<Short>();
 		int remainingSpace = 0;
 
 		Iterator iter;
-		int ix;
+		short ix;
 
 		System.out.println(" < contour plans reduction > ");
 
@@ -2339,7 +2343,7 @@ public class onlinePB {
 		}
 		
 		//get costs of all plans at all contour_locs
-		for (int i=0; i<originalPlanCnt; i++)
+		for (short i=0; i<originalPlanCnt; i++)
 			contour_locs = getFPCCostParallel(contour_locs, i);
 		
 		for(location lc : contour_locs)
@@ -2400,7 +2404,7 @@ public class onlinePB {
 			//System.out.println("Finished step 1");
 			//2.find the plan that covers max area
 			maxCoverage = 0;
-			int maxCoveragePlan = -1;
+			short maxCoveragePlan = -1;
 			int maxCoveragePlanIndex = -1;
 			
 			for (int i = 0; i < originalPlanCnt; i++)
@@ -2434,10 +2438,10 @@ public class onlinePB {
 		
 			System.out.println("After Reduction:");
 		
-			HashMap<Integer,HashSet<Integer>> contourPlansReduced = new HashMap<Integer,HashSet<Integer>>();
+			HashMap<Short,HashSet<Short>> contourPlansReduced = new HashMap<Short,HashSet<Short>>();
 		// update what plans are in which contour
-			HashSet<Integer> reducedPlansSet = new HashSet<Integer>();
-			for (int k = 1; k <= ContourPointsMap.size(); k++) {
+			HashSet<Short> reducedPlansSet = new HashSet<Short>();
+			for (short k = 1; k <= ContourPointsMap.size(); k++) {
 				reducedPlansSet.clear();
 				iter = contour_locs.iterator();
 				while (iter.hasNext()) {
@@ -2471,19 +2475,19 @@ public class onlinePB {
 			
 			Iterator itr = ContourPointsMap.keySet().iterator();
 			while(itr.hasNext()){
-				Integer key = (Integer)itr.next();
-				for(int pt =0;pt<ContourPointsMap.get(key).size();pt++){
-					location p = ContourPointsMap.get(key).get(pt);
-					if(p.get_contour_no() != key.intValue())
+				Short key = (Short)itr.next();
+				for(int pt =0;pt<ContourPointsMap.get(key.shortValue()).size();pt++){
+					location p = ContourPointsMap.get(key.shortValue()).get(pt);
+					if(p.get_contour_no() != key.shortValue())
 						System.out.println("problem");
-					assert(p.get_contour_no() == key.intValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
+					assert(p.get_contour_no() == key.shortValue()) : "not matching contour no. with contourmap key value with contour no.= "+p.get_contour_no()+" key = "+key.intValue();
 				}
 			}
 			
 		}
 	
 	
-	public ArrayList<location> getFPCCostParallel(ArrayList<location> contour_locs, int plan) throws SQLException {
+	public ArrayList<location> getFPCCostParallel(ArrayList<location> contour_locs, short plan) throws SQLException {
 
 		System.out.println("Number of Usable threads are : "+num_of_usable_threads + " with contour locs size "+contour_locs.size()+" with plan "+plan);
 		
@@ -3053,10 +3057,10 @@ class CoveringContourinputParamStruct {
 		Jdbc3PoolingDataSource source;
 		ArrayList<location> contour_fpc_locs;
 		String apktPath, qtName, select_query, predicates; 
-		int dimension, database_conn, plan;
+		int dimension, database_conn; short plan;
 		 Connection conn;
 		 
-		public CGinputParamStruct(ArrayList<location> locs, Jdbc3PoolingDataSource source, int plan) throws SQLException {
+		public CGinputParamStruct(ArrayList<location> locs, Jdbc3PoolingDataSource source, short plan) throws SQLException {
 			this.source = source;
 			this.contour_fpc_locs  = new ArrayList<location>(locs);
 			this.plan  = plan; 
@@ -3084,7 +3088,7 @@ class CoveringContourinputParamStruct {
 		}
 		
 		
-		public float getFPCCost(float selectivity[], int p_no) throws SQLException{
+		public float getFPCCost(float selectivity[], short p_no) throws SQLException{
 			//Get the path to p_no.xml
 			String funName = "getFPCCost";
 			
@@ -3218,19 +3222,18 @@ class location implements Serializable
 	static String select_query;
 	ArrayList<Float> fpc_plan_cost;
 //	double fpc_cost = Double.MAX_VALUE;
-	int opt_plan_no = -1;
+	short opt_plan_no = -1;
 	float opt_cost;
 	static String apktPath;
-	int idx;
-	int leafid=0;
+	short leafid=0;
 	float [] dim_values;
 	static Vector<Plan> plans_vector = new Vector<Plan>();
 	static int decimalPrecision;
 	boolean is_within_threshold[];
-	int reduced_planNumber;
-	int contour_no = -1;
+	short reduced_planNumber;
+	short contour_no = -1;
+	long plan_hash_val = -1;
 	//Plan plan = new Plan();
-	Connection conn; //should be non-static at any cost
 	
 	location(){
 		
@@ -3261,7 +3264,7 @@ class location implements Serializable
 	
 	location(float arr[],  onlinePB obj) throws  IOException, PicassoException{
 		
-		this.conn = obj.conn;
+		Connection conn = obj.conn;
 		dim_values = new float[dimension];
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = roundToDouble(arr[i]);
@@ -3269,7 +3272,7 @@ class location implements Serializable
 		}
 		
 		try {
-			getPlan();
+			getPlan(conn);
 		} catch (SQLException e) {
 			
 			e.printStackTrace();
@@ -3280,7 +3283,7 @@ class location implements Serializable
 	location(float arr[], OfflinePB obj) throws  IOException, PicassoException{
 		
 		
-		this.conn = obj.conn;
+		Connection conn = obj.conn;
 		dim_values = new float[dimension];
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = (arr[i]);
@@ -3292,11 +3295,11 @@ class location implements Serializable
 			int idx = obj.getIndex(obj.convertSelectivitytoIndex(arr), OfflinePB.resolution);
 	        //System.out.println(Arrays.toString(ind)+"  "+idx+"	"+OfflinePB.resolution );
 	        this.opt_cost = (float) obj.OptimalCost[idx];
-	        this.opt_plan_no = obj.plans[idx];
+	        this.opt_plan_no = (short)obj.plans[idx];
 		}
 		else{
 			try {
-				getPlan();
+				getPlan(conn);
 			} catch (SQLException e) {
 
 				e.printStackTrace();
@@ -3304,9 +3307,9 @@ class location implements Serializable
 		}
 	}
 
-	location(double arr[], PlanGen obj, Connection conn) throws  IOException, PicassoException{
+	location(double arr[], PlanGen obj, Connection cntion) throws  IOException, PicassoException{
 		
-		this.conn = conn;
+		Connection conn = cntion;
 		this.dim_values = new float[obj.dimension];
 		for(int i=0;i<obj.dimension;i++){
 			this.dim_values[i] = (float)(arr[i]);
@@ -3314,7 +3317,7 @@ class location implements Serializable
 		}
 		
 		try {
-			getPlan();
+			getPlan(conn);
 		} catch (SQLException e) {
 			
 			e.printStackTrace();
@@ -3322,11 +3325,11 @@ class location implements Serializable
 	}
 
 	
-	public void set_contour_no(int c) {
+	public void set_contour_no(short c) {
 		contour_no = c;
 	}
 	
-	public int get_contour_no() {
+	public short get_contour_no() {
 		return contour_no;
 	}
 	
@@ -3340,7 +3343,7 @@ class location implements Serializable
 	/*
 	 * get the plan number for this point
 	 */
-	public int get_plan_no(){
+	public Short get_plan_no(){
 		return opt_plan_no;
 
 	}
@@ -3376,7 +3379,7 @@ class location implements Serializable
         return bd.floatValue();
     }
 	
-	public void getPlan() throws PicassoException, IOException, SQLException {
+	public void getPlan(Connection conn) throws PicassoException, IOException, SQLException {
 
 //		if((Math.abs(dim_values[0] - 0.258116) < 0.00001f) && (Math.abs(dim_values[1] - 0.001162) < 0.00001f) && (Math.abs(dim_values[2] - 0.000194) < 0.00001f)  )
 //			System.out.println("intereseting");
@@ -3386,7 +3389,7 @@ class location implements Serializable
 //
 //		if((Math.abs(dim_values[0] - 0.325206) < 0.00001f) && (Math.abs(dim_values[1] - 0.0001) < 0.00001f) && (Math.abs(dim_values[2] - 0.198425) < 0.00001f)  )
 //			System.out.println("intereseting");
-
+		Plan plan = new Plan();
 		Vector textualPlan = new Vector();
 		String cost_str = null;
 		
@@ -3474,18 +3477,21 @@ class location implements Serializable
 		String planDiffLevel = "SUB-OPERATOR";
 			plan.computeHash(planDiffLevel);
 		
+		plan_hash_val = plan.getHash();	
 			//System.out.println(dim_values[0]+","+dim_values[2]+","+dim_values[2]+" hash value = "+plan.getHash());	
 		//in order to save space clear the plan tree that is saved in plan/node
 		plan.nodes.clear();	
 		assert(plan.getHash() != 0): "plan hash value not computed";
 	}
 			
-	void setPlanNumber() throws PicassoException{		
+	void setPlanNumber(Connection conn) throws PicassoException{		
 		
 		assert(this.opt_plan_no == -1) : "already assinged a plan number";
 		
 		StringBuilder XML_Plan = new StringBuilder();
-		assert(plan.getHash() != 0): "plan hash value not computed";
+		Plan plan = new Plan();
+		plan.hash = plan_hash_val;
+		assert(plan_hash_val != 0): "plan hash value not computed";
 		int planNumber = plan.getIndexInVector(plans_vector);                  // see if the plan is new or already seen
 		plan.setPlanNo(planNumber);
 
@@ -3561,7 +3567,7 @@ class location implements Serializable
 		}
 
 		//set the optimal plan and cost here
-		this.opt_plan_no = planNumber;
+		this.opt_plan_no = (short)planNumber;
 	}
 	
 	
