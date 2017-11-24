@@ -210,7 +210,7 @@ public class onlinePB {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 		
-		obj.FPCMemoryLeaks();
+		//obj.FPCMemoryLeaks();
 		
 		location loc = new location();
 		loc.dimension = obj.dimension;
@@ -486,28 +486,69 @@ public class onlinePB {
 		for(int k=0; k < 10000000; k++) {
 			if(k == 100000 || (k%1000000 == 0))
 				System.out.println("Currently at "+k);
-			
+
 			getFPCCost(arr, 3, null);
-			
-			if(k == 1000) {
-			String start = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
-			String stop = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
-			String kill = "pkill -9 postgres";
-			if (conn != null) {
-				try { conn.close(); } catch (SQLException e) {}
-			}
-			
-			try {
-			Process p;
-			Runtime r = Runtime.getRuntime();
-			p = r.exec(kill);
-			p.waitFor();
-			}
-			catch (Exception e) 
-			{
-				e.printStackTrace();
-			}
-			conn = source.getConnection();
+
+			if(k == 50000) {
+				String start = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
+				String stop = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
+				String kill = "pkill -9 postgres";
+				if (conn != null) {
+					try { conn.close(); } catch (SQLException e) {}
+				}
+
+				try {
+					Process p;
+					Runtime r = Runtime.getRuntime();
+					p = r.exec(kill);
+					p.waitFor();
+					p = r.exec(start);
+					p.waitFor();
+				}
+				catch (Exception e) 
+				{
+					e.printStackTrace();
+				}
+				
+				source.close();
+				source = new Jdbc3PoolingDataSource();
+				source.setDataSourceName("A Data Source");
+				f_marwa = new File("/home/dsladmin/marwa");
+				
+				//Settings
+				//System.out.println("entered DB conn2");
+				if(database_conn==0){
+//					conn = DriverManager
+//							.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+//									"sa", "database");
+				}
+				else{
+				
+					if(f_marwa.exists() && !f_marwa.isDirectory()) { 
+						System.out.println("entered DB tpcds");
+//						conn = DriverManager
+//								.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
+//										"sa", "database");
+						source.setServerName("localhost:5431");
+						source.setDatabaseName("tpcds-ai");
+					}
+					else{
+					System.out.println("entered DB tpcds");
+//					conn = DriverManager
+//							.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+//									"sa", "database");
+					source.setServerName("localhost:5432");
+					source.setDatabaseName("tpcds-ai");
+					}
+				}
+				source.setUser("sa");
+				source.setPassword("database");
+				
+				if(singleThread)
+					source.setMaxConnections(1);
+				else
+					source.setMaxConnections(num_of_usable_threads);
+				conn = source.getConnection();
 			}
 			
 		}
@@ -1306,7 +1347,7 @@ public class onlinePB {
 				loc1 = new location(qrun_sel,this);
 //				if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //					printSelectivityCost(qrun_sel, -1);
-				non_contour_points.add(loc1);
+				//non_contour_points.add(loc1);
 				if(trie)
 					addLocationtoGraph(loc1, 2);
 				opt_call++;
@@ -1329,7 +1370,7 @@ public class onlinePB {
 			
 			if(loc2 == null){
 				loc2 = new location(qrun_sel,this);
-				non_contour_points.add(loc2);
+				//non_contour_points.add(loc2);
 //				if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //					printSelectivityCost(qrun_sel, -1);
 				if(trie)
@@ -1370,7 +1411,7 @@ public class onlinePB {
 					loc = locationAlreadyExist(qrun_sel);
 				if(loc == null){
 					loc = new location(qrun_sel, this);
-					non_contour_points.add(loc);
+					//non_contour_points.add(loc);
 //					if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //						printSelectivityCost(qrun_sel, -1);
 					if(trie)
@@ -1405,7 +1446,7 @@ public class onlinePB {
 				
 				if(loc == null){
 					loc = new location(qrun_sel_rev, this);
-					non_contour_points.add(loc);
+					//non_contour_points.add(loc);
 //					if(Math.abs(qrun_sel_rev[0] - minimum_selectivity) < 0.00001f)
 //						printSelectivityCost(qrun_sel_rev, -1);
 					if(trie)
@@ -1511,7 +1552,7 @@ public class onlinePB {
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
-							non_contour_points.add(loc);
+							//non_contour_points.add(loc);
 //							if(Math.abs(qrun_copy[0] - minimum_selectivity) < 0.00001f)
 //								printSelectivityCost(qrun_copy, -1);
 							if(trie)
@@ -1590,10 +1631,10 @@ public class onlinePB {
 	
 							
 //							if(!ContourLocationAlreadyExist(loc.dim_values))
-								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
-									contour_points.add(new location(loc.dim_values,this));
-								else 
-									contour_points.add(loc);
+//								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
+//									contour_points.add(new location(loc.dim_values,this));
+//								else 
+//									contour_points.add(loc);
 								if(trie)
 									addLocationtoGraph(loc, 1);
 								
@@ -1617,7 +1658,7 @@ public class onlinePB {
 								
 								if(temp_loc == null){
 									temp_loc = new location(temp_qrun, this);
-									non_contour_points.add(temp_loc);
+									//non_contour_points.add(temp_loc);
 									if(trie)
 										addLocationtoGraph(temp_loc, 2);
 								}
@@ -1707,10 +1748,10 @@ public class onlinePB {
 									forward_jumps_zero_level++;
 							}
 //							if(!ContourLocationAlreadyExist(loc.dim_values))
-								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
-									contour_points.add(new location(loc.dim_values,this));
-								else 
-									contour_points.add(loc);
+//								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
+//									contour_points.add(new location(loc.dim_values,this));
+//								else 
+//									contour_points.add(loc);
 								if(trie)
 									addLocationtoGraph(loc, 1);
 							// check to see if the terminus point is reached for the 2D slice 
@@ -1735,7 +1776,7 @@ public class onlinePB {
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
-							non_contour_points.add(loc);
+							//non_contour_points.add(loc);
 							if(trie)
 								addLocationtoGraph(loc, 2);
 							//counting the optimization calls
