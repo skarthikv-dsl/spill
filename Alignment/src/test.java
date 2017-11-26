@@ -1,3 +1,5 @@
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.lang.instrument.Instrumentation;
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -32,7 +34,8 @@ public class test {
 		float  val1 = (zero * 10000);
 		int val2 = (int) val1;
 		
-		obj.size_of_object();
+		obj.CheckifProcessRunning();
+		//obj.size_of_object();
 		
 		System.exit(0);
 		//obj.arrayListMemoryTest();
@@ -71,6 +74,27 @@ public class test {
  
 	}
 	
+	public void CheckifProcessRunning() {
+		
+		// > /home/dsladmin/Srinivas/data/others/processKill
+		String line;
+	    try {
+	      Process p = Runtime.getRuntime().exec("pidof postgres");
+	      BufferedReader input = new BufferedReader(new InputStreamReader(p.getInputStream()));
+	      while ((line = input.readLine()) != null)
+	      {
+	        System.out.println(line);
+	        if(line.split(" ").length == 4)
+	        	System.out.println("good");
+	        else
+	        	System.out.println("false");
+	      }
+	    } catch (Exception err) {
+	      System.out.println(err);
+	    }
+		
+	}
+
 	private void size_of_object() {
 		SizeOf.skipStaticField(true); //java.sizeOf will not compute static fields
 		 SizeOf.skipFinalField(true); //java.sizeOf will not compute final fields

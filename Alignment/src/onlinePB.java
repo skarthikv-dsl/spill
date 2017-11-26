@@ -34,6 +34,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.StringTokenizer;
+import java.util.TreeMap;
 import java.util.Vector;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -297,9 +298,9 @@ public class onlinePB {
 			assert(obj.max_cc_sel_idx > 0): "outermostdimension is empty";
 
 			//add the root vertex to graph which is used for membership testing of locations
-			map_root = new online_vertex(-1,false,null);
-			obj.contour_root = new online_vertex(-1,false,null);
-			obj.non_contour_root = new online_vertex(-1,false,null);
+			map_root = new online_vertex(-1);
+			obj.contour_root = new online_vertex(-1);
+			obj.non_contour_root = new online_vertex(-1);
 			
 			//clear the contents of onlinePB Planstructure directory
 			File dir = new File(apktPath+"onlinePB/planStructureXML/");
@@ -348,6 +349,14 @@ public class onlinePB {
 //							}
 
 				System.gc();
+				obj.restartDatabase();
+				if(!singleThread){
+					if (obj.conn != null) {
+						try { obj.conn.close(); } catch (SQLException e) {}
+					}
+				}
+				
+				
 				if(cost < h_cost){
 					if(singleThread)
 						obj.generateCoveringContours(order,cost);
@@ -367,7 +376,8 @@ public class onlinePB {
 						try { obj.conn.close(); } catch (SQLException e) {}
 					}
 				}
-
+				
+				
 					//if(writeMapstoFile)
 						obj.writeContourPointstoFile(i);
 				System.out.println("The running optimization calls are "+obj.opt_call);
@@ -558,6 +568,94 @@ public class onlinePB {
 		System.exit(0);
 	}
 
+	public  void restartDatabase() throws SQLException {
+
+		
+		String start = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
+		String stop = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
+		String kill = "pkill -9 postgres";
+		if (conn != null) {
+			try { conn.close(); } catch (SQLException e) {}
+		}
+
+		try {
+			Process p;
+			Runtime r = Runtime.getRuntime();
+			p = r.exec(kill);
+			p.waitFor();
+			
+			while(!checkIfPostgresServer()) {
+				p = r.exec(start);
+				p.waitFor();
+				Thread.sleep(20 * 1000);
+			}
+		}
+		catch (Exception e) 
+		{
+			e.printStackTrace();
+		}
+		
+		source.close();
+		source = new Jdbc3PoolingDataSource();
+		source.setDataSourceName("A Data Source");
+		f_marwa = new File("/home/dsladmin/marwa");
+		
+		//Settings
+		//System.out.println("entered DB conn2");
+		if(database_conn==0){
+//			conn = DriverManager
+//					.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+//							"sa", "database");
+		}
+		else{
+		
+			if(f_marwa.exists() && !f_marwa.isDirectory()) { 
+				System.out.println("entered DB tpcds");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
+//								"sa", "database");
+				source.setServerName("localhost:5431");
+				source.setDatabaseName("tpcds-ai");
+			}
+			else{
+			System.out.println("entered DB tpcds");
+//			conn = DriverManager
+//					.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+//							"sa", "database");
+			source.setServerName("localhost:5432");
+			source.setDatabaseName("tpcds-ai");
+			}
+		}
+		source.setUser("sa");
+		source.setPassword("database");
+		
+		if(singleThread)
+			source.setMaxConnections(1);
+		else
+			source.setMaxConnections(num_of_usable_threads);
+		conn = source.getConnection();
+	
+	}
+
+	public boolean checkIfPostgresServer() {
+		
+		String line;
+	    try {
+	      Process p = Runtime.getRuntime().exec("pidof postgres");
+	      BufferedReader input = new BufferedReader(new InputStreamReader(p.getInputStream()));
+	      while ((line = input.readLine()) != null)
+	      {
+	        //System.out.println(line);
+	        if(line.split(" ").length >= 5)
+	        	return true;
+	        else
+	        	return false;
+	      }
+	    } catch (Exception err) {
+	      System.out.println(err);
+	    }
+	    return false;
+	}
 	public onlinePB(onlinePB obj){
 
 		//to just make sure that static variables are already assigned values
@@ -1347,7 +1445,7 @@ public class onlinePB {
 				loc1 = new location(qrun_sel,this);
 //				if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //					printSelectivityCost(qrun_sel, -1);
-				//non_contour_points.add(loc1);
+				non_contour_points.add(loc1);
 				if(trie)
 					addLocationtoGraph(loc1, 2);
 				opt_call++;
@@ -1370,7 +1468,7 @@ public class onlinePB {
 			
 			if(loc2 == null){
 				loc2 = new location(qrun_sel,this);
-				//non_contour_points.add(loc2);
+				non_contour_points.add(loc2);
 //				if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //					printSelectivityCost(qrun_sel, -1);
 				if(trie)
@@ -1411,7 +1509,7 @@ public class onlinePB {
 					loc = locationAlreadyExist(qrun_sel);
 				if(loc == null){
 					loc = new location(qrun_sel, this);
-					//non_contour_points.add(loc);
+					non_contour_points.add(loc);
 //					if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //						printSelectivityCost(qrun_sel, -1);
 					if(trie)
@@ -1446,7 +1544,7 @@ public class onlinePB {
 				
 				if(loc == null){
 					loc = new location(qrun_sel_rev, this);
-					//non_contour_points.add(loc);
+					non_contour_points.add(loc);
 //					if(Math.abs(qrun_sel_rev[0] - minimum_selectivity) < 0.00001f)
 //						printSelectivityCost(qrun_sel_rev, -1);
 					if(trie)
@@ -1552,7 +1650,7 @@ public class onlinePB {
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
-							//non_contour_points.add(loc);
+							non_contour_points.add(loc);
 //							if(Math.abs(qrun_copy[0] - minimum_selectivity) < 0.00001f)
 //								printSelectivityCost(qrun_copy, -1);
 							if(trie)
@@ -1630,11 +1728,11 @@ public class onlinePB {
 							}
 	
 							
-//							if(!ContourLocationAlreadyExist(loc.dim_values))
-//								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
-//									contour_points.add(new location(loc.dim_values,this));
-//								else 
-//									contour_points.add(loc);
+							if(!ContourLocationAlreadyExist(loc.dim_values))
+								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
+									contour_points.add(new location(loc.dim_values,this));
+								else 
+									contour_points.add(loc);
 								if(trie)
 									addLocationtoGraph(loc, 1);
 								
@@ -1658,7 +1756,7 @@ public class onlinePB {
 								
 								if(temp_loc == null){
 									temp_loc = new location(temp_qrun, this);
-									//non_contour_points.add(temp_loc);
+									non_contour_points.add(temp_loc);
 									if(trie)
 										addLocationtoGraph(temp_loc, 2);
 								}
@@ -1747,11 +1845,11 @@ public class onlinePB {
 								if(qrun_copy[0] >= minimum_selectivity && qrun_copy[0] <= ((float)Math.pow(beta, 2)*minimum_selectivity))
 									forward_jumps_zero_level++;
 							}
-//							if(!ContourLocationAlreadyExist(loc.dim_values))
-//								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
-//									contour_points.add(new location(loc.dim_values,this));
-//								else 
-//									contour_points.add(loc);
+							if(!ContourLocationAlreadyExist(loc.dim_values))
+								if(loc.get_contour_no() > 0) //again checking if the loc already exist in earlier contours									
+									contour_points.add(new location(loc.dim_values,this));
+								else 
+									contour_points.add(loc);
 								if(trie)
 									addLocationtoGraph(loc, 1);
 							// check to see if the terminus point is reached for the 2D slice 
@@ -1776,7 +1874,7 @@ public class onlinePB {
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
-							//non_contour_points.add(loc);
+							non_contour_points.add(loc);
 							if(trie)
 								addLocationtoGraph(loc, 2);
 							//counting the optimization calls
@@ -2963,7 +3061,7 @@ public class onlinePB {
 		// Traverse through all characters of given word
 		for( int level = 0; level < dimension; level++)
 		{
-			HashMap<Integer,online_vertex> child = crawl.getChildern();
+			TreeMap<Integer,online_vertex> child = crawl.getChildern();
 			float power = (float)Math.pow(10, decimalPrecision);
 			//the value 11 is chosen to combat the imprecision in the float and decimal representation
 			// moreover it will add a value < 1 which would eventually get rounded due to int'f floor
@@ -2975,12 +3073,12 @@ public class onlinePB {
 				online_vertex temp;
 
 				if(level == dimension - 1) //then this is a leaf node
-                    temp = new online_vertex(val, true, loc);
+                    temp = new online_vertex_leaf(val, loc);
                 else
-                    temp = new online_vertex(val, false, null);
+                    temp = new online_vertex(val);
 				
 				if(child == null)
-					child = new HashMap<Integer,online_vertex>();
+					child = new TreeMap<Integer,online_vertex>();
 				
 				child.put( val, temp );
 				
@@ -3007,9 +3105,9 @@ public class onlinePB {
 		if(option == 0)
 			crawl = map_root;
 		else if(option == 1)
-			crawl = contour_root;
+			crawl =  contour_root;
 		else if(option == 2)
-			crawl = non_contour_root;
+			crawl =  non_contour_root;
 		else
 			crawl = null;
 
@@ -3021,7 +3119,7 @@ public class onlinePB {
 		{
 			if(crawl == null)
 				System.out.println("null crawl");
-			HashMap<Integer,online_vertex> child = crawl.getChildern();
+			TreeMap<Integer,online_vertex> child = crawl.getChildern();
 			float power = (float)Math.pow(10, decimalPrecision);
 			//the value 11 is chosen to combat the imprecision in the float and decimal representation
 			// moreover it will add a value < 1 which would eventually get rounded due to int'f floor
@@ -3058,14 +3156,16 @@ public class onlinePB {
 //				}
 //			}
 	}
-		if(crawl.loc == null){
+		
+		online_vertex_leaf crawl_leaf = (online_vertex_leaf) crawl;
+		if(crawl_leaf.loc == null){
 			System.out.println("the crawl location is null");
 		}
-		assert(crawl.loc != null): "crawl.loc is null which should not be the case";
+		assert(crawl_leaf.loc != null): "crawl.loc is null which should not be the case";
 		location_hits ++;
 		endTime = System.nanoTime();
 		location_finding_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
-		return crawl.loc;
+		return crawl_leaf.loc;
 	}
 	
 }
@@ -3118,8 +3218,8 @@ class CoveringContourinputParamStruct {
 			obj.conn = conn;
 			obj.contour_points.clear();
 			obj.non_contour_points.clear();
-			obj.contour_root = new online_vertex(-1,false,null);
-			obj.non_contour_root = new online_vertex(-1,false,null);
+			obj.contour_root = new online_vertex(-1);
+			obj.non_contour_root = new online_vertex(-1);
 			
 			assert(order.size() == dimension): "size of order not matching with dimensions";
 			assert(cost > 0): "contour searching cost is less than or equal to 0";
@@ -3818,17 +3918,14 @@ class location implements Serializable
 	
 }
 
+
 class online_vertex {
 
 	int value;
-	HashMap<Integer,online_vertex> children;
-	boolean isLeaf = false;
-	location loc;
+	TreeMap<Integer,online_vertex> children;
 	
-	public online_vertex(int val, boolean iL, location lc) {
+	public online_vertex(int val) {
 		value = val;
-		isLeaf = iL;
-		loc = lc;
 	}
 	
 	online_vertex(){
@@ -3839,12 +3936,26 @@ class online_vertex {
 		this.value = value;
 	}
 	
-	HashMap<Integer,online_vertex> getChildern(){
+	public TreeMap<Integer,online_vertex> getChildern(){
 		return children;
 	}
 	
-	void setChildern(HashMap<Integer,online_vertex> hm){
+	public void setChildern(TreeMap<Integer,online_vertex> hm){
 		children = hm;
+	}
+}
+
+class online_vertex_leaf  extends online_vertex{
+
+	location loc;
+
+	public online_vertex_leaf(int val, location l) {
+		value = val;
+		loc = l;
+	}
+	
+	online_vertex_leaf(){
+		
 	}
 }
 
