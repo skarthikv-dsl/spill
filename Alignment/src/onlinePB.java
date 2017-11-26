@@ -334,6 +334,13 @@ public class onlinePB {
 
 			while(cost < 2*h_cost)
 			{
+				
+				if(cost<(double)9000){
+					cost *= 2;
+					i++;
+					continue;
+				}
+				
 				if(cost>h_cost)
 					cost = h_cost;
 				System.out.println("---------------------------------------------------------------------------------------------\n");
