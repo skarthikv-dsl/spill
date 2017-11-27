@@ -175,7 +175,7 @@ public class OfflinePB
 		//Settings
 		//Populate the OptimalCost Matrix.
 		
-		root = new online_vertex(-1,false,null);
+		root = new online_vertex(-1);
 		
 		obj.readpkt(gdp);
 		
@@ -312,7 +312,7 @@ public class OfflinePB
 					else if(!minContourCostMap.containsKey(i))
 						minContourCostMap.put(i, l.get_cost());
 
-					l.set_contour_no(i);
+					l.set_contour_no((short) i);
 				}
 				
 				if(visualisation_2D)
@@ -459,7 +459,9 @@ public class OfflinePB
 			}
 			
 			obj = (onlineLocationsMap)ip.readObject();
-			ContourPointsMap = obj.getContourMap();
+			
+			//TODO: need to change the below
+			//ContourPointsMap = obj.getContourMap();
 			Iterator itr = ContourPointsMap.keySet().iterator();
 			while(itr.hasNext()){
 				Integer key = (Integer) itr.next();
@@ -486,7 +488,7 @@ public class OfflinePB
 							//TODO: removed the contour_no == k check condition; check again!
 						//if (objContourPt.contour_no == k && !reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
 							assert(objContourPt.reduced_planNumber != -1) : "contour location not reduced";
-							reducedPlansSet.add(objContourPt.reduced_planNumber);
+							reducedPlansSet.add((int) objContourPt.reduced_planNumber);
 						}
 					}
 
@@ -524,7 +526,8 @@ public class OfflinePB
 			
 			fos = new FileOutputStream (path);
 			oos = new ObjectOutputStream(fos);
-			oos.writeObject(new onlineLocationsMap(ContourPointsMap));
+			//TODO: Need to change it
+			//oos.writeObject(new onlineLocationsMap(ContourPointsMap));
 			
 			oos.flush();
 			oos.close();
@@ -1451,9 +1454,9 @@ public void initialize(int location) {
 				online_vertex temp;
 
 				if(level == dimension - 1) //then this is a leaf node
-                    temp = new online_vertex(val, true, loc);
+                    temp = new online_vertex_leaf(val,  loc);
                 else
-                    temp = new online_vertex(val, false, null);
+                    temp = new online_vertex(val);
 				
 				if(child == null)
 					child = new HashMap<Integer,online_vertex>();
@@ -2085,7 +2088,7 @@ public void initialize(int location) {
 				location objContourPt = (location)iter.next();
 				if(objContourPt.is_within_threshold[maxCoveragePlanIndex] == true)
 				{
-					objContourPt.reduced_planNumber = maxCoveragePlan;	
+					objContourPt.reduced_planNumber = (short) maxCoveragePlan;	
 				}
 			}
 		}
@@ -2103,7 +2106,7 @@ public void initialize(int location) {
 					while (iter.hasNext()) {
 						location objContourPt = (location) iter.next();
 						if (!reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
-							reducedPlansSet.add(objContourPt.reduced_planNumber);
+							reducedPlansSet.add((int) objContourPt.reduced_planNumber);
 						}
 					}
 
@@ -2124,7 +2127,7 @@ public void initialize(int location) {
 					while (iter.hasNext()) {
 						location objContourPt = (location) iter.next();
 						if (!reducedPlansSet.contains(objContourPt.reduced_planNumber)) {
-							reducedPlansSet.add(objContourPt.reduced_planNumber);
+							reducedPlansSet.add((int) objContourPt.reduced_planNumber);
 						}
 					}
 					contourPlansReduced.put(contour_no, reducedPlansSet);

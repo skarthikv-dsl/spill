@@ -136,7 +136,7 @@ public class onlinePB {
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException, ClassNotFoundException {
 	
-		int threads = (int) ( Runtime.getRuntime().availableProcessors()*0.95);
+		int threads = (int) ( Runtime.getRuntime().availableProcessors()*1);
 		num_of_usable_threads = threads;
 		//set the program arguments
 		if(args.length > 0){
@@ -405,6 +405,7 @@ public class onlinePB {
 						obj.addLocationtoGraph(l,0);
 				}
 				
+				
 				for(location l: obj.non_contour_points){
 					if(l.get_plan_no() == -1){
 						l.setPlanNumber(obj.conn);
@@ -490,6 +491,22 @@ public class onlinePB {
 		
 	}
 	
+	public void extractNonContourPointstoList(ArrayList<location> al, online_vertex node) {
+		
+		if((node instanceof online_vertex) == true) {
+			Iterator valueSet =  node.getChildern().values().iterator();
+			while(valueSet.hasNext()) {
+				extractNonContourPointstoList(al,(online_vertex)valueSet.next());
+			}
+		} else {
+			online_vertex_leaf node_leaf = (online_vertex_leaf) node;
+			al.add(node_leaf.loc);
+		}
+		
+		if(node.getChildern() != null)
+			node.getChildern().clear();		
+	}
+
 	public  void FPCMemoryLeaks() throws SQLException {
 
 		
@@ -580,7 +597,13 @@ public class onlinePB {
 		
 		String start = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
 		String stop = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
-		String kill = "pkill -9 postgres";
+		String kill = "sudo pkill -9 postgres";
+		
+		File f_marwa = new File("/home/dsladmin/marwa");
+		if(f_marwa.exists()){
+			start = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
+			stop = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
+		}
 		if (conn != null) {
 			try { conn.close(); } catch (SQLException e) {}
 		}
@@ -2055,7 +2078,8 @@ public class onlinePB {
 	    			//assert(input.obj.contour_points.size() > 0 || input.obj.non_contour_points.size() > 0): "empty contour or non_contour points";
 	            	
 	    			output.contour_locs_parallel = input.obj.contour_points;
-	            	output.non_contour_locs_parallel = input.obj.non_contour_points;
+	    			output.non_contour_locs_parallel = new ArrayList<location>(); 
+	            	extractNonContourPointstoList(output.non_contour_locs_parallel, input.obj.non_contour_root);
             		output.opt_call_count = input.obj.opt_call;
             		output.fpc_call_count = input.obj.fpc_call;
             		output.slope_time = input.obj.slope_time;
