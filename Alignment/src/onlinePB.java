@@ -493,14 +493,17 @@ public class onlinePB {
 	
 	public void extractNonContourPointstoList(ArrayList<location> al, online_vertex node) {
 		
-		if((node instanceof online_vertex) == true) {
+		if(node.getChildern()!=null && node.getChildern().size() > 0) {
 			Iterator valueSet =  node.getChildern().values().iterator();
 			while(valueSet.hasNext()) {
-				extractNonContourPointstoList(al,(online_vertex)valueSet.next());
+				online_vertex temp = (online_vertex)valueSet.next();
+				extractNonContourPointstoList(al,temp);
 			}
 		} else {
-			online_vertex_leaf node_leaf = (online_vertex_leaf) node;
-			al.add(node_leaf.loc);
+			if(node instanceof online_vertex_leaf) {
+				online_vertex_leaf node_leaf = (online_vertex_leaf) node;
+				al.add(node_leaf.loc);
+			}
 		}
 		
 		if(node.getChildern() != null)
@@ -610,11 +613,14 @@ public class onlinePB {
 
 		try {
 			Process p;
-			Runtime r = Runtime.getRuntime();
+			Runtime r;
+			while(checkIfPostgresServer()) {
+			r= Runtime.getRuntime();
 			p = r.exec(kill);
 			p.waitFor();
-			
+			}
 			while(!checkIfPostgresServer()) {
+				r= Runtime.getRuntime();
 				p = r.exec(start);
 				p.waitFor();
 				Thread.sleep(20 * 1000);
@@ -686,6 +692,8 @@ public class onlinePB {
 	    }
 	    return false;
 	}
+	
+	
 	public onlinePB(onlinePB obj){
 
 		//to just make sure that static variables are already assigned values
@@ -1475,7 +1483,7 @@ public class onlinePB {
 				loc1 = new location(qrun_sel,this);
 //				if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //					printSelectivityCost(qrun_sel, -1);
-				non_contour_points.add(loc1);
+				//non_contour_points.add(loc1);
 				if(trie)
 					addLocationtoGraph(loc1, 2);
 				opt_call++;
@@ -1498,7 +1506,7 @@ public class onlinePB {
 			
 			if(loc2 == null){
 				loc2 = new location(qrun_sel,this);
-				non_contour_points.add(loc2);
+				//non_contour_points.add(loc2);
 //				if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //					printSelectivityCost(qrun_sel, -1);
 				if(trie)
@@ -1539,7 +1547,7 @@ public class onlinePB {
 					loc = locationAlreadyExist(qrun_sel);
 				if(loc == null){
 					loc = new location(qrun_sel, this);
-					non_contour_points.add(loc);
+					//non_contour_points.add(loc);
 //					if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
 //						printSelectivityCost(qrun_sel, -1);
 					if(trie)
@@ -1574,7 +1582,7 @@ public class onlinePB {
 				
 				if(loc == null){
 					loc = new location(qrun_sel_rev, this);
-					non_contour_points.add(loc);
+					//non_contour_points.add(loc);
 //					if(Math.abs(qrun_sel_rev[0] - minimum_selectivity) < 0.00001f)
 //						printSelectivityCost(qrun_sel_rev, -1);
 					if(trie)
@@ -1680,7 +1688,7 @@ public class onlinePB {
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
-							non_contour_points.add(loc);
+							//non_contour_points.add(loc);
 //							if(Math.abs(qrun_copy[0] - minimum_selectivity) < 0.00001f)
 //								printSelectivityCost(qrun_copy, -1);
 							if(trie)
@@ -1786,7 +1794,7 @@ public class onlinePB {
 								
 								if(temp_loc == null){
 									temp_loc = new location(temp_qrun, this);
-									non_contour_points.add(temp_loc);
+									//non_contour_points.add(temp_loc);
 									if(trie)
 										addLocationtoGraph(temp_loc, 2);
 								}
@@ -1904,7 +1912,7 @@ public class onlinePB {
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
-							non_contour_points.add(loc);
+							//non_contour_points.add(loc);
 							if(trie)
 								addLocationtoGraph(loc, 2);
 							//counting the optimization calls

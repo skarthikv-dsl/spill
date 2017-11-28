@@ -71,6 +71,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.StringTokenizer;
+import java.util.TreeMap;
 import java.util.Vector;
 //import java.util.Set;
 import java.util.Comparator;
@@ -1444,7 +1445,7 @@ public void initialize(int location) {
 		// Traverse through all characters of given word
 		for( int level = 0; level < dimension; level++)
 		{
-			HashMap<Integer,online_vertex> child = crawl.getChildern();
+			TreeMap<Integer, online_vertex> child = crawl.getChildern();
 
 			int val = findNearestPoint(loc.dim_values[level]);
 
@@ -1459,7 +1460,7 @@ public void initialize(int location) {
                     temp = new online_vertex(val);
 				
 				if(child == null)
-					child = new HashMap<Integer,online_vertex>();
+					child = new TreeMap<Integer,online_vertex>();
 				
 				child.put( val, temp );
 				
@@ -1493,7 +1494,7 @@ public void initialize(int location) {
 		{
 			if(crawl == null)
 				System.out.println("null crawl");
-			HashMap<Integer,online_vertex> child = crawl.getChildern();
+			TreeMap<Integer,online_vertex> child = crawl.getChildern();
 			
 			int val = arr[level];
 			
@@ -1526,13 +1527,14 @@ public void initialize(int location) {
 //				}
 //			}
 	}
-		if(crawl.loc == null){
+		online_vertex_leaf crawl_leaf = (online_vertex_leaf) crawl;
+		if(crawl_leaf.loc == null){
 			System.out.println("the crawl location is null");
 		}
-		assert(crawl.loc != null): "crawl.loc is null which should not be the case";
+		assert(crawl_leaf.loc != null): "crawl.loc is null which should not be the case";
 		endTime = System.nanoTime();
 		location_hits ++;
-		return crawl.loc;
+		return crawl_leaf.loc;
 	}
 	
 	
