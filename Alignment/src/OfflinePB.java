@@ -267,11 +267,13 @@ public class OfflinePB
 			if(trie)
 				obj.addLocationtoGraph(h_loc);
 			h_cost = h_loc.get_cost();
+			opt_calls++;
 						
 			location l_loc = new location(obj.convertIndextoSelectivity(l_loc_arr),obj);
 			if(trie)
 				obj.addLocationtoGraph(l_loc);
 			min_cost = l_loc.get_cost();
+			opt_calls++;
 		}
 			
 		
@@ -441,8 +443,6 @@ public class OfflinePB
 	  	System.out.println("OfflinePB The MaxHarm  is "+MaxHarm);
 	  	System.out.println("OfflinePB Anshuman average Suboptimality is "+(double)anshASO);
 		System.out.println("OfflinePB The AverageSubOptimaility  is "+(double)ASO/ASO_points);
-
-
 	}
 	
 	
@@ -553,13 +553,14 @@ public class OfflinePB
 		 * The following If condition checks whether any earlier point in all_contour_points 
 		 * had the same plan. If so, no need to open the .../predicateOrder/plan.txt again
 		 */
-
+		
 		leftInfo = locationAlreadyExist(left);
 		
 		if(leftInfo == null){
 			leftInfo = new location(convertIndextoSelectivity(left),this);
 			if(trie)
 				addLocationtoGraph(leftInfo);
+			all_contour_points.add(leftInfo);
 			opt_calls++;
 		}
 		double leftCost = leftInfo.get_cost();
@@ -571,6 +572,7 @@ public class OfflinePB
 			rightInfo = new location(convertIndextoSelectivity(right),this);
 			if(trie)
 				addLocationtoGraph(rightInfo);
+			all_contour_points.add(rightInfo);
 			opt_calls++;
 		}
 		double rightCost = rightInfo.get_cost(); 
@@ -588,6 +590,7 @@ public class OfflinePB
 				rightInfo = new location(convertIndextoSelectivity(right),this);
 				if(trie)
 					addLocationtoGraph(rightInfo);
+				all_contour_points.add(rightInfo);
 				opt_calls++;
 			}
 			rightCost = rightInfo.get_cost(); 
@@ -614,6 +617,7 @@ public class OfflinePB
 					if(trie)
 						addLocationtoGraph(midInfo);
 					opt_calls++;
+					all_contour_points.add(midInfo);
 				}
 				midCost = midInfo.get_cost();
 	
@@ -634,8 +638,8 @@ public class OfflinePB
 	
 		System.out.println("\n Found seed location with cost " + seedCost + " as "
 							+ getIndex(right, resolution) + " with cost = " + rightCost);
-		if(!ContourLocationAlreadyExist(rightInfo.dim_values))	
-			all_contour_points.add(rightInfo);
+//		if(!locationAlreadyExist(rightInfo.dim_values))	
+//			all_contour_points.add(rightInfo);
 		
 		//isContourPoint[getIndex(rightInfo.dim_values, resolution)] = true;		
 
@@ -691,6 +695,7 @@ public class OfflinePB
 					if(trie)
 						addLocationtoGraph(seedInfo);
 					opt_calls++;
+					all_contour_points.add(seedInfo);
 					explore_seed_count ++;
 				}
 				int newSeed = getIndex(convertSelectivitytoIndex(seedInfo.dim_values),resolution);
@@ -717,6 +722,7 @@ public class OfflinePB
 				if(trie)
 					addLocationtoGraph(cand1Info);
 				opt_calls ++;
+				all_contour_points.add(cand1Info);
 				explore_seed_count ++;
 			}
 			
@@ -726,6 +732,7 @@ public class OfflinePB
 				if(trie)
 					addLocationtoGraph(cand2Info);
 				opt_calls ++;
+				all_contour_points.add(cand2Info);
 				explore_seed_count ++;
 			}
 			
@@ -1416,13 +1423,14 @@ public void initialize(int location) {
 
 		if(trie)
 			return searchLocationInGraph(arr);
-		
+
 		boolean flag = false;
 		for(int c = 1; c<=ContourPointsMap.keySet().size(); c++){
 			for(location loc: ContourPointsMap.get(c)){
 				flag = true;
+
 				for(int i=0;i<dimension;i++){
-					if(Math.abs(loc.get_dimension(i) - selectivity[arr[i]]) > 0.00001){
+					if(Math.abs(loc.get_dimension(i) - selectivity[arr[i]]) > 0.00001f){
 						flag = false;
 						break;
 					}
@@ -1433,6 +1441,28 @@ public void initialize(int location) {
 				}
 			}
 		}
+		
+		for(location loc: all_contour_points){
+			flag = true;
+			
+//			if((Math.abs(selectivity[arr[0]] - 5.0E-5) < 0.00001f) && (Math.abs(selectivity[arr[1]] - 0.06) < 0.00001f) && (Math.abs(selectivity[arr[2]] - 5.0E-5) < 0.00001f)  ){
+//				System.out.print("\n loc = ");
+//				for(int i=0;i<dimension;i++)
+//					System.out.print(loc.dim_values[i]+",");
+//			}
+			for(int i=0;i<dimension;i++){
+				if(Math.abs(loc.get_dimension(i) - selectivity[arr[i]]) > 0.00001f){
+					flag = false;
+					break;
+				}
+			}
+			
+			if(flag==true) {
+				location_hits ++;
+				return loc;
+			}
+		}
+
 		return null;
 }
 	

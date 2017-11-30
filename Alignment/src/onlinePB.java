@@ -3512,9 +3512,10 @@ class location implements Serializable
 		
 		Connection conn = obj.conn;
 		dim_values = new float[dimension];
+		//System.out.println();
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = (arr[i]);
-			//		System.out.print(arr[i]+",");
+			//System.out.print(arr[i]+",");
 		}
 		
 		if(obj.using_packets){
