@@ -169,6 +169,7 @@ public class OfflinePB
 		System.out.println("Query Template: "+qtName);
 		
 		File f_marwa = new File("/home/dsladmin/marwa");
+		File f_durga = new File("/home/dsladmin/durga");
 		ADiagramPacket gdp = obj.getGDP(new File(pktPath));
 		
 		//ADiagramPacket reducedgdp = obj.cgFpc(threshold, gdp,apktPath);
@@ -209,7 +210,7 @@ public class OfflinePB
 								"sa", "database");
 			}
 			else{
-				if(f_marwa.exists() && !f_marwa.isDirectory()) { 
+				if(f_marwa.exists() || f_durga.exists()) { 
 				System.out.println("entered DB tpcds");
 				conn = DriverManager
 						.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
@@ -1672,7 +1673,37 @@ public void initialize(int location) {
 						e.printStackTrace();
 					}
 				}
-
+				
+				//if you want to validate fpc and plan quality
+				double tol = 0.01;
+				int pen_cnt =0;
+				for(int p=0;p<data.length;p++){
+					double cst = getOptimalCost(p);
+					double all_cst = AllPlanCosts[plans[p]][p];
+					double max,min; 
+					if(cst > all_cst){
+						max = cst;
+						min = all_cst;
+					}
+					else
+					{
+						max = all_cst;
+						min = cst;
+					}
+					
+					double th = (max-min)/min*(100.0);
+					if(th>(100.0*tol)){
+						//System.out.println("problem at "+p);
+						int [] ind = getCoordinates(dimension, resolution, p);
+						System.out.print("\nThe location is "+p+" optimal plan is "+plans[p]+ " opt cost = "+getOptimalCost(p)+" and allplancost="+AllPlanCosts[plans[p]][p]);
+						System.out.print(" the coordinates are ");
+						for(int k=0;k<dimension;k++)
+						System.out.print(ind[k]+"\t");
+						pen_cnt ++;
+					}
+				}
+				
+				System.out.println("\nFPC ERROR "+pen_cnt); 
 			}
 		}
 

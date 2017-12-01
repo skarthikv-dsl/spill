@@ -69,6 +69,7 @@ public class onlinePB {
 	static int database_conn=1;
 	static int sel_distribution = 1;
 	static File f_marwa;
+	static File f_durga;
 	static float h_cost;
 	static float min_cost;
 	//for plan bouquet
@@ -98,9 +99,9 @@ public class onlinePB {
 	static boolean memoization = true;
 	static float cost_error = 0.12f;
 	static float float_error ;
-	static boolean contoursReadFromFile = false;
+	static boolean contoursReadFromFile = true;
 	static boolean cg_contoursReadFromFile = false;
-	static boolean writeMapstoFile = false;
+	static boolean writeMapstoFile = true;
 	static boolean singleThread = false;
 	static boolean trie = true;
 
@@ -168,7 +169,7 @@ public class onlinePB {
 			source = new Jdbc3PoolingDataSource();
 			source.setDataSourceName("A Data Source");
 			f_marwa = new File("/home/dsladmin/marwa");
-			
+			f_durga = new File("/home/dsladmin/durga");
 			//Settings
 			//System.out.println("entered DB conn2");
 			if(database_conn==0){
@@ -178,7 +179,7 @@ public class onlinePB {
 			}
 			else{
 			
-				if(f_marwa.exists() && !f_marwa.isDirectory()) { 
+				if(f_marwa.exists() || f_durga.exists()) { 
 					System.out.println("entered DB tpcds");
 //					conn = DriverManager
 //							.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
@@ -220,8 +221,6 @@ public class onlinePB {
 		loc.database_conn = obj.database_conn;
 		loc.apktPath = obj.apktPath;
 		loc.decimalPrecision = obj.decimalPrecision;
-
-		
 		
 		File ContoursFile = new File(apktPath+"online_contours/Contours.map");
 
@@ -422,7 +421,7 @@ public class onlinePB {
 				
 				int size_of_contour = obj.contour_points.size();
 				int size_of_non_contour = obj.non_contour_points.size();
-				//ContourPointsMap.put((short)i, new ArrayList<location>(obj.contour_points)); //storing the contour points
+				ContourPointsMap.put((short)i, new ArrayList<location>(obj.contour_points)); //storing the contour points
 
 				//non_ContourPointsMap.put((short)i, new ArrayList<location>(obj.non_contour_points)); //storing the contour points
 
@@ -458,7 +457,7 @@ public class onlinePB {
 		}		
 		
 		obj.printPlanDistribution();
-		System.exit(0);
+		//System.exit(0);
 		
 		File fl_red =  new File(apktPath+"online_contours/Red_Contours.map");
 		if(cg_contoursReadFromFile && fl_red.exists()){		
@@ -550,7 +549,7 @@ public class onlinePB {
 				source.close();
 				source = new Jdbc3PoolingDataSource();
 				source.setDataSourceName("A Data Source");
-				f_marwa = new File("/home/dsladmin/marwa");
+
 				
 				//Settings
 				//System.out.println("entered DB conn2");
@@ -561,7 +560,7 @@ public class onlinePB {
 				}
 				else{
 				
-					if(f_marwa.exists() && !f_marwa.isDirectory()) { 
+					if(f_marwa.exists() || f_durga.exists()) { 
 						System.out.println("entered DB tpcds");
 //						conn = DriverManager
 //								.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
@@ -602,7 +601,7 @@ public class onlinePB {
 		String stop = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
 		String kill = "sudo pkill -9 postgres";
 		
-		File f_marwa = new File("/home/dsladmin/marwa");
+		
 		if(f_marwa.exists()){
 			start = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
 			stop = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
@@ -618,12 +617,13 @@ public class onlinePB {
 			r= Runtime.getRuntime();
 			p = r.exec(kill);
 			p.waitFor();
+			Thread.sleep(10 * 1000);
 			}
 			while(!checkIfPostgresServer()) {
 				r= Runtime.getRuntime();
 				p = r.exec(start);
 				p.waitFor();
-				Thread.sleep(20 * 1000);
+				Thread.sleep(10 * 1000);
 			}
 		}
 		catch (Exception e) 
@@ -645,7 +645,7 @@ public class onlinePB {
 		}
 		else{
 		
-			if(f_marwa.exists() && !f_marwa.isDirectory()) { 
+			if(f_marwa.exists() || f_durga.exists()) { 
 				System.out.println("entered DB tpcds");
 //				conn = DriverManager
 //						.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
@@ -757,7 +757,7 @@ public class onlinePB {
 		
 		System.out.println("The plans distributions are");
 		System.out.println(plans_dist);
-		System.exit(0);
+		//System.exit(0);
 	}
 
 
@@ -1158,11 +1158,16 @@ public class onlinePB {
 	    
 //	    String content = "This is the content to write into file";
 			File file_cs, file_contour;
-			File file;
+			File file = new File("/home/dsladmin/Srinivas/data/others/covering_contours/");
+			if(!file.exists())
+				file.mkdirs();
+			
+			file = new File("/home/dsladmin/Srinivas/data/others/contours/");
+			if(!file.exists())
+				file.mkdirs();
 			
 			
-			
-			if(f_marwa.exists() && !f_marwa.isDirectory()) {
+			if(f_marwa.exists() ||f_durga.exists()) {
 
 				file_cs = new File("/home/dsladmin/Srinivas/data/others/covering_contours/"+qtName+contour_no+".txt");
 			}
@@ -1170,7 +1175,7 @@ public class onlinePB {
 				file_cs = new File("/home/dsladmin/Srinivas/data/others/covering_contours/"+qtName+contour_no+".txt");
 			}
           
-			if(f_marwa.exists() && !f_marwa.isDirectory()) {
+			if(f_marwa.exists() ||f_durga.exists()) {
 				file_contour = new File("/home/dsladmin/Srinivas/data/others/contours/"+qtName+contour_no+".txt");
 			}
 			else{
@@ -2504,7 +2509,7 @@ public class onlinePB {
 	private void ContourCentricCostGreedy(short contour_no) throws SQLException
 	{
 		ArrayList<location> contour_locs = new ArrayList<location>();
-		
+		HashSet<Short> planSet = new HashSet<Short>();
 		if(contour_no == -1){
 			//get all the location of all the contours
 			
@@ -2529,6 +2534,17 @@ public class onlinePB {
 		int[] index = new int[dimension];
 		
 		short originalPlanCnt = (short) new File(apktPath+"onlinePB/planStructureXML").listFiles().length ;
+		
+		if(!qtName.contains("5D")) {
+			for(short i=0;i<originalPlanCnt;i++) 
+				planSet.add(i);
+		}
+		else
+		{
+			for(location loc: contour_locs) 
+				planSet.add(loc.get_plan_no());
+		}
+		
 		short plansArray[] = new short[originalPlanCnt];
 		HashSet<Short> chosenPlanSet = new HashSet<Short>();
 		int remainingSpace = 0;
