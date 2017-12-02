@@ -2554,6 +2554,8 @@ public class onlinePB {
 			originalPlanCnt = (short) planMap.size();
 		}
 		
+		//essentially mapping from 0<=plan_ind<=originalPlancnt to actual numbers
+		//this is also reverse mapping of planMap datastructure
 		short plansArray[] = new short[originalPlanCnt];
 		HashSet<Short> chosenPlanSet = new HashSet<Short>();
 		int remainingSpace = 0;
@@ -2567,7 +2569,15 @@ public class onlinePB {
 		ix = 0;
 		while(ix < originalPlanCnt)
 		{
-			plansArray[ix] = planMap.get(ix);
+			short plan_allocated =-1;
+			for(Short key : planMap.keySet()){
+				if(ix == planMap.get(key.shortValue())){
+					plan_allocated = key.shortValue();
+					break;
+				}
+			}
+			plansArray[ix] = plan_allocated;
+			assert(plan_allocated !=-1 ): "some issue with plan map";
 			ix++;
 		}
 
@@ -2594,7 +2604,7 @@ public class onlinePB {
 		
 		//get costs of all plans at all contour_locs
 		for (short i=0; i<originalPlanCnt; i++)
-			contour_locs = getFPCCostParallel(contour_locs, planMap.get(i), i);
+			contour_locs = getFPCCostParallel(contour_locs, plansArray[i], i);
 		
 		for(location lc : contour_locs)
 			assert(lc.fpc_plan_cost.size() == originalPlanCnt) : "for not all plans in the non_reduced_contour_loc_structure with fpc costs";
