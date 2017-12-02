@@ -303,8 +303,10 @@ public class onlinePB {
 			
 			//clear the contents of onlinePB Planstructure directory
 			File dir = new File(apktPath+"onlinePB/planStructureXML/");
+			if(!contoursReadFromFile){
 			for(File file: dir.listFiles())  
 			        file.delete();
+			}
 			
 			dir = new File(apktPath+"onlinePB/subContourPlans/");
 				obj.recursiveDelete(dir);
@@ -603,8 +605,8 @@ public class onlinePB {
 		
 		
 		if(f_marwa.exists()){
-			start = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
-			stop = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
+			start = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/Srinivas/tpch_9.4_DL_8.3/ -w start";
+			stop = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/Srinivas/tpch_9.4_DL_8.3/ -w stop";
 		}
 		if (conn != null) {
 			try { conn.close(); } catch (SQLException e) {}
@@ -2509,7 +2511,7 @@ public class onlinePB {
 	private void ContourCentricCostGreedy(short contour_no) throws SQLException
 	{
 		ArrayList<location> contour_locs = new ArrayList<location>();
-		HashSet<Short> planSet = new HashSet<Short>();
+		HashMap<Short,Short> planMap = new HashMap<Short,Short>(); 
 		if(contour_no == -1){
 			//get all the location of all the contours
 			
@@ -2537,12 +2539,19 @@ public class onlinePB {
 		
 		if(!qtName.contains("5D")) {
 			for(short i=0;i<originalPlanCnt;i++) 
-				planSet.add(i);
+				planMap.put(i,i);
 		}
 		else
 		{
-			for(location loc: contour_locs) 
-				planSet.add(loc.get_plan_no());
+			short i = 0;
+			for(location loc: contour_locs){
+				short p_no = loc.get_plan_no();
+				if(!planMap.keySet().contains(p_no)){
+					planMap.put(loc.get_plan_no(),i);
+					i++;
+				}
+			}
+			originalPlanCnt = (short) planMap.size();
 		}
 		
 		short plansArray[] = new short[originalPlanCnt];
@@ -2558,7 +2567,7 @@ public class onlinePB {
 		ix = 0;
 		while(ix < originalPlanCnt)
 		{
-			plansArray[ix] = ix;
+			plansArray[ix] = planMap.get(ix);
 			ix++;
 		}
 
@@ -2585,7 +2594,7 @@ public class onlinePB {
 		
 		//get costs of all plans at all contour_locs
 		for (short i=0; i<originalPlanCnt; i++)
-			contour_locs = getFPCCostParallel(contour_locs, i);
+			contour_locs = getFPCCostParallel(contour_locs, planMap.get(i), i);
 		
 		for(location lc : contour_locs)
 			assert(lc.fpc_plan_cost.size() == originalPlanCnt) : "for not all plans in the non_reduced_contour_loc_structure with fpc costs";
@@ -2612,7 +2621,7 @@ public class onlinePB {
 					assert(objContourPt.reduced_planNumber == -1) : "should not come here";
 						
 					
-					double foreign_cost = objContourPt.fpc_plan_cost.get(i);
+					float foreign_cost = (float) objContourPt.fpc_plan_cost.get(i);
 					// foreign_cost  = getFPCCost(objContourPt.dim_values, i);
 					
 					assert(foreign_cost > 0): "getFPCParallel is not working: less than zero cost";
@@ -2728,7 +2737,7 @@ public class onlinePB {
 		}
 	
 	
-	public ArrayList<location> getFPCCostParallel(ArrayList<location> contour_locs, short plan) throws SQLException {
+	public ArrayList<location> getFPCCostParallel(ArrayList<location> contour_locs, short plan, short fpcArrayListLocation) throws SQLException {
 
 		System.out.println("Number of Usable threads are : "+num_of_usable_threads + " with contour locs size "+contour_locs.size()+" with plan "+plan);
 		
@@ -2748,7 +2757,7 @@ public class onlinePB {
 			if(j==num_of_usable_threads-1 || (contour_locs.size() < num_of_usable_threads))
 				cur_max_val = contour_locs.size();
 
-			CGinputParamStruct input = new CGinputParamStruct(new ArrayList<location>(contour_locs.subList(cur_min_val, cur_max_val)), source, plan);
+			CGinputParamStruct input = new CGinputParamStruct(new ArrayList<location>(contour_locs.subList(cur_min_val, cur_max_val)), source, plan, fpcArrayListLocation);
 			inputs.add(input);
 			
 			if(contour_locs.size() < num_of_usable_threads)
@@ -3302,11 +3311,13 @@ class CoveringContourinputParamStruct {
 		String apktPath, qtName, select_query, predicates; 
 		int dimension, database_conn; short plan;
 		 Connection conn;
+		 short fpcArrayListLocation;
 		 
-		public CGinputParamStruct(ArrayList<location> locs, Jdbc3PoolingDataSource source, short plan) throws SQLException {
+		public CGinputParamStruct(ArrayList<location> locs, Jdbc3PoolingDataSource source, short plan, short fpcArrayListLocation) throws SQLException {
 			this.source = source;
 			this.contour_fpc_locs  = new ArrayList<location>(locs);
 			this.plan  = plan; 
+			this.fpcArrayListLocation = fpcArrayListLocation;
 		}
 		
 		public void getForiegnCost_all_locations(String apktPath, String qtName, String select_query, String predicates, int dimension, int database_conn) throws SQLException{
@@ -3322,7 +3333,7 @@ class CoveringContourinputParamStruct {
 			conn = source.getConnection();
 			
 			for(location loc : contour_fpc_locs) {
-				loc.fpc_plan_cost.set(plan,getFPCCost(loc.dim_values, plan));
+				loc.fpc_plan_cost.set(fpcArrayListLocation,getFPCCost(loc.dim_values, plan));
 			}
 			
 			if (conn != null) {
