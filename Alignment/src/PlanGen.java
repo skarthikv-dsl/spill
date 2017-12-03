@@ -234,7 +234,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 	}
 
-	public void getPlanGenParallel() throws SQLException {
+	public void getPlanGenParallel() throws SQLException, PicassoException, IOException {
 
 		
 		System.out.println("Number of Usable threads are : "+num_of_usable_threads + " with contour locs size "+totalPoints);
@@ -293,7 +293,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 	    	 
 		    	try {
 		    		PlanGenOutputParamStruct output = future.get();
-		    		
+		    		conn = source.getConnection();
 		    		for(int key : output.hm.keySet()){
 		    			long hash_val = output.hm.get(key).hash_val;
 		    			int plan_number = -1;
@@ -301,6 +301,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 //							if(true){
 								plan_number = planHashMap.size();
 								planHashMap.put(hash_val,plan_number);
+								writeXMLPlan(key,plan_number);
 						}
 						else{
 								plan_number = planHashMap.get(hash_val);
@@ -310,6 +311,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 						data_new[key].setPlanNumber(plan_number);
 						//System.out.println("Location = "+key+" with cost = "+output.hm.get(key).cost+" plan no = "+plan_number);
 		    		}
+		    		
 
 				} catch (InterruptedException | ExecutionException e) {
 					
@@ -833,6 +835,90 @@ File plansFile = new File(apktPath+"planStructure_new");
 		return plan;
 		
 	}
+	
+public void writeXMLPlan(int loc, int plan_no) throws PicassoException, IOException, SQLException {
+
+		
+		StringBuilder XML_Plan = new StringBuilder();
+		String xml_query = null;
+		int  index [] = new int[dimension] ;
+		index = getCoordinates(dimension, resolution, loc);
+		try{      	
+			Statement stmt = conn.createStatement();
+			String exp_query = new String("Selectivity ( "+predicates+ ") ( ");
+			for(int i=0;i<dimension;i++){
+				if(i !=dimension-1){
+					exp_query = exp_query + (selectivity[index[i]])+ ", ";
+				}
+				else{
+					exp_query = exp_query + (selectivity[index[i]]) + " ) ";
+				}
+			}
+			exp_query = exp_query + select_query;
+			xml_query = "explain (format xml) "+ exp_query ;
+			
+			//String exp_query = new String(query_opt_spill);
+			//System.out.println(exp_query);
+//			stmt.execute("set work_mem = '100MB'");
+//			//NOTE,Settings: 4GB for DS and 1GB for H
+//			if(database_conn==0){
+//				stmt.execute("set effective_cache_size='1GB'");
+//			}
+//			else{
+//				stmt.execute("set effective_cache_size='4GB'");
+//			}
+
+			//NOTE,Settings: need not set the page cost's
+//			stmt.execute("set  enable_hashjoin = off");
+//			//stmt.execute("set  enable_mergejoin = off");
+//			stmt.execute("set  enable_nestloop = off");
+//			stmt.execute("set  enable_indexscan = off");
+//			stmt.execute("set  enable_bitmapscan = off");
+//			//stmt.execute("set  enable_seqscan = off");
+//			stmt.execute("set  seq_page_cost = 1");
+//			stmt.execute("set  random_page_cost=4");
+//			stmt.execute("set cpu_operator_cost=0.0025");
+//			stmt.execute("set cpu_index_tuple_cost=0.005");
+//			stmt.execute("set cpu_tuple_cost=0.01");
+			
+		
+			
+			ResultSet rs_xml = stmt.executeQuery(xml_query);
+			
+			while(rs_xml.next())  {
+				XML_Plan.append(rs_xml.getString(1)); 
+			}
+	
+			rs_xml.close();
+			stmt.close();
+			
+			String xml_path = apktPath+"planStructureXML/"+plan_no+".xml";
+			File xml_file =new File(xml_path);
+			//Execute the xml query
+			
+			try{
+				FileWriter fw_xml = new FileWriter(xml_file, false); 
+				fw_xml.write(XML_Plan.toString());
+				fw_xml.close();
+			}
+			catch(Exception e){
+				e.printStackTrace();
+				ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+				throw new PicassoException("Error getting plan: "+e);
+			}
+			//Store the result in path
+
+			
+		}
+		catch(Exception e){
+			e.printStackTrace();
+			ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+			throw new PicassoException("Error getting plan: "+e);
+		}
+
+		
+	}
+
 	
 	public Plan getNativePlanOperators(int loc, Operators op) throws PicassoException, IOException {
 

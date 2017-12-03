@@ -1605,21 +1605,29 @@ public void clearSystemCache(){
 			plan_locs = new ArrayList <Integer>();
 			order =  new ArrayList<Integer>();
 
-			FileReader file = new FileReader(genPCST_parallel.apktPath+"predicateOrder/"+p_no+".txt");
-
-			BufferedReader br = new BufferedReader(file);
-			String s;
-			while((s = br.readLine()) != null) {
-				//System.out.println(Integer.parseInt(s));
-				// If the number is the remaining dimensions then only add it to the order
-
-				value = Integer.parseInt(s);
-				//System.out.println("\nvalue="+value+"\n");
-				order.add(value);
+			
+			FileReader file;
+			File file_exist = new File(genPCST_parallel.apktPath+"predicateOrder/"+p_no+".txt");
+			if(!file_exist.exists()) {
+				file = new FileReader(genPCST_parallel.apktPath+"predicateOrder/0.txt");
 			}
-			category = order.get(0);
-			br.close();
-			file.close();
+			else {
+				file = new FileReader(genPCST_parallel.apktPath+"predicateOrder/"+p_no+".txt");
+			}
+				BufferedReader br = new BufferedReader(file);
+				String s;
+				while((s = br.readLine()) != null) {
+					//System.out.println(Integer.parseInt(s));
+					// If the number is the remaining dimensions then only add it to the order
+
+					value = Integer.parseInt(s);
+					//System.out.println("\nvalue="+value+"\n");
+					order.add(value);
+				}
+				category = order.get(0);
+				br.close();
+				file.close();
+			
 		}
 		void addPoint(int loc)
 		{

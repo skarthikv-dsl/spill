@@ -137,7 +137,7 @@ public class onlinePB {
 	
 	public static void main(String[] args) throws IOException, SQLException, PicassoException, ClassNotFoundException {
 	
-		int threads = (int) ( Runtime.getRuntime().availableProcessors()*1);
+		int threads = (int) ( Runtime.getRuntime().availableProcessors()*0.9);
 		num_of_usable_threads = threads;
 		//set the program arguments
 		if(args.length > 0){
@@ -2603,9 +2603,13 @@ public class onlinePB {
 		}
 		
 		//get costs of all plans at all contour_locs
-		for (short i=0; i<originalPlanCnt; i++)
+		for (short i=0; i<originalPlanCnt; i++) {
+			if(i!=0 && (i%10 ==0)) {
+				System.gc();
+				restartDatabase();
+			}
 			contour_locs = getFPCCostParallel(contour_locs, plansArray[i], i);
-		
+		}
 		for(location lc : contour_locs)
 			assert(lc.fpc_plan_cost.size() == originalPlanCnt) : "for not all plans in the non_reduced_contour_loc_structure with fpc costs";
 
