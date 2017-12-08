@@ -87,6 +87,7 @@ public class onlinePB {
 	//parameters to set
 	//static float minimum_selectivity = 0.00005f;
 	static float minimum_selectivity = 0.0001f;
+	static float max_selectivity = 0.01f;
 	//static float minimum_selectivity = 0.001f;
 	static float alpha = 2;
 	static float lambda = 20;
@@ -104,6 +105,8 @@ public class onlinePB {
 	static boolean writeMapstoFile = true;
 	static boolean singleThread = false;
 	static boolean trie = true;
+	static boolean extra_locations = true;
+	static int no_extra_locs = 6;
 
 	static Jdbc3PoolingDataSource source;
 	Connection conn = null;
@@ -1288,7 +1291,8 @@ public class onlinePB {
 		System.out.println(funName+" Resolution = "+resolution);
 		double sel;
 		this.selectivity = new float [resolution];
-
+		
+		
 		if(resolution == 10){
 			if(sel_distribution == 0){
 
@@ -1514,7 +1518,6 @@ public class onlinePB {
 				if(loc2 == null){
 					loc2 = searchLocationInGraph(qrun_sel,2);
 				}
-
 			}
 			else
 				loc2 = locationAlreadyExist(qrun_sel);
@@ -1569,6 +1572,7 @@ public class onlinePB {
 						addLocationtoGraph(loc, 2);
 					opt_call++;
 				}
+				
 				assert(loc != null): "location is null";
 				float optimization_cost = loc.get_cost(); 				
 				
@@ -2231,6 +2235,15 @@ public class onlinePB {
 
 	private boolean ContourLocationAlreadyExist(float[] arr) {
 		//TODO: need to test this
+		
+		if(trie) {
+			location loc = searchLocationInGraph(arr, 1);
+			if(loc == null)
+				return false;
+			else
+				return true;
+		}
+		
 		boolean flag = false;
 		for(location loc: contour_points){
 			flag = true;
