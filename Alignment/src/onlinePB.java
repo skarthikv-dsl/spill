@@ -140,9 +140,14 @@ public class onlinePB {
 		int threads = (int) ( Runtime.getRuntime().availableProcessors()*0.9);
 		num_of_usable_threads = threads;
 		//set the program arguments
-		if(args.length > 0){
+		if(args.length >= 1){
 			alpha = Float.parseFloat(args[0]);
 			System.out.println("Alpha = "+alpha);
+			//writeMapstoFile = false;
+		}
+		if(args.length >= 2){
+			minimum_selectivity = Float.parseFloat(args[1]);
+			System.out.println("minimum_selectivity = "+minimum_selectivity);
 			//writeMapstoFile = false;
 		}
 		
@@ -221,8 +226,9 @@ public class onlinePB {
 		loc.database_conn = obj.database_conn;
 		loc.apktPath = obj.apktPath;
 		loc.decimalPrecision = obj.decimalPrecision;
+		loc.alpha = obj.alpha;
 		
-		File ContoursFile = new File(apktPath+"online_contours/Contours.map");
+		File ContoursFile = new File(apktPath+"online_contours/Contours"+alpha+".map");
 
 		if(contoursReadFromFile && ContoursFile.exists()){
 			obj.readContourPointsFromFile(false);
@@ -302,7 +308,9 @@ public class onlinePB {
 			obj.non_contour_root = new online_vertex(-1);
 			
 			//clear the contents of onlinePB Planstructure directory
-			File dir = new File(apktPath+"onlinePB/planStructureXML/");
+			File dir = new File(apktPath+"onlinePB/planStructureXML"+alpha+"/");
+			if(!dir.exists())
+				dir.mkdirs();
 			if(!contoursReadFromFile){
 			for(File file: dir.listFiles())  
 			        file.delete();
@@ -461,7 +469,7 @@ public class onlinePB {
 		obj.printPlanDistribution();
 		//System.exit(0);
 		
-		File fl_red =  new File(apktPath+"online_contours/Red_Contours.map");
+		File fl_red =  new File(apktPath+"online_contours/Red_Contours"+alpha+".map");
 		if(cg_contoursReadFromFile && fl_red.exists()){		
 			
 			obj.readContourPointsFromFile(true);
@@ -1078,10 +1086,10 @@ public class onlinePB {
 			onlineLocationsMap obj;
 			
 			if(!CG_done){
-				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Contours.map")));
+				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Contours"+alpha+".map")));
 			}
 			else{
-				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Red_Contours.map")));
+				ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Red_Contours"+alpha+".map")));
 			}
 			
 			obj = (onlineLocationsMap)ip.readObject();
@@ -1096,7 +1104,7 @@ public class onlinePB {
 				
 			}
 			
-			ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/non_Contours.map")));
+			ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/non_Contours"+alpha+".map")));
 			obj = (onlineLocationsMap)ip.readObject();
 			non_ContourPointsMap = obj.getContourMap();
 			itr = non_ContourPointsMap.keySet().iterator();
@@ -1246,16 +1254,16 @@ public class onlinePB {
 			
 			//for writing the contours map
 			if(!CG_Done)
-				path = new String (apktPath+"online_contours/Contours.map");
+				path = new String (apktPath+"online_contours/Contours"+alpha+".map");
 			else
-				path = new String (apktPath+"online_contours/Red_Contours.map");
+				path = new String (apktPath+"online_contours/Red_Contours"+alpha+".map");
 			
 			fos = new FileOutputStream (path);
 			oos = new ObjectOutputStream(fos);
 			oos.writeObject(new onlineLocationsMap(ContourPointsMap));
 
 			//for writing the non contours map
-			path = new String (apktPath+"online_contours/non_Contours.map");
+			path = new String (apktPath+"online_contours/non_Contours"+alpha+".map");
 			fos = new FileOutputStream (path);
 			oos = new ObjectOutputStream(fos);
 			oos.writeObject(new onlineLocationsMap(non_ContourPointsMap));
@@ -2476,7 +2484,7 @@ public class onlinePB {
 		assert(loc !=null): "location should not be null";
 		
 		if(loc.get_plan_no() >= 0){
-			path = new String(apktPath+"onlinePB/planStructureXML/"+loc.get_plan_no()+".xml");
+			path = new String(apktPath+"onlinePB/planStructureXML"+alpha+"/"+loc.get_plan_no()+".xml");
 			long endTime = System.nanoTime();
 			opt_plan_path_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
 			return path;
@@ -2535,7 +2543,7 @@ public class onlinePB {
 		
 		int[] index = new int[dimension];
 		
-		short originalPlanCnt = (short) new File(apktPath+"onlinePB/planStructureXML").listFiles().length ;
+		short originalPlanCnt = (short) new File(apktPath+"onlinePB/planStructureXML"+alpha).listFiles().length ;
 		
 		if(!qtName.contains("5D")) {
 			for(short i=0;i<originalPlanCnt;i++) 
@@ -2789,7 +2797,7 @@ public class onlinePB {
 	            	CGOutputParamStruct output = new CGOutputParamStruct();
 	            	//System.out.println("before getting the connection");
 	            	
-	            	input.getForiegnCost_all_locations(apktPath, qtName, select_query, predicates, dimension, database_conn);
+	            	input.getForiegnCost_all_locations(apktPath, qtName, select_query, predicates, dimension, database_conn, alpha);
 	            	
 	            	//System.out.println("after getting the connection");
 	            	output.contour_fpc_done_locs = new ArrayList<location>(input.contour_fpc_locs);
@@ -2841,7 +2849,7 @@ public class onlinePB {
 
 		String xml_path;
 		if(path == null)
-			xml_path = new String(apktPath+"/onlinePB/planStructureXML/"+p_no+".xml");
+			xml_path = new String(apktPath+"/onlinePB/planStructureXML"+alpha+"/"+p_no+".xml");
 		else
 			xml_path = path;
 		
@@ -3325,6 +3333,7 @@ class CoveringContourinputParamStruct {
 		String apktPath, qtName, select_query, predicates; 
 		int dimension, database_conn; short plan;
 		 Connection conn;
+		 static float alpha;
 		 short fpcArrayListLocation;
 		 
 		public CGinputParamStruct(ArrayList<location> locs, Jdbc3PoolingDataSource source, short plan, short fpcArrayListLocation) throws SQLException {
@@ -3334,7 +3343,7 @@ class CoveringContourinputParamStruct {
 			this.fpcArrayListLocation = fpcArrayListLocation;
 		}
 		
-		public void getForiegnCost_all_locations(String apktPath, String qtName, String select_query, String predicates, int dimension, int database_conn) throws SQLException{
+		public void getForiegnCost_all_locations(String apktPath, String qtName, String select_query, String predicates, int dimension, int database_conn, float alpha) throws SQLException{
 			if(apktPath!= null && qtName!= null && predicates!= null && select_query!=null){ 
 				this.apktPath = apktPath;
 				this.qtName = qtName;
@@ -3342,6 +3351,7 @@ class CoveringContourinputParamStruct {
 				this.predicates = predicates;
 				this.dimension = dimension;
 				this.database_conn = database_conn;
+				this.alpha = alpha;
 			}
 				
 			conn = source.getConnection();
@@ -3361,7 +3371,7 @@ class CoveringContourinputParamStruct {
 			String funName = "getFPCCost";
 			
 			
-			String xml_path = apktPath+"/onlinePB/planStructureXML/"+p_no+".xml";
+			String xml_path = apktPath+"/onlinePB/planStructureXML"+alpha+"/"+p_no+".xml";
 			
 			 String regx;
 		     Pattern pattern;
@@ -3486,7 +3496,7 @@ class location implements Serializable
 	static int dimension;
 	static int database_conn;
 	static String predicates;
-	
+	static float alpha;
 	static String select_query;
 	ArrayList<Float> fpc_plan_cost;
 //	double fpc_cost = Double.MAX_VALUE;
@@ -3524,6 +3534,7 @@ class location implements Serializable
 		this.contour_no = loc.contour_no;
 		this.dim_values = new float[dimension];
 		this.reduced_planNumber = loc.reduced_planNumber;
+		this.alpha = loc.alpha;
 		//System.arraycopy(pg.dim_values, 0, dim_values, 0, dimension);
 		for(int it=0;it<dimension;it++)
 			this.dim_values[it] = loc.dim_values[it];
@@ -3770,8 +3781,8 @@ class location implements Serializable
 			plan.setPlanNo(planNumber);
 		
 			//Dump xml plan
-			String xml_path = apktPath+"onlinePB/"+"planStructureXML/"+plan.getPlanNo()+".xml";
-			File dir = new File(apktPath+"onlinePB/"+"planStructureXML/");
+			String xml_path = apktPath+"onlinePB/"+"planStructureXML"+alpha+"/"+plan.getPlanNo()+".xml";
+			File dir = new File(apktPath+"onlinePB/"+"planStructureXML"+alpha+"/");
 			//check if the dir exists
 			if(!dir.exists())
 				dir.mkdirs();

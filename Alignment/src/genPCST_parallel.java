@@ -64,6 +64,9 @@ public class genPCST_parallel {
 	static Jdbc3PoolingDataSource source;
 	static String varyingJoins;
 	static double JS_multiplier [];
+	static File f_marwa;
+	static File f_durga;
+	static int threads;
 	static String query;
 	static String query_opt_spill;
 	static String select_query;
@@ -103,9 +106,9 @@ public class genPCST_parallel {
 		obj.readpkt(gdp, false);
 		obj.loadPropertiesFile();
 		obj.loadSelectivity();
-		int threads = Runtime.getRuntime().availableProcessors();
-		File f_marwa = new File("/home/dsladmin/marwa");
-		File f_durga = new File("/home/dsladmin/durga");
+		threads = Runtime.getRuntime().availableProcessors();
+		f_marwa = new File("/home/dsladmin/marwa");
+		f_durga = new File("/home/dsladmin/durga");
 		
 		try{
 			System.out.println("entered DB conn1");
@@ -221,6 +224,9 @@ public class genPCST_parallel {
 							System.out.println("One flag is not set");
 						}
 					}
+					
+					System.gc();
+					obj.restartDatabase();
 				}  
 			
 //				p = r.exec(stop);
@@ -232,6 +238,108 @@ public class genPCST_parallel {
 				e.printStackTrace();
 			}
 	}
+	
+	
+	public  void restartDatabase() throws SQLException {
+
+		
+		String start = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w start";
+		String stop = "/home/dsladmin/spillBound/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/spillBound/tpch_9.4_DL_8.3/ -w stop";
+		String kill = "sudo pkill -9 postgres";
+		
+		
+		if(f_marwa.exists()){
+			start = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/Srinivas/tpch_9.4_DL_8.3/ -w start";
+			stop = "/home/dsladmin/Srinivas/postgresql-9.4.1/bin/pg_ctl -D /home/dsladmin/Srinivas/tpch_9.4_DL_8.3/ -w stop";
+		}
+		if (conn != null) {
+			try { conn.close(); } catch (SQLException e) {}
+		}
+
+		try {
+			Process p;
+			Runtime r;
+			while(checkIfPostgresServer()) {
+			r= Runtime.getRuntime();
+			p = r.exec(kill);
+			p.waitFor();
+			Thread.sleep(5 * 1000);
+			}
+			while(!checkIfPostgresServer()) {
+				r= Runtime.getRuntime();
+				p = r.exec(start);
+				p.waitFor();
+				Thread.sleep(5 * 1000);
+			}
+		}
+		catch (Exception e) 
+		{
+			e.printStackTrace();
+		}
+		
+		source.close();
+		source = new Jdbc3PoolingDataSource();
+		source.setDataSourceName("A Data Source");
+		f_marwa = new File("/home/dsladmin/marwa");
+		
+		//Settings
+		//System.out.println("entered DB conn2");
+		if(database_conn==0){
+//			conn = DriverManager
+//					.getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+//							"sa", "database");
+		}
+		else{
+		
+			if(f_marwa.exists() || f_durga.exists()) { 
+				System.out.println("entered DB tpcds");
+//				conn = DriverManager
+//						.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai",
+//								"sa", "database");
+				source.setServerName("localhost:5431");
+				source.setDatabaseName("tpcds-ai");
+			}
+			else{
+			System.out.println("entered DB tpcds");
+//			conn = DriverManager
+//					.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+//							"sa", "database");
+			source.setServerName("localhost:5432");
+			source.setDatabaseName("tpcds-ai");
+			}
+		}
+		source.setUser("sa");
+		source.setPassword("database");
+		
+		if(single_thread)
+			source.setMaxConnections(1);
+		else
+			source.setMaxConnections(threads);
+		conn = source.getConnection();
+	
+	}
+
+	public boolean checkIfPostgresServer() {
+		
+		String line;
+	    try {
+	      Process p = Runtime.getRuntime().exec("pidof postgres");
+	      BufferedReader input = new BufferedReader(new InputStreamReader(p.getInputStream()));
+	      while ((line = input.readLine()) != null)
+	      {
+	        //System.out.println(line);
+	        if(line.split(" ").length >= 5)
+	        	return true;
+	        else
+	        	return false;
+	      }
+	    } catch (Exception err) {
+	      System.out.println(err);
+	    }
+	    return false;
+	}
+	
+	
 	public void getFPCCost_84(int p_no) throws SQLException{
 		
 	

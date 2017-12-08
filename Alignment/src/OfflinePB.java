@@ -190,7 +190,7 @@ public class OfflinePB
 		//Calculate Native MSO
 		//obj.findingNativeMSO();
 		
-		obj.loadPropertiesFile();
+		
 		
 		if(nexus_bcg)
 			obj.loadSelectivity_nexus_bcg();
@@ -1626,7 +1626,8 @@ public void initialize(int location) {
 			//ADiagramPacket gdp = getGDP(new File(pktPath));
 			totalPlans = gdp.getMaxPlanNumber();
 			dimension = gdp.getDimension();
-			resolution = gdp.getMaxResolution();
+			
+			//resolution = gdp.getMaxResolution();
 			data = gdp.getData();
 			totalPoints = (int) Math.pow(resolution, dimension);
 			//System.out.println("\nthe total plans are "+totalPlans+" with dimensions "+dimension+" and resolution "+resolution);
