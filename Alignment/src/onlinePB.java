@@ -61,6 +61,7 @@ public class onlinePB {
 	static int totalPoints;
 	static DataValues[] data;
 	static float selectivity[];
+	static float extra_selectivity[];
 	static String apktPath;
 	static String qtName ;
 	static String select_query;
@@ -154,10 +155,13 @@ public class onlinePB {
 			//writeMapstoFile = false;
 		}
 		
+
+		
 		float_error = (float)Math.pow(10, -1*decimalPrecision);
 		long startTime = System.nanoTime();
 		onlinePB obj = new onlinePB();  
 		obj.loadPropertiesFile();
+		obj.loadSelectivity();
 		String pktPath = apktPath + qtName + ".apkt" ;
 		String pktPath_new = apktPath + qtName + "_new9.4.apkt";
 		System.out.println("Query Template is "+qtName);
@@ -291,8 +295,8 @@ public class onlinePB {
 			while(true) {
 				flag = false;
 				step ++;
-				if(var >= 1.0f) {
-					var = 1.0f;
+				if(var >= max_selectivity) {
+					var = max_selectivity;
 					outermost_dimension_sel.add(var);
 					flag = true;
 				}
@@ -300,6 +304,13 @@ public class onlinePB {
 					break;
 				outermost_dimension_sel.add(var);
 				var = obj.roundToDouble(var * beta);
+			}
+			
+			if(extra_locations) {
+				assert(max_selectivity <= extra_selectivity[0]) : "max. selectivity is greater than min extra selectivity";
+				for(int itr=0; itr < extra_selectivity.length; itr++) {
+					outermost_dimension_sel.add(extra_selectivity[itr]);
+				}
 			}
 			
 			obj.max_cc_sel_idx = outermost_dimension_sel.size() - 1 ; 
@@ -1292,6 +1303,13 @@ public class onlinePB {
 		double sel;
 		this.selectivity = new float [resolution];
 		
+		if(extra_locations) {
+			extra_selectivity = new float[no_extra_locs];
+			if(no_extra_locs == 6) {
+				extra_selectivity[0] = 0.03f; extra_selectivity[1] = 0.06f; extra_selectivity[2] = 0.09f;
+				extra_selectivity[3] = 0.3f; extra_selectivity[4] = 0.6f; extra_selectivity[5] = 0.9f;
+			}
+		}
 		
 		if(resolution == 10){
 			if(sel_distribution == 0){
@@ -1444,13 +1462,6 @@ public class onlinePB {
 		}
 		
 		float temp_qrun[] = new float[dimension];
-		//following code was used to test the recursion
-//		if(remainingDimList.size()==2 ){
-//			for(int i=0;i<dimension;i++)
-//				System.out.print("\t"+qrun_sel[i]);
-//			System.out.println();
-//			return;
-//		}
 		
 		if(remainingDimList.size()==2)
 		{ 
@@ -3003,6 +3014,30 @@ public class onlinePB {
 	}
 
 	public  float roundToDouble(float d) {
+		
+		if(extra_locations) {
+			if(d > max_selectivity) {
+				
+				int i;
+				int return_index = 0;
+				double diff;
+				if(d >= extra_selectivity[no_extra_locs-1])
+					return extra_selectivity[no_extra_locs-1];
+
+				for(i=0;i<extra_selectivity.length;i++)
+				{
+					diff = d - extra_selectivity[i];
+					if(diff <= 0.00000001f)
+					{
+						return_index = i;
+						break;
+					}
+				}
+				//System.out.println("return_index="+return_index);
+				return extra_selectivity[return_index];
+			}
+		}
+		
         BigDecimal bd = new BigDecimal(Float.toString(d));
         bd = bd.setScale(decimalPrecision, BigDecimal.ROUND_HALF_UP);
         float f = bd.floatValue(); 
