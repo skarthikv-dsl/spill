@@ -58,6 +58,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 	static DataValues[] data_new;
 	static int totalPoints;
 	static double selectivity[];
+	static double extra_selectivity[];
 	static String apktPath;
 	static String qtName ;
 	static Jdbc3PoolingDataSource source;
@@ -78,6 +79,8 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 	static boolean planstructure_format = true;
 	static boolean single_thread = false;
 	static int num_of_usable_threads;
+	static boolean extra_locations = true;
+	static int no_extra_locs = 6;
 	//static DataValues [] data = new DataValues[totalPoints];
 	
 	public static void main(String[] args) throws IOException, PicassoException, SQLException {
@@ -1507,6 +1510,15 @@ public void writeXMLPlan(int loc, int plan_no) throws PicassoException, IOExcept
 		double sel;
 		this.selectivity = new double [resolution];
 
+		if(extra_locations) {
+			extra_selectivity = new double[no_extra_locs];
+			selectivity = new double[resolution];
+			if(no_extra_locs == 6) {
+				extra_selectivity[0] = 0.03f; extra_selectivity[1] = 0.06f; extra_selectivity[2] = 0.09f;
+				extra_selectivity[3] = 0.3f; extra_selectivity[4] = 0.6f; extra_selectivity[5] = 1.0f;
+			}
+		}
+		
 		if(resolution == 10){
 			if(sel_distribution == 0){
 
@@ -1650,6 +1662,41 @@ public void writeXMLPlan(int loc, int plan_no) throws PicassoException, IOExcept
 				selectivity[95] = 0.955045; 	selectivity[96] = 0.965035; 	selectivity[97] = 0.975025; 	selectivity[98] = 0.985015; 	selectivity[99] = 0.995005;
 			}
 
+		}
+			if(resolution==100+no_extra_locs){
+
+				if(sel_distribution == 1){
+
+					//this is used for onlinePB
+					selectivity[0] = 0.0001f; 	selectivity[1] = 0.0002f; 	selectivity[2] = 0.0003f; 	selectivity[3] = 0.0004f; 	selectivity[4] = 0.0005f; 	
+					selectivity[5] = 0.0006f; 	selectivity[6] = 0.0007f; 	selectivity[7] = 0.0008f; 	selectivity[8] = 0.0009f; 	selectivity[9] = 0.0010f; 	
+					selectivity[10] = 0.0011f; 	selectivity[11] = 0.0012f; 	selectivity[12] = 0.0013f; 	selectivity[13] = 0.0014f; 	selectivity[14] = 0.0015f; 	
+					selectivity[15] = 0.0016f; 	selectivity[16] = 0.0017f; 	selectivity[17] = 0.0018f; 	selectivity[18] = 0.0019f; 	selectivity[19] = 0.0020f; 	
+					selectivity[20] = 0.0021f; 	selectivity[21] = 0.0022f; 	selectivity[22] = 0.0023f; 	selectivity[23] = 0.0024f; 	selectivity[24] = 0.0025f; 	
+					selectivity[25] = 0.0026f; 	selectivity[26] = 0.0027f; 	selectivity[27] = 0.0028f; 	selectivity[28] = 0.0029f; 	selectivity[29] = 0.0030f; 	
+					selectivity[30] = 0.0031f; 	selectivity[31] = 0.0032f; 	selectivity[32] = 0.0033f; 	selectivity[33] = 0.0034f; 	selectivity[34] = 0.0035f; 	
+					selectivity[35] = 0.0036f; 	selectivity[36] = 0.0037f; 	selectivity[37] = 0.0038f; 	selectivity[38] = 0.0039f; 	selectivity[39] = 0.0040f; 	
+					selectivity[40] = 0.0041f; 	selectivity[41] = 0.0042f; 	selectivity[42] = 0.0043f; 	selectivity[43] = 0.0044f; 	selectivity[44] = 0.0045f; 	
+					selectivity[45] = 0.0046f; 	selectivity[46] = 0.0047f; 	selectivity[47] = 0.0048f; 	selectivity[48] = 0.0049f; 	selectivity[49] = 0.0050f; 	
+					selectivity[50] = 0.0051f; 	selectivity[51] = 0.0052f; 	selectivity[52] = 0.0053f; 	selectivity[53] = 0.0054f; 	selectivity[54] = 0.0055f; 	
+					selectivity[55] = 0.0056f; 	selectivity[56] = 0.0057f; 	selectivity[57] = 0.0058f; 	selectivity[58] = 0.0059f; 	selectivity[59] = 0.0060f; 	
+					selectivity[60] = 0.0061f; 	selectivity[61] = 0.0062f; 	selectivity[62] = 0.0063f; 	selectivity[63] = 0.0064f; 	selectivity[64] = 0.0065f; 	
+					selectivity[65] = 0.0066f; 	selectivity[66] = 0.0067f; 	selectivity[67] = 0.0068f; 	selectivity[68] = 0.0069f; 	selectivity[69] = 0.0070f; 	
+					selectivity[70] = 0.0071f; 	selectivity[71] = 0.0072f; 	selectivity[72] = 0.0073f; 	selectivity[73] = 0.0074f; 	selectivity[74] = 0.0075f; 	
+					selectivity[75] = 0.0076f; 	selectivity[76] = 0.0077f; 	selectivity[77] = 0.0078f; 	selectivity[78] = 0.0079f; 	selectivity[79] = 0.0080f; 	
+					selectivity[80] = 0.0081f; 	selectivity[81] = 0.0082f; 	selectivity[82] = 0.0083f; 	selectivity[83] = 0.0084f; 	selectivity[84] = 0.0085f; 	
+					selectivity[85] = 0.0086f; 	selectivity[86] = 0.0087f; 	selectivity[87] = 0.0088f; 	selectivity[88] = 0.0089f; 	selectivity[89] = 0.0090f; 	
+					selectivity[90] = 0.0091f; 	selectivity[91] = 0.0092f; 	selectivity[92] = 0.0093f; 	selectivity[93] = 0.0094f; 	selectivity[94] = 0.0095f; 	
+					selectivity[95] = 0.0096f; 	selectivity[96] = 0.0097f; 	selectivity[97] = 0.0098f; 	selectivity[98] = 0.0099f; 	selectivity[99] = 0.01f; 	
+
+					if(extra_locations) {
+						assert(selectivity[99] <= extra_selectivity[0]) : "max. selectivity is greater than min extra selectivity";
+						for(int itr=0; itr < extra_selectivity.length; itr++) {
+							selectivity[100+itr] = extra_selectivity[itr];
+						}
+					}
+				}
+				
 			else
 				assert (false) :funName+ "ERROR: should not come here";
 		}

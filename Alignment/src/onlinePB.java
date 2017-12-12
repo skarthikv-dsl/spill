@@ -97,13 +97,13 @@ public class onlinePB {
 	static boolean DEBUG_LEVEL_1 = false;
 	static boolean visualisation_2D = false;
 	static boolean enhancement = true; //toggling between last_dim1 and last_dim2
-	static boolean enhancement_end_contour = false; //if you are enabling this add opt++ in code
+	static boolean enhancement_end_contour = true; //if you are enabling this add opt++ in code
 	static boolean memoization = true;
 	static float cost_error = 0.12f;
-	static float float_error ;
-	static boolean contoursReadFromFile = true;
+	static float float_error = 0.00000001f;
+	static boolean contoursReadFromFile = false;
 	static boolean cg_contoursReadFromFile = false;
-	static boolean writeMapstoFile = true;
+	static boolean writeMapstoFile = false;
 	static boolean singleThread = false;
 	static boolean trie = true;
 	static boolean extra_locations = true;
@@ -155,8 +155,8 @@ public class onlinePB {
 			//writeMapstoFile = false;
 		}
 		
+		System.out.println("contoursReadFromFile = "+contoursReadFromFile+" writeMapstoFile = "+writeMapstoFile+" singleThread  = "+singleThread +" trie = "+trie+" extra_locations = "+extra_locations+"  no_extra_locs = "+ no_extra_locs) ;
 
-		
 		float_error = (float)Math.pow(10, -1*decimalPrecision);
 		long startTime = System.nanoTime();
 		onlinePB obj = new onlinePB();  
@@ -408,7 +408,7 @@ public class onlinePB {
 				}
 				
 				
-					//if(writeMapstoFile)
+					if(writeMapstoFile)
 						obj.writeContourPointstoFile(i);
 				System.out.println("The running optimization calls are "+obj.opt_call);
 				System.out.println("The running forward jump are "+obj.forward_jumps);
@@ -641,13 +641,13 @@ public class onlinePB {
 			r= Runtime.getRuntime();
 			p = r.exec(kill);
 			p.waitFor();
-			Thread.sleep(10 * 1000);
+			Thread.sleep(3 * 1000);
 			}
 			while(!checkIfPostgresServer()) {
 				r= Runtime.getRuntime();
 				p = r.exec(start);
 				p.waitFor();
-				Thread.sleep(10 * 1000);
+				Thread.sleep(3 * 1000);
 			}
 		}
 		catch (Exception e) 
@@ -830,14 +830,14 @@ public class onlinePB {
 			// TODO: not required for(int d=0;d<dimension;d++) actual_sel_pb[d] = findNearestSelectivity(actual_sel_pb[d]);
 			
 			float cost_act_sel_pb = getFPCCost(actual_sel_pb, -1, null);
-			if(cost_act_sel_pb < 10000f)
+			if(cost_act_sel_pb < 9000f)
 				continue;
 			
 			//----------------------------------------------------------
 			int i = 1;
 			while(i<=ContourPointsMap.size() && !done_pb)
 			{	
-				if(cost< 10000f){
+				if(cost< 9000f){
 					cost *= 2;
 					i++;
 					continue;
@@ -914,6 +914,8 @@ public class onlinePB {
 			return;
 		}
 		
+		HashMap<Short,ArrayList<location>> planstoLocationsMap = new HashMap<Short,ArrayList<location>>();
+		
 		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
 			
 			location p = ContourPointsMap.get(contour_no).get(c);
@@ -925,47 +927,60 @@ public class onlinePB {
 			if(p.get_cost() < min_cost)
 				min_cost = p.get_cost();
 			
-			/*
-			 * to check if p dominates actual selectivity
-			 */
-
-			boolean flag = true;
-			for(int d=0;d<dimension;d++){
-				if(p.get_dimension(d) <= (actual_sel_pb[d]) ){
-					flag = false;
-					break;
-				}
-			}
-			
-			
 			
 			if(!unique_plans.contains(p.reduced_planNumber)){				
-				learning_cost_pb += p.get_cost(); //TODO: see if its correct
-				last_exec_cost = p.get_cost();
 				unique_plans.add(p.reduced_planNumber);
+				ArrayList<location> al = new ArrayList<location>();
+				al.add(p);
+				planstoLocationsMap.put(contour_no, al);
+			}
+			else {
+				planstoLocationsMap.get(contour_no).add(p);
 			}
 			
-			if(flag == true){
-				if(cost_act_sel_pb >= 4*cost)
-					flag = false;
+		}
+		
+		 if(!uniquePlansMap.containsKey(contour_no))
+			 uniquePlansMap.put(contour_no, unique_plans.size());
+		 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
+			 uniquePlansMap.remove(contour_no);
+			 uniquePlansMap.put(contour_no, unique_plans.size());
+		 }
+		
+		if(cost_act_sel_pb > 2*alpha*cost) {
+			done_pb = true;
+			
+			Iterator itr = planstoLocationsMap.keySet().iterator();
+			while(itr.hasNext()) {
+				short key = (short) itr.next();
+				learning_cost_pb += planstoLocationsMap.get(key).get(0).opt_cost;
 			}
+			return;
+		}
+		
+		Iterator itr = planstoLocationsMap.keySet().iterator();
+		while(itr.hasNext()) {			
+			short key = (short) itr.next();
 			
-//			if(!flag && cost_generic(convertSelectivitytoIndex(actual_sel_pb)) < 2*cost)
-//				flag = checkFPC(p.get_plan_no(),contour_no);
+			for(location p : planstoLocationsMap.get(key)) {
+				boolean flag = true;
+				for(int d=0;d<dimension;d++){
+					if(p.get_dimension(d) < (actual_sel_pb[d]) ){
+						flag = false;
+						break;
+					}
+				}
+						
+				learning_cost_pb += p.get_cost(); 
 			
-
+			
 			if(flag){
 				done_pb = true;
 				 System.out.println("The number unique points are "+unique_points);
 				 System.out.println("The number unique plans are "+unique_plans.size());
 				 System.out.println("The  unique plans are "+unique_plans);
 				 //System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
-				 if(!uniquePlansMap.containsKey(contour_no))
-					 uniquePlansMap.put(contour_no, unique_plans.size());
-				 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
-					 uniquePlansMap.remove(contour_no);
-					 uniquePlansMap.put(contour_no, unique_plans.size());
-				 }
+	
 				//Settings:  changed to include only the contour cost and not the point
 //				 if(p.get_cost() > last_exec_cost ){
 //					 learning_cost_pb -= last_exec_cost;
@@ -988,16 +1003,10 @@ public class onlinePB {
 				
 				return;
 			}
-		}
+		}			
+	}
 		 //assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
-		
-		if(!uniquePlansMap.containsKey(contour_no))
-			 uniquePlansMap.put(contour_no, unique_plans.size());
-		 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
-			 uniquePlansMap.remove(contour_no);
-			 uniquePlansMap.put(contour_no, unique_plans.size());
-		 }
-		
+	
 		 System.out.println("The number of unique points are "+unique_points);
 		 System.out.println("The number of unique plans are "+unique_plans.size());
 		 System.out.println("The  unique plans are "+unique_plans);
@@ -1049,7 +1058,29 @@ public class onlinePB {
 			//System.out.println("return_index="+return_index);
 			return return_index;
 		}
-
+		
+		public float findNearestLowerSel(float mid)
+		{
+			int i;
+			int return_index = 0;
+			float diff;
+			if(mid <= max_selectivity)
+				return mid;
+			else if(mid < extra_selectivity[0])
+				return max_selectivity;
+				
+			for(i=extra_selectivity.length-1;i>=0;i--)
+			{
+				diff = mid - extra_selectivity[i];
+				if(diff >= 0.0000001)
+				{
+					return_index = i;
+					break;
+				}
+			}
+			//System.out.println("return_index="+return_index);
+			return extra_selectivity[return_index];
+		}
 	
 	public void calculateMSOBound() {
 
@@ -1307,7 +1338,7 @@ public class onlinePB {
 			extra_selectivity = new float[no_extra_locs];
 			if(no_extra_locs == 6) {
 				extra_selectivity[0] = 0.03f; extra_selectivity[1] = 0.06f; extra_selectivity[2] = 0.09f;
-				extra_selectivity[3] = 0.3f; extra_selectivity[4] = 0.6f; extra_selectivity[5] = 0.9f;
+				extra_selectivity[3] = 0.3f; extra_selectivity[4] = 0.6f; extra_selectivity[5] = 1.0f;
 			}
 		}
 		
@@ -1695,13 +1726,18 @@ public class onlinePB {
 						}							
 						float old_sel = qrun_copy[last_dim2];
 						
-						qrun_copy[last_dim2] = roundToDouble(old_sel/beta);
-
+						if(!extra_locations) {
+							qrun_copy[last_dim2] = roundToDouble(old_sel/beta);
+						}
+						else {
+							qrun_copy[last_dim2] = old_sel/beta;
+							qrun_copy[last_dim2] = findNearestLowerSel(qrun_copy[last_dim2]);
+						}
 						
 						if(qrun_copy[last_dim2] <= minimum_selectivity)
 							qrun_copy[last_dim2] = minimum_selectivity;
 						
-						assert(qrun_copy[last_dim2] <= old_sel) : "selectivity not decreasing, even if it has to";
+						assert(qrun_copy[last_dim2] <= old_sel) : "selectivity not decreasing, even if it has to: old_sel = "+old_sel+" new sel = "+qrun_copy[last_dim2];
 						
 						if(DEBUG_LEVEL_2)
 						System.out.println("Selectivity learnt "+old_sel/(qrun_copy[last_dim2]*beta));
@@ -1718,12 +1754,14 @@ public class onlinePB {
 						
 						if(loc == null){
 							loc = new location(qrun_copy, this);
+							//printSelectivityCost(qrun_copy, opt_cost_copy);
 							//non_contour_points.add(loc);
 //							if(Math.abs(qrun_copy[0] - minimum_selectivity) < 0.00001f)
 //								printSelectivityCost(qrun_copy, -1);
 							if(trie)
 								addLocationtoGraph(loc, 2);
 							//counting the optimization calls
+							
 							opt_call++;
 							backward_jumps ++;
 						}
@@ -1765,7 +1803,7 @@ public class onlinePB {
 					
 					boolean came_inside_dim1_loop = false;
 					contour_done = false;
-					while((qrun_copy[last_dim1] < 1.0f) && (opt_cost_copy <= target_cost3))
+					while((qrun_copy[last_dim1] < (1.0f-float_error)) && (opt_cost_copy <= target_cost3))
 					{
 
 //						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )
@@ -1877,7 +1915,7 @@ public class onlinePB {
 						
 						assert((beta -1)*forward_jump > 0.0f) : "jump in the negative direction";
 						
-						if(qrun_copy[last_dim1]/(old_sel*beta) < 1.0f)
+						if(qrun_copy[last_dim1]/(old_sel*beta) < (1.0f-float_error))
 							qrun_copy[last_dim1] = old_sel*beta;
 						
 						if(qrun_copy[last_dim1]/old_sel < 1.01*beta)
@@ -1890,7 +1928,7 @@ public class onlinePB {
 						//System.out.println("The jumps sizes are "+(qrun_copy[last_dim1]/old_sel)+" against "+beta);
 						assert(qrun_copy[last_dim1] >= old_sel) : "selectivity not increasing, even if it has to";
 						
-						if(qrun_copy[last_dim1] >= 1.0f){
+						if(qrun_copy[last_dim1] >= (1.0f-float_error)){
 							
 							qrun_copy[last_dim1] = 1.0f;
 							if(trie){
@@ -1921,7 +1959,7 @@ public class onlinePB {
 								if(trie)
 									addLocationtoGraph(loc, 1);
 							// check to see if the terminus point is reached for the 2D slice 
-							if(qrun_copy[last_dim2] >= 1.0f)
+							if(qrun_copy[last_dim2] >= (1.0f-float_error))
 								return; 
 							
 							contour_done = true;
@@ -1972,7 +2010,7 @@ public class onlinePB {
 					if(contour_done){
 
 						// check to see if the terminus point is reached for the 2D slice 
-						if(qrun_copy[last_dim2] >= 1.0f)
+						if(qrun_copy[last_dim2] >= (1.0f-float_error))
 							return; 
 
 						break;
@@ -2042,7 +2080,7 @@ public class onlinePB {
 				}
 			}
 			else{
-				if(qrun_sel[curDim] > 1.0f){
+				if(qrun_sel[curDim] >= (1.0f-float_error)){
 					qrun_sel[curDim] = 1.0f;
 					flag = true;
 				}
@@ -3022,8 +3060,9 @@ public class onlinePB {
 				int return_index = 0;
 				double diff;
 				if(d >= extra_selectivity[no_extra_locs-1])
-					return extra_selectivity[no_extra_locs-1];
+					d = extra_selectivity[no_extra_locs-1];
 
+				else {
 				for(i=0;i<extra_selectivity.length;i++)
 				{
 					diff = d - extra_selectivity[i];
@@ -3034,7 +3073,8 @@ public class onlinePB {
 					}
 				}
 				//System.out.println("return_index="+return_index);
-				return extra_selectivity[return_index];
+				d = extra_selectivity[return_index];
+				}
 			}
 		}
 		
@@ -3595,9 +3635,9 @@ class location implements Serializable
 		dim_values = new float[dimension];
 		for(int i=0;i<dimension;i++){
 			dim_values[i] = roundToDouble(arr[i]);
-			//		System.out.print(arr[i]+",");
+					//System.out.print(arr[i]+",");
 		}
-		
+		//System.out.println();
 		try {
 			getPlan(conn);
 		} catch (SQLException e) {
