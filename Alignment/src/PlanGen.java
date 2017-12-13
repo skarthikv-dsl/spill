@@ -190,6 +190,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		}
 		gdp.setMaxPlanNumber(totalPlans);
 		gdp.setDataPoints(data_new);
+		gdp.setResolution(resolution, dimension);
 		//Write the new apkt file
 		//ADP.setPlans(plans);
 		//ADP.setMaxPlanNumber(plans.size());
@@ -524,14 +525,7 @@ public void clearCache(){
 			select_query = prop.getProperty("select_query");
 			predicates= prop.getProperty("predicates");
 			resolution = Integer.parseInt(prop.getProperty("resolution"));
-			
 
-			int from_clause_int_val = Integer.parseInt(prop.getProperty("FROM_CLAUSE"));
-
-			if(from_clause_int_val == 1)
-				FROM_CLAUSE = true;
-			else
-				FROM_CLAUSE = false;
 
 			/*
 			 * 0 for sel_distribution is used for tpch type queries

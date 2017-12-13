@@ -130,7 +130,9 @@ public class OfflinePB
 		//static ArrayList<Integer> learntDimIndices = new ArrayList<Integer>();
 	 static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	 static HashMap<Integer,ArrayList<location>> ContourPointsMap = new HashMap<Integer,ArrayList<location>>();
-	 static HashMap<Integer,Integer> uniquePlansMap = new HashMap<Integer,Integer>();
+	 HashMap<Integer,HashSet<Integer>> uniquePlansMap = new HashMap<Integer,HashSet<Integer>>();
+		HashMap<Integer,ArrayList<Float>> min_max_contour_costMap = new HashMap<Integer,ArrayList<Float>>();
+		HashMap<Integer,HashMap<Integer,ArrayList<location>>> contour_plan_locationMap = new HashMap<Integer,HashMap<Integer,ArrayList<location>>>();
 	 static HashMap<Integer,Float> minContourCostMap = new HashMap<Integer,Float>();
 	 static double learning_cost = 0;
 	 static boolean done = false;
@@ -338,7 +340,58 @@ public class OfflinePB
 		
 		obj.ContourCentricCostGreedy(-1);
 		
-		System.exit(0);
+		//System.exit(0);
+		
+		
+		for(int contour_no =1 ; contour_no <= ContourPointsMap.size(); contour_no++) {
+			
+			HashMap<Integer,ArrayList<location>> planstoLocationsMap = new HashMap<Integer,ArrayList<location>>();
+			HashSet<Integer> unique_plans = new HashSet();
+			int unique_points =0;
+			float maximum_cost =0 , minimum_cost = Float.MAX_VALUE;
+			
+			for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
+
+				location p = ContourPointsMap.get(contour_no).get(c);
+
+				/*needed for testing the code*/
+				unique_points ++;
+				if(p.get_cost() > maximum_cost)
+					maximum_cost = p.get_cost();
+				if(p.get_cost() < minimum_cost)
+					minimum_cost = p.get_cost();
+
+				if(!unique_plans.contains(p.reduced_planNumber)){				
+					unique_plans.add((int)p.reduced_planNumber);
+				}
+
+				if(!planstoLocationsMap.containsKey(p.reduced_planNumber))
+				{	ArrayList<location> al = new ArrayList<location>();
+					al.add(p);
+					planstoLocationsMap.put((int)p.reduced_planNumber, al);
+				}
+				else {
+					planstoLocationsMap.get((int)p.reduced_planNumber).add(p);
+				}
+
+			}
+			
+			obj.contour_plan_locationMap.put(contour_no, planstoLocationsMap);
+			ArrayList<Float> min_max_cost = new ArrayList<Float>();
+			assert(minimum_cost <= maximum_cost) : "min cost is greater than max_cost in a contour";
+			//first element in the arraylist is min cost and the second element is max cost
+			min_max_cost.add(minimum_cost); min_max_cost.add(maximum_cost);
+			obj.min_max_contour_costMap.put(contour_no, min_max_cost);
+			
+			if(!obj.uniquePlansMap.containsKey(contour_no))
+				obj.uniquePlansMap.put(contour_no, unique_plans);
+			else if(obj.uniquePlansMap.get(contour_no).size() <unique_plans.size() && obj.uniquePlansMap.containsKey(contour_no)){
+				obj.uniquePlansMap.remove(contour_no);
+				obj.uniquePlansMap.put(contour_no, unique_plans);
+			}
+		}
+		
+		
 		
 		/*
 		 * running the plan bouquet algorithm 
@@ -561,7 +614,7 @@ public class OfflinePB
 			leftInfo = new location(convertIndextoSelectivity(left),this);
 			if(trie)
 				addLocationtoGraph(leftInfo);
-			all_contour_points.add(leftInfo);
+//			all_contour_points.add(leftInfo);
 			opt_calls++;
 		}
 		double leftCost = leftInfo.get_cost();
@@ -573,7 +626,7 @@ public class OfflinePB
 			rightInfo = new location(convertIndextoSelectivity(right),this);
 			if(trie)
 				addLocationtoGraph(rightInfo);
-			all_contour_points.add(rightInfo);
+			//all_contour_points.add(rightInfo);
 			opt_calls++;
 		}
 		double rightCost = rightInfo.get_cost(); 
@@ -591,7 +644,7 @@ public class OfflinePB
 				rightInfo = new location(convertIndextoSelectivity(right),this);
 				if(trie)
 					addLocationtoGraph(rightInfo);
-				all_contour_points.add(rightInfo);
+				//all_contour_points.add(rightInfo);
 				opt_calls++;
 			}
 			rightCost = rightInfo.get_cost(); 
@@ -618,7 +671,7 @@ public class OfflinePB
 					if(trie)
 						addLocationtoGraph(midInfo);
 					opt_calls++;
-					all_contour_points.add(midInfo);
+					//all_contour_points.add(midInfo);
 				}
 				midCost = midInfo.get_cost();
 	
@@ -640,7 +693,7 @@ public class OfflinePB
 		System.out.println("\n Found seed location with cost " + seedCost + " as "
 							+ getIndex(right, resolution) + " with cost = " + rightCost);
 //		if(!locationAlreadyExist(rightInfo.dim_values))	
-//			all_contour_points.add(rightInfo);
+			all_contour_points.add(rightInfo);
 		
 		//isContourPoint[getIndex(rightInfo.dim_values, resolution)] = true;		
 
@@ -1133,7 +1186,7 @@ public  void getPlanCountArray() {
 }
 	 
 	 
-	public void planBouquetAlgo(int contour_no, double cost) {
+	public void planBouquetAlgo_old(int contour_no, double cost) {
 
 		String funName = "planBouquetAlgo";
 		
@@ -1209,10 +1262,10 @@ public  void getPlanCountArray() {
 				 System.out.println("The  unique plans are "+unique_plans);
 				 //System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
 				 if(!uniquePlansMap.containsKey(contour_no))
-					 uniquePlansMap.put(contour_no, unique_plans.size());
-				 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
+					 uniquePlansMap.put(contour_no, unique_plans);
+				 else if(uniquePlansMap.get(contour_no).size()<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
 					 uniquePlansMap.remove(contour_no);
-					 uniquePlansMap.put(contour_no, unique_plans.size());
+					 uniquePlansMap.put(contour_no, unique_plans);
 				 }
 				//Settings:  changed to include only the contour cost and not the point
 //				 if(p.get_cost() > last_exec_cost ){
@@ -1253,10 +1306,10 @@ public  void getPlanCountArray() {
 		 //assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
 		
 		if(!uniquePlansMap.containsKey(contour_no))
-			 uniquePlansMap.put(contour_no, unique_plans.size());
-		 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
+			 uniquePlansMap.put(contour_no, unique_plans);
+		 else if(uniquePlansMap.get(contour_no).size()<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
 			 uniquePlansMap.remove(contour_no);
-			 uniquePlansMap.put(contour_no, unique_plans.size());
+			 uniquePlansMap.put(contour_no, unique_plans);
 		 }
 		
 		 System.out.println("The number of unique points are "+unique_points);
@@ -1271,6 +1324,109 @@ public  void getPlanCountArray() {
 
 	}
 	
+	public void planBouquetAlgo(int contour_no, double cost) {
+
+		String funName = "planBouquetAlgo";
+		
+		double last_exec_cost = 0;
+		learning_cost =0;
+		int [] arr = new int[dimension];
+		HashSet<Integer> unique_plans = uniquePlansMap.get(contour_no);
+		int unique_points =0;
+		double max_cost = min_max_contour_costMap.get(contour_no).get(1) , min_cost = min_max_contour_costMap.get(contour_no).get(0);
+		double cost_act_sel_pb = cost_generic(convertSelectivitytoIndex(actual_sel)); 
+
+		if(cost > (2+0.001)*cost_act_sel_pb) {
+			//return if the cost of the contour is twice more than cost of actual selectivity
+			done = true;
+			learning_cost = 1;//to make sure none of the asserts fail
+			 System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
+			 System.out.println("The  unique plans are "+uniquePlansMap.get(contour_no));
+			 System.out.println("Contour No. is "+contour_no+" : Max cost is "+min_max_contour_costMap.get(contour_no).get(1)+" and min cost is "+min_max_contour_costMap.get(contour_no).get(0)+" with learning cost "+learning_cost);
+			return;
+		}
+		
+		HashMap<Integer,ArrayList<location>> planstoLocationsMap = contour_plan_locationMap.get(contour_no);
+		
+		
+		if(cost_act_sel_pb > 2*cost) {
+			
+			Iterator itr = planstoLocationsMap.keySet().iterator();
+			while(itr.hasNext()) {
+				int key = (int) itr.next();
+				learning_cost += planstoLocationsMap.get(key).get(0).opt_cost;
+			}
+			
+			System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
+			 System.out.println("The  unique plans are "+uniquePlansMap.get(contour_no));
+			 System.out.println("Contour No. is "+contour_no+" : Max cost is "+min_max_contour_costMap.get(contour_no).get(1)+" and min cost is "+min_max_contour_costMap.get(contour_no).get(0)+" with learning cost "+learning_cost);
+			return;
+		}
+		
+		Iterator itr = planstoLocationsMap.keySet().iterator();
+		while(itr.hasNext()) {			
+			int key = (int) itr.next();
+			
+			float curr_cost = Float.MAX_VALUE;
+			boolean flag = true;
+			for(location p : planstoLocationsMap.get(key)) {
+				
+				boolean flag_inner = true;
+				for(int d=0;d<dimension;d++){
+					if(p.get_dimension(d) < (actual_sel[d]) ){
+						flag_inner = false;
+						break;
+					}
+				}
+				
+				flag = flag_inner;
+				curr_cost =  p.get_cost();
+				if(flag_inner)
+					break;
+			}	
+			
+				learning_cost += curr_cost; 
+			
+			
+			if(flag){
+				done = true;
+				 System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
+				 System.out.println("The  unique plans are "+uniquePlansMap.get(contour_no));
+				 System.out.println("Contour No. is "+contour_no+" : Max cost is "+min_max_contour_costMap.get(contour_no).get(1)+" and min cost is "+min_max_contour_costMap.get(contour_no).get(0)+" with learning cost "+learning_cost);
+				 //System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
+	
+				//Settings:  changed to include only the contour cost and not the point
+//				 if(p.get_cost() > last_exec_cost ){
+//					 learning_cost_pb -= last_exec_cost;
+//					 learning_cost_pb += p.get_cost();
+//				 }
+//				 learning_cost_pb -= last_exec_cost;
+//				 int [] int_actual_sel = new int[dimension];
+//				 for(int d=0;d<dimension;d++)
+//					 int_actual_sel[d] = findNearestPoint(actual_sel_pb[d]);
+//				 double oneDimCost=0;
+////				 if(cost_generic(convertSelectivitytoIndex(actual_sel_pb)) < 2*cost)
+//				 
+//				 
+//				 if(fpc_cost_generic(int_actual_sel, p.get_plan_no())<oneDimCost)
+//					 oneDimCost = fpc_cost_generic(int_actual_sel, p.get_plan_no());
+//				 if(cost_generic(int_actual_sel)> oneDimCost)
+//					 oneDimCost = cost_generic(int_actual_sel);
+//				 learning_cost_pb  += oneDimCost;
+//	 
+				
+				return;
+			}			
+	}
+		 //assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
+	
+		System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
+		 System.out.println("The  unique plans are "+uniquePlansMap.get(contour_no));
+		 System.out.println("Contour No. is "+contour_no+" : Max cost is "+min_max_contour_costMap.get(contour_no).get(1)+" and min cost is "+min_max_contour_costMap.get(contour_no).get(0)+" with learning cost "+learning_cost);
+//		 if(cost_generic(convertSelectivitytoIndex(actual_sel_pb)) < 2*cost)
+
+	}
+
 
 	private boolean checkFPC(int plan_no, int contour_no) {
 		
@@ -1763,7 +1919,7 @@ public void initialize(int location) {
 		/*
 		 * Populates the selectivity Matrix according to the input given
 		 * */
-		void loadSelectivity()
+		void loadSelectivity_spillBound()
 		{
 			String funName = "loadSelectivity: ";
 			System.out.println(funName+" Resolution = "+resolution);
@@ -1957,6 +2113,203 @@ public void initialize(int location) {
 		}
 	
 	
+		
+		void loadSelectivity()
+		{
+			String funName = "loadSelectivity: ";
+			System.out.println(funName+" Resolution = "+resolution);
+			double sel;
+			this.selectivity = new float [resolution];
+
+			
+			
+			if(resolution == 10){
+				if(sel_distribution == 0){
+
+					//This is for TPCH queries 
+					selectivity[0] = 0.0005f;	selectivity[1] = 0.005f;selectivity[2] = 0.01f;	selectivity[3] = 0.02f;
+					selectivity[4] = 0.05f;		selectivity[5] = 0.10f;	selectivity[6] = 0.20f;	selectivity[7] = 0.40f;
+					selectivity[8] = 0.60f;		selectivity[9] = 0.95f;                                   // oct - 2012
+				}
+				else if( sel_distribution ==1){
+
+					//This is for TPCDS queries
+					selectivity[0] = 0.0001f;	selectivity[1] = 0.0005f;selectivity[2] = 0.005f;	selectivity[3] = 0.02f;
+					selectivity[4] = 0.05f;		selectivity[5] = 0.10f;	selectivity[6] = 0.15f;	selectivity[7] = 0.25f;
+					selectivity[8] = 0.50f;		selectivity[9] = 0.99f;                                // dec - 2012
+				}
+				else
+					assert (false) :funName+ "ERROR: should not come here";
+
+			}		
+			if(resolution == 20){
+
+				if(sel_distribution == 0){
+
+					selectivity[0] = 0.0005f;   selectivity[1] = 0.0008f;		selectivity[2] = 0.001f;	selectivity[3] = 0.002f;
+					selectivity[4] = 0.004f;   selectivity[5] = 0.006f;		selectivity[6] = 0.008f;	selectivity[7] = 0.01f;
+					selectivity[8] = 0.03f;	selectivity[9] = 0.05f;	selectivity[10] = 0.08f;	selectivity[11] = 0.10f;
+					selectivity[12] = 0.200f;	selectivity[13] = 0.300f;	selectivity[14] = 0.400f;	selectivity[15] = 0.500f;
+					selectivity[16] = 0.600f;	selectivity[17] = 0.700f;	selectivity[18] = 0.800f;	selectivity[19] = 0.99f;
+				}
+				else if(sel_distribution == 1){
+
+					selectivity[0] = 0.0001f;   selectivity[1] = 0.0003f;		selectivity[2] = 0.0005f;	selectivity[3] = 0.0007f;
+					selectivity[4] = 0.001f;   selectivity[5] = 0.003f;		selectivity[6] = 0.005f;	selectivity[7] = 0.007f;
+					selectivity[8] = 0.01f;	selectivity[9] = 0.03f;	selectivity[10] = 0.05f;	selectivity[11] = 0.07f;
+					selectivity[12] = 0.1f;	selectivity[13] = 0.15f;	selectivity[14] = 0.25f;	selectivity[15] = 0.4f;
+					selectivity[16] = 0.50f;	selectivity[17] = 0.60f;	selectivity[18] = 0.80f;	selectivity[19] = 0.99f;
+				}
+				else
+					assert (false) :funName+ "ERROR: should not come here";
+
+
+			}
+
+			if(resolution == 30){
+
+				if(sel_distribution == 0){
+					//tpch
+					selectivity[0] = 0.0005f;  selectivity[1] = 0.0008f;	selectivity[2] = 0.001f;	selectivity[3] = 0.002f;
+					selectivity[4] = 0.004f;   selectivity[5] = 0.006f;	selectivity[6] = 0.008f;	selectivity[7] = 0.01f;
+					selectivity[8] = 0.03f;	selectivity[9] = 0.05f;
+					selectivity[10] = 0.07f;	selectivity[11] = 0.1f;	selectivity[12] = 0.15f;	selectivity[13] = 0.20f;
+					selectivity[14] = 0.25f;	selectivity[15] = 0.30f;	selectivity[16] = 0.35f;	selectivity[17] = 0.40f;
+					selectivity[18] = 0.45f;	selectivity[19] = 0.50f;	selectivity[20] = 0.55f;	selectivity[21] = 0.60f;
+					selectivity[22] = 0.65f;	selectivity[23] = 0.70f;	selectivity[24] = 0.75f;	selectivity[25] = 0.80f;
+					selectivity[26] = 0.85f;	selectivity[27] = 0.90f;	selectivity[28] = 0.95f;	selectivity[29] = 0.99f;
+				}
+
+				else if(sel_distribution == 1){
+					selectivity[0] = 0.0001f;  selectivity[1] = 0.0002f;	selectivity[2] = 0.0004f;	selectivity[3] = 0.0006f;
+					selectivity[4] = 0.0008f;   selectivity[5] = 0.001f;	selectivity[6] = 0.002f;	selectivity[7] = 0.003f;
+					selectivity[8] = 0.004f;	selectivity[9] = 0.006f;	selectivity[10] = 0.008f;	selectivity[11] = 0.01f;
+					selectivity[12] = 0.0200f;	selectivity[13] = 0.0400f;	selectivity[14] = 0.0600f;	selectivity[15] = 0.08f;
+					selectivity[16] = 0.1000f;	selectivity[17] = 0.1500f;	selectivity[18] = 0.2000f;	selectivity[19] = 0.2500f;
+					selectivity[20] = 0.3000f;	selectivity[21] = 0.3500f;	selectivity[22] = 0.4000f;	selectivity[23] = 0.4500f;
+					selectivity[24] = 0.5000f;	selectivity[25] = 0.6000f;	selectivity[26] = 0.7000f;	selectivity[27] = 0.8000f;
+					selectivity[28] = 0.9000f;	selectivity[29] = 0.9950f;
+				}
+
+				else
+					assert (false) :funName+ "ERROR: should not come here";
+			}
+
+			if(resolution==100){
+
+				if(sel_distribution == 1){
+//					this was used for spillbound				
+//					selectivity[0] = 0.000064; 	selectivity[1] = 0.000093; 	selectivity[2] = 0.000126; 	selectivity[3] = 0.000161; 	selectivity[4] = 0.000198;
+//					selectivity[5] = 0.000239; 	selectivity[6] = 0.000284; 	selectivity[7] = 0.000332; 	selectivity[8] = 0.000384; 	selectivity[9] = 0.000440;
+//					selectivity[10] = 0.000501; 	selectivity[11] = 0.000567; 	selectivity[12] = 0.000638; 	selectivity[13] = 0.000716; 	selectivity[14] = 0.000800;
+//					selectivity[15] = 0.000890; 	selectivity[16] = 0.000989; 	selectivity[17] = 0.001095; 	selectivity[18] = 0.001211; 	selectivity[19] = 0.001335;
+//					selectivity[20] = 0.001471; 	selectivity[21] = 0.001617; 	selectivity[22] = 0.001776; 	selectivity[23] = 0.001948; 	selectivity[24] = 0.002134;
+//					selectivity[25] = 0.002335; 	selectivity[26] = 0.002554; 	selectivity[27] = 0.002790; 	selectivity[28] = 0.003046; 	selectivity[29] = 0.003323;
+//					selectivity[30] = 0.003624; 	selectivity[31] = 0.003949; 	selectivity[32] = 0.004301; 	selectivity[33] = 0.004683; 	selectivity[34] = 0.005096;
+//					selectivity[35] = 0.005543; 	selectivity[36] = 0.006028; 	selectivity[37] = 0.006552; 	selectivity[38] = 0.007121; 	selectivity[39] = 0.007736;
+//					selectivity[40] = 0.008403; 	selectivity[41] = 0.009125; 	selectivity[42] = 0.009907; 	selectivity[43] = 0.010753; 	selectivity[44] = 0.011670;
+//					selectivity[45] = 0.012663; 	selectivity[46] = 0.013739; 	selectivity[47] = 0.014904; 	selectivity[48] = 0.016165; 	selectivity[49] = 0.017531;
+//					selectivity[50] = 0.019011; 	selectivity[51] = 0.020613; 	selectivity[52] = 0.022348; 	selectivity[53] = 0.024228; 	selectivity[54] = 0.026263;
+//					selectivity[55] = 0.028467; 	selectivity[56] = 0.030854; 	selectivity[57] = 0.033440; 	selectivity[58] = 0.036240; 	selectivity[59] = 0.039272;
+//					selectivity[60] = 0.042556; 	selectivity[61] = 0.046113; 	selectivity[62] = 0.049965; 	selectivity[63] = 0.054136; 	selectivity[64] = 0.058654;
+//					selectivity[65] = 0.063547; 	selectivity[66] = 0.068845; 	selectivity[67] = 0.074584; 	selectivity[68] = 0.080799; 	selectivity[69] = 0.087530;
+//					selectivity[70] = 0.094819; 	selectivity[71] = 0.102714; 	selectivity[72] = 0.111263; 	selectivity[73] = 0.120523; 	selectivity[74] = 0.130550;
+//					selectivity[75] = 0.141411; 	selectivity[76] = 0.153172; 	selectivity[77] = 0.165910; 	selectivity[78] = 0.179705; 	selectivity[79] = 0.194645;
+//					selectivity[80] = 0.210825; 	selectivity[81] = 0.228348; 	selectivity[82] = 0.247325; 	selectivity[83] = 0.267877; 	selectivity[84] = 0.290136;
+//					selectivity[85] = 0.314241; 	selectivity[86] = 0.340348; 	selectivity[87] = 0.368621; 	selectivity[88] = 0.399241; 	selectivity[89] = 0.432403;
+//					selectivity[90] = 0.468316; 	selectivity[91] = 0.507211; 	selectivity[92] = 0.549334; 	selectivity[93] = 0.594953; 	selectivity[94] = 0.644359;
+//					selectivity[95] = 0.697865; 	selectivity[96] = 0.755812; 	selectivity[97] = 0.818569; 	selectivity[98] = 0.886535; 	selectivity[99] = 0.990142;
+
+					//this is used for onlinePB
+					selectivity[0] = 0.0001035f; 	selectivity[1] = 0.0001111f; 	selectivity[2] = 0.0001194f; 	selectivity[3] = 0.0001286f; 	selectivity[4] = 0.0001387f; 	
+					selectivity[5] = 0.0001499f; 	selectivity[6] = 0.0001621f; 	selectivity[7] = 0.0001756f; 	selectivity[8] = 0.0001904f; 	selectivity[9] = 0.0002067f; 	
+					selectivity[10] = 0.0002246f; 	selectivity[11] = 0.0002443f; 	selectivity[12] = 0.0002660f; 	selectivity[13] = 0.0002899f; 	selectivity[14] = 0.0003161f; 	
+					selectivity[15] = 0.0003450f; 	selectivity[16] = 0.0003767f; 	selectivity[17] = 0.0004117f; 	selectivity[18] = 0.0004501f; 	selectivity[19] = 0.0004924f; 	
+					selectivity[20] = 0.0005389f; 	selectivity[21] = 0.0005900f; 	selectivity[22] = 0.0006463f; 	selectivity[23] = 0.0007081f; 	selectivity[24] = 0.0007762f; 	
+					selectivity[25] = 0.0008511f; 	selectivity[26] = 0.0009334f; 	selectivity[27] = 0.0010240f; 	selectivity[28] = 0.0011237f; 	selectivity[29] = 0.0012333f; 	
+					selectivity[30] = 0.0013539f; 	selectivity[31] = 0.0014866f; 	selectivity[32] = 0.0016325f; 	selectivity[33] = 0.0017930f; 	selectivity[34] = 0.0019695f; 	
+					selectivity[35] = 0.0021638f; 	selectivity[36] = 0.0023774f; 	selectivity[37] = 0.0026124f; 	selectivity[38] = 0.0028709f; 	selectivity[39] = 0.0031552f; 	
+					selectivity[40] = 0.0034680f; 	selectivity[41] = 0.0038121f; 	selectivity[42] = 0.0041905f; 	selectivity[43] = 0.0046068f; 	selectivity[44] = 0.0050648f; 	
+					selectivity[45] = 0.0055685f; 	selectivity[46] = 0.0061226f; 	selectivity[47] = 0.0067321f; 	selectivity[48] = 0.0074026f; 	selectivity[49] = 0.0081401f; 	
+					selectivity[50] = 0.0089514f; 	selectivity[51] = 0.0098438f; 	selectivity[52] = 0.0108254f; 	selectivity[53] = 0.0119052f; 	selectivity[54] = 0.0130930f; 	
+					selectivity[55] = 0.0143996f; 	selectivity[56] = 0.0158368f; 	selectivity[57] = 0.0174177f; 	selectivity[58] = 0.0191567f; 	selectivity[59] = 0.0210696f; 	
+					selectivity[60] = 0.0231739f; 	selectivity[61] = 0.0254885f; 	selectivity[62] = 0.0280346f; 	selectivity[63] = 0.0308353f; 	selectivity[64] = 0.0339161f; 	
+					selectivity[65] = 0.0373050f; 	selectivity[66] = 0.0410328f; 	selectivity[67] = 0.0451333f; 	selectivity[68] = 0.0496439f; 	selectivity[69] = 0.0546055f; 	
+					selectivity[70] = 0.0600633f; 	selectivity[71] = 0.0660669f; 	selectivity[72] = 0.0726709f; 	selectivity[73] = 0.0799352f; 	selectivity[74] = 0.0879260f; 	
+					selectivity[75] = 0.0967158f; 	selectivity[76] = 0.1063847f; 	selectivity[77] = 0.1170204f; 	selectivity[78] = 0.1287197f; 	selectivity[79] = 0.1415889f; 	
+					selectivity[80] = 0.1557451f; 	selectivity[81] = 0.1713168f; 	selectivity[82] = 0.1884458f; 	selectivity[83] = 0.2072876f; 	selectivity[84] = 0.2280136f; 	
+					selectivity[85] = 0.2508122f; 	selectivity[86] = 0.2758907f; 	selectivity[87] = 0.3034770f; 	selectivity[88] = 0.3338220f; 	selectivity[89] = 0.3672014f; 	
+					selectivity[90] = 0.4039188f; 	selectivity[91] = 0.4443080f; 	selectivity[92] = 0.4887360f; 	selectivity[93] = 0.5376069f; 	selectivity[94] = 0.5913649f; 	
+					selectivity[95] = 0.6504986f; 	selectivity[96] = 0.7155457f; 	selectivity[97] = 0.7870975f; 	selectivity[98] = 0.8658045f; 	selectivity[99] = 0.9523823f; 	
+
+				}
+				else if(sel_distribution == 0){
+					selectivity[0] = 0.005995f; 	selectivity[1] = 0.015985f; 	selectivity[2] = 0.025975f; 	selectivity[3] = 0.035965f; 	selectivity[4] = 0.045955f; 	
+					selectivity[5] = 0.055945f; 	selectivity[6] = 0.065935f; 	selectivity[7] = 0.075925f; 	selectivity[8] = 0.085915f; 	selectivity[9] = 0.095905f; 	
+					selectivity[10] = 0.105895f; 	selectivity[11] = 0.115885f; 	selectivity[12] = 0.125875f; 	selectivity[13] = 0.135865f; 	selectivity[14] = 0.145855f; 	
+					selectivity[15] = 0.155845f; 	selectivity[16] = 0.165835f; 	selectivity[17] = 0.175825f; 	selectivity[18] = 0.185815f; 	selectivity[19] = 0.195805f; 	
+					selectivity[20] = 0.205795f; 	selectivity[21] = 0.215785f; 	selectivity[22] = 0.225775f; 	selectivity[23] = 0.235765f; 	selectivity[24] = 0.245755f; 	
+					selectivity[25] = 0.255745f; 	selectivity[26] = 0.265735f; 	selectivity[27] = 0.275725f; 	selectivity[28] = 0.285715f; 	selectivity[29] = 0.295705f; 	
+					selectivity[30] = 0.305695f; 	selectivity[31] = 0.315685f; 	selectivity[32] = 0.325675f; 	selectivity[33] = 0.335665f; 	selectivity[34] = 0.345655f; 	
+					selectivity[35] = 0.355645f; 	selectivity[36] = 0.365635f; 	selectivity[37] = 0.375625f; 	selectivity[38] = 0.385615f; 	selectivity[39] = 0.395605f; 	
+					selectivity[40] = 0.405595f; 	selectivity[41] = 0.415585f; 	selectivity[42] = 0.425575f; 	selectivity[43] = 0.435565f; 	selectivity[44] = 0.445555f; 	
+					selectivity[45] = 0.455545f; 	selectivity[46] = 0.465535f; 	selectivity[47] = 0.475525f; 	selectivity[48] = 0.485515f; 	selectivity[49] = 0.495505f; 	
+					selectivity[50] = 0.505495f; 	selectivity[51] = 0.515485f; 	selectivity[52] = 0.525475f; 	selectivity[53] = 0.535465f; 	selectivity[54] = 0.545455f; 	
+					selectivity[55] = 0.555445f; 	selectivity[56] = 0.565435f; 	selectivity[57] = 0.575425f; 	selectivity[58] = 0.585415f; 	selectivity[59] = 0.595405f; 	
+					selectivity[60] = 0.605395f; 	selectivity[61] = 0.615385f; 	selectivity[62] = 0.625375f; 	selectivity[63] = 0.635365f; 	selectivity[64] = 0.645355f; 	
+					selectivity[65] = 0.655345f; 	selectivity[66] = 0.665335f; 	selectivity[67] = 0.675325f; 	selectivity[68] = 0.685315f; 	selectivity[69] = 0.695305f; 	
+					selectivity[70] = 0.705295f; 	selectivity[71] = 0.715285f; 	selectivity[72] = 0.725275f; 	selectivity[73] = 0.735265f; 	selectivity[74] = 0.745255f; 	
+					selectivity[75] = 0.755245f; 	selectivity[76] = 0.765235f; 	selectivity[77] = 0.775225f; 	selectivity[78] = 0.785215f; 	selectivity[79] = 0.795205f; 	
+					selectivity[80] = 0.805195f; 	selectivity[81] = 0.815185f; 	selectivity[82] = 0.825175f; 	selectivity[83] = 0.835165f; 	selectivity[84] = 0.845155f; 	
+					selectivity[85] = 0.855145f; 	selectivity[86] = 0.865135f; 	selectivity[87] = 0.875125f; 	selectivity[88] = 0.885115f; 	selectivity[89] = 0.895105f; 	
+					selectivity[90] = 0.905095f; 	selectivity[91] = 0.915085f; 	selectivity[92] = 0.925075f; 	selectivity[93] = 0.935065f; 	selectivity[94] = 0.945055f; 	
+					selectivity[95] = 0.955045f; 	selectivity[96] = 0.965035f; 	selectivity[97] = 0.975025f; 	selectivity[98] = 0.985015f; 	selectivity[99] = 0.995005f;
+				}
+
+			}
+//				if(resolution==100+no_extra_locs){
+//
+//					if(sel_distribution == 1){
+//
+//						//this is used for onlinePB
+//						selectivity[0] = 0.0001f; 	selectivity[1] = 0.0002f; 	selectivity[2] = 0.0003f; 	selectivity[3] = 0.0004f; 	selectivity[4] = 0.0005f; 	
+//						selectivity[5] = 0.0006f; 	selectivity[6] = 0.0007f; 	selectivity[7] = 0.0008f; 	selectivity[8] = 0.0009f; 	selectivity[9] = 0.0010f; 	
+//						selectivity[10] = 0.0011f; 	selectivity[11] = 0.0012f; 	selectivity[12] = 0.0013f; 	selectivity[13] = 0.0014f; 	selectivity[14] = 0.0015f; 	
+//						selectivity[15] = 0.0016f; 	selectivity[16] = 0.0017f; 	selectivity[17] = 0.0018f; 	selectivity[18] = 0.0019f; 	selectivity[19] = 0.0020f; 	
+//						selectivity[20] = 0.0021f; 	selectivity[21] = 0.0022f; 	selectivity[22] = 0.0023f; 	selectivity[23] = 0.0024f; 	selectivity[24] = 0.0025f; 	
+//						selectivity[25] = 0.0026f; 	selectivity[26] = 0.0027f; 	selectivity[27] = 0.0028f; 	selectivity[28] = 0.0029f; 	selectivity[29] = 0.0030f; 	
+//						selectivity[30] = 0.0031f; 	selectivity[31] = 0.0032f; 	selectivity[32] = 0.0033f; 	selectivity[33] = 0.0034f; 	selectivity[34] = 0.0035f; 	
+//						selectivity[35] = 0.0036f; 	selectivity[36] = 0.0037f; 	selectivity[37] = 0.0038f; 	selectivity[38] = 0.0039f; 	selectivity[39] = 0.0040f; 	
+//						selectivity[40] = 0.0041f; 	selectivity[41] = 0.0042f; 	selectivity[42] = 0.0043f; 	selectivity[43] = 0.0044f; 	selectivity[44] = 0.0045f; 	
+//						selectivity[45] = 0.0046f; 	selectivity[46] = 0.0047f; 	selectivity[47] = 0.0048f; 	selectivity[48] = 0.0049f; 	selectivity[49] = 0.0050f; 	
+//						selectivity[50] = 0.0051f; 	selectivity[51] = 0.0052f; 	selectivity[52] = 0.0053f; 	selectivity[53] = 0.0054f; 	selectivity[54] = 0.0055f; 	
+//						selectivity[55] = 0.0056f; 	selectivity[56] = 0.0057f; 	selectivity[57] = 0.0058f; 	selectivity[58] = 0.0059f; 	selectivity[59] = 0.0060f; 	
+//						selectivity[60] = 0.0061f; 	selectivity[61] = 0.0062f; 	selectivity[62] = 0.0063f; 	selectivity[63] = 0.0064f; 	selectivity[64] = 0.0065f; 	
+//						selectivity[65] = 0.0066f; 	selectivity[66] = 0.0067f; 	selectivity[67] = 0.0068f; 	selectivity[68] = 0.0069f; 	selectivity[69] = 0.0070f; 	
+//						selectivity[70] = 0.0071f; 	selectivity[71] = 0.0072f; 	selectivity[72] = 0.0073f; 	selectivity[73] = 0.0074f; 	selectivity[74] = 0.0075f; 	
+//						selectivity[75] = 0.0076f; 	selectivity[76] = 0.0077f; 	selectivity[77] = 0.0078f; 	selectivity[78] = 0.0079f; 	selectivity[79] = 0.0080f; 	
+//						selectivity[80] = 0.0081f; 	selectivity[81] = 0.0082f; 	selectivity[82] = 0.0083f; 	selectivity[83] = 0.0084f; 	selectivity[84] = 0.0085f; 	
+//						selectivity[85] = 0.0086f; 	selectivity[86] = 0.0087f; 	selectivity[87] = 0.0088f; 	selectivity[88] = 0.0089f; 	selectivity[89] = 0.0090f; 	
+//						selectivity[90] = 0.0091f; 	selectivity[91] = 0.0092f; 	selectivity[92] = 0.0093f; 	selectivity[93] = 0.0094f; 	selectivity[94] = 0.0095f; 	
+//						selectivity[95] = 0.0096f; 	selectivity[96] = 0.0097f; 	selectivity[97] = 0.0098f; 	selectivity[98] = 0.0099f; 	selectivity[99] = 0.01f; 	
+//
+//						if(extra_locations) {
+//							assert(selectivity[99] <= extra_selectivity[0]) : "max. selectivity is greater than min extra selectivity";
+//							for(int itr=0; itr < extra_selectivity.length; itr++) {
+//								selectivity[100+itr] = extra_selectivity[itr];
+//							}
+//						}
+//					}
+//					
+//				else
+//					assert (false) :funName+ "ERROR: should not come here";
+//			}
+			
+							
+		}
+
+		
+		
 	public ADiagramPacket getGDP(File file) {
 		ADiagramPacket gdp = null;
 		FileInputStream fis;

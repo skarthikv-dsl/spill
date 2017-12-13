@@ -78,7 +78,9 @@ public class onlinePB {
 	static boolean done_pb = false;
 	static float[] actual_sel_pb; 
 	static int num_of_usable_threads;
-	HashMap<Short,Integer> uniquePlansMap = new HashMap<Short,Integer>();
+	HashMap<Short,HashSet<Short>> uniquePlansMap = new HashMap<Short,HashSet<Short>>();
+	HashMap<Short,ArrayList<Float>> min_max_contour_costMap = new HashMap<Short,ArrayList<Float>>();
+	HashMap<Short,HashMap<Short,ArrayList<location>>> contour_plan_locationMap = new HashMap<Short,HashMap<Short,ArrayList<location>>>();
 	HashMap<Long,Short> planHashMap = new HashMap<Long,Short>();
 	static HashMap<Short,Integer> plans_dist = new HashMap<Short,Integer>();
 	static 	HashMap<Short,ArrayList<location>> ContourPointsMap = new HashMap<Short,ArrayList<location>>();
@@ -101,8 +103,8 @@ public class onlinePB {
 	static boolean memoization = true;
 	static float cost_error = 0.12f;
 	static float float_error = 0.00000001f;
-	static boolean contoursReadFromFile = false;
-	static boolean cg_contoursReadFromFile = false;
+	static boolean contoursReadFromFile = true;
+	static boolean cg_contoursReadFromFile = true;
 	static boolean writeMapstoFile = false;
 	static boolean singleThread = false;
 	static boolean trie = true;
@@ -807,14 +809,63 @@ public class onlinePB {
 			q_sel[d] = 1.0f;
 		h_cost = getFPCCost(q_sel, -1, null);
 		
+		
+		for(short contour_no =1 ; contour_no <= ContourPointsMap.size(); contour_no++) {
+			
+			HashMap<Short,ArrayList<location>> planstoLocationsMap = new HashMap<Short,ArrayList<location>>();
+			HashSet<Short> unique_plans = new HashSet();
+			int unique_points =0;
+			float max_cost =0 , min_cost = Float.MAX_VALUE;
+			
+			for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
+
+				location p = ContourPointsMap.get(contour_no).get(c);
+
+				/*needed for testing the code*/
+				unique_points ++;
+				if(p.get_cost() > max_cost)
+					max_cost = p.get_cost();
+				if(p.get_cost() < min_cost)
+					min_cost = p.get_cost();
+
+				if(!unique_plans.contains(p.reduced_planNumber)){				
+					unique_plans.add(p.reduced_planNumber);
+				}
+
+				if(!planstoLocationsMap.containsKey(p.reduced_planNumber))
+				{	ArrayList<location> al = new ArrayList<location>();
+					al.add(p);
+					planstoLocationsMap.put(p.reduced_planNumber, al);
+				}
+				else {
+					planstoLocationsMap.get(p.reduced_planNumber).add(p);
+				}
+
+			}
+			
+			contour_plan_locationMap.put(contour_no, planstoLocationsMap);
+			ArrayList<Float> min_max_cost = new ArrayList<Float>();
+			assert(min_cost <= max_cost) : "min cost is greater than max_cost in a contour";
+			//first element in the arraylist is min cost and the second element is max cost
+			min_max_cost.add(min_cost); min_max_cost.add(max_cost);
+			min_max_contour_costMap.put(contour_no, min_max_cost);
+			
+			if(!uniquePlansMap.containsKey(contour_no))
+				uniquePlansMap.put(contour_no, unique_plans);
+			else if(uniquePlansMap.get(contour_no).size() <unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
+				uniquePlansMap.remove(contour_no);
+				uniquePlansMap.put(contour_no, unique_plans);
+			}
+		}
+		
 		double[] subOpt = new double[max_point];
 		
 		  for (int  j = min_point; j < max_point ; j++)
 		  {
 			System.out.println("Entering loop "+j);
 
-//			if(j != 98378)
-//				continue;
+			if(j != 76757)
+				continue;
 			//initialization for every loop
 			
 			float algo_cost = 0;
@@ -879,8 +930,12 @@ public class onlinePB {
 			
 			System.out.print("\nCost of actual_sel_pb ="+cost_act_sel_pb+" at ");
 			for(int d=0;d<dimension;d++) System.out.print(index_actual_sel[d]+",");
-
+			
+			
 			SO = (algo_cost/cost_act_sel_pb);
+			
+			assert(SO >=0.95 ) : "suboptimiality is less than 1";
+			
 			SO = SO * (1 + lambda/100);		
 			subOpt[j] = SO;
 
@@ -903,58 +958,32 @@ public class onlinePB {
 		float last_exec_cost = 0;
 		learning_cost_pb =0;
 		int [] arr = new int[dimension];
-		HashSet<Short> unique_plans = new HashSet();
-		int unique_points =0;
-		float max_cost =0 , min_cost = Float.MAX_VALUE;
+		
 		
 		if(cost > (2+cost_error)*cost_act_sel_pb) {
 			//return if the cost of the contour is twice more than cost of actual selectivity
 			done_pb = true;
 			learning_cost_pb = 1;//to make sure none of the asserts fail
+			 System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
+			 System.out.println("The  unique plans are "+uniquePlansMap.get(contour_no));
+			 System.out.println("Contour No. is "+contour_no+" : Max cost is "+min_max_contour_costMap.get(contour_no).get(1)+" and min cost is "+min_max_contour_costMap.get(contour_no).get(0)+" with learning cost "+learning_cost_pb);
 			return;
 		}
 		
-		HashMap<Short,ArrayList<location>> planstoLocationsMap = new HashMap<Short,ArrayList<location>>();
+		HashMap<Short,ArrayList<location>> planstoLocationsMap = contour_plan_locationMap.get(contour_no);
 		
-		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
-			
-			location p = ContourPointsMap.get(contour_no).get(c);
-			
-			/*needed for testing the code*/
-			unique_points ++;
-			if(p.get_cost() > max_cost)
-				max_cost = p.get_cost();
-			if(p.get_cost() < min_cost)
-				min_cost = p.get_cost();
-			
-			
-			if(!unique_plans.contains(p.reduced_planNumber)){				
-				unique_plans.add(p.reduced_planNumber);
-				ArrayList<location> al = new ArrayList<location>();
-				al.add(p);
-				planstoLocationsMap.put(contour_no, al);
-			}
-			else {
-				planstoLocationsMap.get(contour_no).add(p);
-			}
-			
-		}
-		
-		 if(!uniquePlansMap.containsKey(contour_no))
-			 uniquePlansMap.put(contour_no, unique_plans.size());
-		 else if(uniquePlansMap.get(contour_no)<unique_plans.size() && uniquePlansMap.containsKey(contour_no)){
-			 uniquePlansMap.remove(contour_no);
-			 uniquePlansMap.put(contour_no, unique_plans.size());
-		 }
 		
 		if(cost_act_sel_pb > 2*alpha*cost) {
-			done_pb = true;
 			
 			Iterator itr = planstoLocationsMap.keySet().iterator();
 			while(itr.hasNext()) {
 				short key = (short) itr.next();
 				learning_cost_pb += planstoLocationsMap.get(key).get(0).opt_cost;
 			}
+			
+			System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
+			 System.out.println("The  unique plans are "+uniquePlansMap.get(contour_no));
+			 System.out.println("Contour No. is "+contour_no+" : Max cost is "+min_max_contour_costMap.get(contour_no).get(1)+" and min cost is "+min_max_contour_costMap.get(contour_no).get(0)+" with learning cost "+learning_cost_pb);
 			return;
 		}
 		
@@ -962,23 +991,32 @@ public class onlinePB {
 		while(itr.hasNext()) {			
 			short key = (short) itr.next();
 			
+			float curr_cost = Float.MAX_VALUE;
+			boolean flag = true;
 			for(location p : planstoLocationsMap.get(key)) {
-				boolean flag = true;
+				
+				boolean flag_inner = true;
 				for(int d=0;d<dimension;d++){
 					if(p.get_dimension(d) < (actual_sel_pb[d]) ){
-						flag = false;
+						flag_inner = false;
 						break;
 					}
 				}
-						
-				learning_cost_pb += p.get_cost(); 
+				
+				flag = flag_inner;
+				curr_cost =  p.get_cost();
+				if(flag_inner)
+					break;
+			}	
+			
+				learning_cost_pb += curr_cost; 
 			
 			
 			if(flag){
 				done_pb = true;
-				 System.out.println("The number unique points are "+unique_points);
-				 System.out.println("The number unique plans are "+unique_plans.size());
-				 System.out.println("The  unique plans are "+unique_plans);
+				 System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
+				 System.out.println("The  unique plans are "+uniquePlansMap.get(contour_no));
+				 System.out.println("Contour No. is "+contour_no+" : Max cost is "+min_max_contour_costMap.get(contour_no).get(1)+" and min cost is "+min_max_contour_costMap.get(contour_no).get(0)+" with learning cost "+learning_cost_pb);
 				 //System.out.print("The final execution cost is "+p.get_cost()+ "at :" );
 	
 				//Settings:  changed to include only the contour cost and not the point
@@ -1002,15 +1040,13 @@ public class onlinePB {
 //	 
 				
 				return;
-			}
-		}			
+			}			
 	}
 		 //assert (unique_points <= Math.pow(resolution, dimension-1)) : funName+" : total points is execeeding the max possible points";
 	
-		 System.out.println("The number of unique points are "+unique_points);
-		 System.out.println("The number of unique plans are "+unique_plans.size());
-		 System.out.println("The  unique plans are "+unique_plans);
-		 System.out.println("Contour No. is "+contour_no+" : Max cost is "+max_cost+" and min cost is "+min_cost+" with learning cost "+learning_cost_pb);
+		System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
+		 System.out.println("The  unique plans are "+uniquePlansMap.get(contour_no));
+		 System.out.println("Contour No. is "+contour_no+" : Max cost is "+min_max_contour_costMap.get(contour_no).get(1)+" and min cost is "+min_max_contour_costMap.get(contour_no).get(0)+" with learning cost "+learning_cost_pb);
 //		 if(cost_generic(convertSelectivitytoIndex(actual_sel_pb)) < 2*cost)
 
 	}
@@ -1097,7 +1133,7 @@ public class onlinePB {
 				}
 			 else if(cost> (float)OptimalCost[totalPoints-1])
 				 cost = (float) OptimalCost[totalPoints-1];
-			 algo_cost += Math.pow(2,i-1)*uniquePlansMap.get(i+skip);
+			 algo_cost += Math.pow(2,i-1)*uniquePlansMap.get(i+skip).size();
 			 if(i>1){
 			 double so = algo_cost/Math.pow(2,i-2);
 			 if(so > max_pb_so)
