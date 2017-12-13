@@ -864,8 +864,8 @@ public class onlinePB {
 		  {
 			System.out.println("Entering loop "+j);
 
-			if(j != 76757)
-				continue;
+//			if(j != 76757)
+//				continue;
 			//initialization for every loop
 			
 			float algo_cost = 0;
@@ -2035,7 +2035,7 @@ public class onlinePB {
 						opt_cost_copy = loc.get_cost();
 						
 						if(qrun_copy[last_dim2] < 1.0)
-							assert (opt_cost_copy >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+optimization_cost+" and contour cost = "+cost;
+							assert (opt_cost_copy >= cost): "covering locaiton has less than contour cost: i.e. covering_cost = "+opt_cost_copy+" and contour cost = "+cost;
 						
 							if(DEBUG_LEVEL_2)
 							printSelectivityCost(qrun_copy, opt_cost_copy);
