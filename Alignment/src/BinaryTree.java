@@ -1,3 +1,5 @@
+import iisc.dsl.picasso.server.PicassoException;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -7,6 +9,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 //import java.lang.ProcessBuilder.Redirect;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -109,6 +113,7 @@ public class BinaryTree {
 	static int numplans;
 	public static HashMap<String, Integer> relationMap =  new HashMap<String, Integer>();
 	public static boolean FROM_CLAUSE;
+	static boolean generate_planstructure = true;
 
 	public BinaryTree(){
 
@@ -675,7 +680,11 @@ public class BinaryTree {
 		}
 		
 	}
-	public static void main(String[] args) throws NumberFormatException, IOException{
+	
+	
+	
+	
+	public static void main(String[] args) throws NumberFormatException, IOException, PicassoException, SQLException, ClassNotFoundException{
 
 		BinaryTree tree = new BinaryTree();
 		Properties prop = new Properties();
@@ -695,7 +704,7 @@ public class BinaryTree {
 		}
 		else{
 			System.out.println("Properties file not found");
-			System.exit(0);
+			//System.exit(0);
 		}
 		InputStream input = null;
 		input = new FileInputStream("./src/Constants.properties");
@@ -704,14 +713,39 @@ public class BinaryTree {
 		String apktPath = prop.getProperty("apktPath");
 		String QTName = prop.getProperty("qtName");
 		benchmark = prop.getProperty("Benchmark");
+		
 		//String BaseLocation = prop.getProperty("BaseLocation");
 		//String QTName = prop.getProperty("QTName");
 		//path = BaseLocation+QTName+"/";
+		
+		
 		path = apktPath;
-		numplans=new File(path+"planStructure_new").listFiles().length ;
-		numplans = numplans-1;
+		numplans=new File(path+"planStructureXML/").listFiles().length ;
 		System.out.println("NUMPLANS ="+numplans+"\n");
 		
+		for(int i=0; i<numplans;i++){
+			//reload the planStrucuture_new directory
+			if(generate_planstructure){
+				PlanGen pg = new PlanGen();
+				pg.apktPath = apktPath;
+				pg.dimension = Integer.parseInt(prop.getProperty("dimension"));
+				pg.select_query = prop.getProperty("select_query");
+				File f_marwa = new File("/home/dsladmin/marwa");
+				File f_durga = new File("/home/dsladmin/durga");
+				if(f_marwa.exists() || f_durga.exists()) { 
+					Class.forName("org.postgresql.Driver");
+					pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai","sa", "database");
+				}
+				else {
+					Class.forName("org.postgresql.Driver");
+					pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai","sa", "database");
+				}
+				pg.getForcedPlanStructure(i);
+				if (pg.conn != null) {
+					try { pg.conn.close(); } catch (SQLException e) {}
+				}
+			}
+		}
 		tree.initialize(QTName);
 		for(int i=0;i<numplans;i++){
 			//reading the plan

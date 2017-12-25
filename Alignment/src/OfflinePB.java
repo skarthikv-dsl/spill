@@ -88,7 +88,7 @@ import iisc.dsl.picasso.server.plan.Plan;
 
 public class OfflinePB
 {
-	static double AllPlanCosts[][];
+	static float AllPlanCosts[][];
 	static int nPlans;
 
 	static int UNI = 1;
@@ -99,7 +99,7 @@ public class OfflinePB
 	static double threshold = 20;
 
 	int plans[];
-	double OptimalCost[];
+	float OptimalCost[];
 	int totalPlans;
 	int dimension;
 	static int resolution;
@@ -110,7 +110,7 @@ public class OfflinePB
 	static String select_query;
 	static String predicates;
 	static int database_conn=1;
-	static boolean loadAllPlanCosts = false;
+	
 	
 	static Vector<Plan> plans_vector = new Vector<Plan>();
 	
@@ -124,6 +124,8 @@ public class OfflinePB
 	static boolean memoization = true;
 	static Connection conn = null;
 	static float beta;
+	static double learning_cost = 0;
+	 static boolean done = false;
 	static ArrayList<Integer> remainingDim;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
 	 static ArrayList<location> all_contour_points = new ArrayList<location>();
@@ -135,9 +137,9 @@ public class OfflinePB
 		HashMap<Integer,ArrayList<Float>> min_max_contour_costMap = new HashMap<Integer,ArrayList<Float>>();
 		HashMap<Integer,HashMap<Integer,ArrayList<location>>> contour_plan_locationMap = new HashMap<Integer,HashMap<Integer,ArrayList<location>>>();
 	 static HashMap<Integer,Float> minContourCostMap = new HashMap<Integer,Float>();
-	 static double learning_cost = 0;
-	 static boolean done = false;
-
+	 
+	
+	 
 	 float[] actual_sel;
 	 static int opt_calls = 0;
 	 
@@ -160,10 +162,15 @@ public class OfflinePB
 	 static boolean using_packets = true;
 	 static float lambda = 20;
 	 static boolean trie = true;
-	 static online_vertex root;
+	
 	 static boolean extra_locations = true;
+	 static boolean only_opt_calls;
+	 static boolean loadAllPlanCosts = false;
 		static int no_extra_locs = 6;
-	 
+		 static online_vertex root;
+		 float [] point_selec;
+		 int [] point_index;
+		 
 	public static void main(String args[]) throws IOException, SQLException, PicassoException, ClassNotFoundException
 	{
 		long startTime = System.nanoTime();
@@ -181,8 +188,15 @@ public class OfflinePB
 
 		//Settings
 		//Populate the OptimalCost Matrix.
-		
+
+		obj.point_index = new int[obj.dimension];
+		obj.point_selec = new float[obj.dimension];
 		root = new online_vertex(-1);
+		
+		if(nexus_bcg)
+			obj.loadSelectivity_nexus_bcg();
+		else
+			obj.loadSelectivity();
 		
 		obj.readpkt(gdp);
 		
@@ -197,10 +211,7 @@ public class OfflinePB
 		
 		
 		
-		if(nexus_bcg)
-			obj.loadSelectivity_nexus_bcg();
-		else
-			obj.loadSelectivity();
+		
 
 		
 		try{
@@ -245,8 +256,8 @@ public class OfflinePB
 		loc.decimalPrecision = obj.decimalPrecision;
 		
 		int i;
-		double h_cost, min_cost; 
-		
+		float h_cost, min_cost; 
+
 		if(visualisation_2D){
 			obj.dimension = 2;
 			int [] h_loc_arr = {resolution-1,resolution-1};
@@ -836,7 +847,7 @@ public class OfflinePB
 			newIndex[dim] = index[dim] + 1;
 		else
 			newIndex[0] = -1;		// end - cant move anymore
-	
+
 		return newIndex;
 	}
 
@@ -849,7 +860,7 @@ public class OfflinePB
 			newIndex[dim] = index[dim]-1;
 		else
 			newIndex[0] = -1;	// end - cant move anymore
-	
+
 		return newIndex;
 	}
 
@@ -891,8 +902,10 @@ public class OfflinePB
 	public int[] createCorner(int corner) 
 	{
 		int index[] = new int[dimension];
+		for(int i=0; i< dimension;i++)
+			index[i] = 0;
 		int d=dimension-1;
-		
+
 		while(corner > 0) 
 		{
 			if((corner % 2) > 0) 
@@ -1490,26 +1503,25 @@ public  void getPlanCountArray() {
 		return (SO/worst_native - 1);
 		//assert that this ratio is > 1
 	}
-	
-private float[] convertIndextoSelectivity(int[] point_Index) {
-	
+
+private float[] convertIndextoSelectivity(int[] point_Index_arg) {
+
 	String funName = "convertIndextoSelectivity";
-	
-	float [] point_selec = new float[point_Index.length];
-	assert (point_Index.length == dimension): funName+" ERROR: point index length not matching with dimension"; 
+
+	assert (point_Index_arg.length == dimension): funName+" ERROR: point index length not matching with dimension"; 
 	for(int d=0; d<dimension;d++)
-		point_selec[d] = selectivity[point_Index[d]];
+		point_selec[d] = selectivity[point_Index_arg[d]];
 	return point_selec;
 }
 
-public int[] convertSelectivitytoIndex (float[] point_sel) {
-	
+public int[] convertSelectivitytoIndex (float[] point_sel_arg) {
+
 	String funName = "convertSelectivitytoIndex";
-	
-	int [] point_index = new int[point_sel.length];
-	assert (point_sel.length == dimension): funName+" ERROR: point index length not matching with dimension"; 
+
+	//int [] point_index = new int[point_sel_arg.length];
+	assert (point_sel_arg.length == dimension): funName+" ERROR: point index length not matching with dimension"; 
 	for(int d=0; d<dimension;d++)
-		point_index[d] = findNearestPoint(point_sel[d]);
+		point_index[d] = findNearestPoint(point_sel_arg[d]);
 	return point_index;
 }
 
@@ -1578,6 +1590,7 @@ public void initialize(int location) {
 
 	private location locationAlreadyExist(int[] arr) {
 		//TODO: need to test this
+		
 		if(!memoization)
 			return null;
 
@@ -1794,10 +1807,10 @@ public void initialize(int location) {
 			assert (totalPoints==data.length) : "Data length and the resolution didn't match !";
 
 			plans = new int [data.length];
-			OptimalCost = new double [data.length]; 
+			OptimalCost = new float [data.length]; 
 			for (int i = 0;i < data.length;i++)
 			{
-				this.OptimalCost[i]= data[i].getCost();
+				this.OptimalCost[i]= (float)data[i].getCost();
 				this.plans[i] = data[i].getPlanNumber();
 				//System.out.println("At "+i+" plan is "+plans[i]);
 				//System.out.println("Plan Number ="+plans[i]+"\n");
@@ -1814,20 +1827,30 @@ public void initialize(int location) {
 				System.out.println("Plan "+p+" has "+plan_count[p]+" points");
 			}
 			
+			for(int j=resolution-1; j>=0 ; j--) {
+			for(int i=0; i < resolution; i++) {
+					int arr[] = new int[2];//arr[0] = arr[1] = 0;
+					arr[0] = i; arr[1] = j;
+					//System.out.print((int)(OptimalCost[getIndex(arr, resolution)])+"\t");
+				}
+				//System.out.println("\n");
+			}
+			
 			if(loadAllPlanCosts){
 				// ------------------------------------- Read pcst files
 				nPlans = totalPlans;
-				AllPlanCosts = new double[nPlans][totalPoints];
+				AllPlanCosts = new float[nPlans][totalPoints];
 				//costBouquet = new double[total_points];
 				for (int i = 0; i < nPlans; i++) {
 					try {
 
 						ObjectInputStream ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"pcstFiles/"+ i + ".pcst")));
-						double[] cost = (double[]) ip.readObject();
+						
+						double[] cost =  (double[]) ip.readObject();
 						for (int j = 0; j < totalPoints; j++)
 						{
 
-							AllPlanCosts[i][j] = cost[j];
+							AllPlanCosts[i][j] = (float)cost[j];
 						}
 					} catch (Exception e) {
 						e.printStackTrace();
@@ -1835,7 +1858,7 @@ public void initialize(int location) {
 				}
 				
 				//if you want to validate fpc and plan quality
-				double tol = 0.01;
+				double tol = 0.0001;
 				int pen_cnt =0;
 				for(int p=0;p<data.length;p++){
 					double cst = getOptimalCost(p);
@@ -1858,12 +1881,12 @@ public void initialize(int location) {
 						System.out.print("\nThe location is "+p+" optimal plan is "+plans[p]+ " opt cost = "+getOptimalCost(p)+" and allplancost="+AllPlanCosts[plans[p]][p]);
 						System.out.print(" the coordinates are ");
 						for(int k=0;k<dimension;k++)
-						System.out.print(ind[k]+"\t");
+						System.out.print(selectivity[ind[k]]+"\t");
 						pen_cnt ++;
 					}
 				}
 				
-				System.out.println("\nFPC ERROR "+pen_cnt); 
+				System.out.println("\nFPC ERROR with "+ (100*tol)+"% threshold are "+pen_cnt); 
 			}
 		}
 
@@ -2219,26 +2242,26 @@ public void initialize(int location) {
 
 				if(sel_distribution == 1){
 //					this was used for spillbound				
-//					selectivity[0] = 0.000064; 	selectivity[1] = 0.000093; 	selectivity[2] = 0.000126; 	selectivity[3] = 0.000161; 	selectivity[4] = 0.000198;
-//					selectivity[5] = 0.000239; 	selectivity[6] = 0.000284; 	selectivity[7] = 0.000332; 	selectivity[8] = 0.000384; 	selectivity[9] = 0.000440;
-//					selectivity[10] = 0.000501; 	selectivity[11] = 0.000567; 	selectivity[12] = 0.000638; 	selectivity[13] = 0.000716; 	selectivity[14] = 0.000800;
-//					selectivity[15] = 0.000890; 	selectivity[16] = 0.000989; 	selectivity[17] = 0.001095; 	selectivity[18] = 0.001211; 	selectivity[19] = 0.001335;
-//					selectivity[20] = 0.001471; 	selectivity[21] = 0.001617; 	selectivity[22] = 0.001776; 	selectivity[23] = 0.001948; 	selectivity[24] = 0.002134;
-//					selectivity[25] = 0.002335; 	selectivity[26] = 0.002554; 	selectivity[27] = 0.002790; 	selectivity[28] = 0.003046; 	selectivity[29] = 0.003323;
-//					selectivity[30] = 0.003624; 	selectivity[31] = 0.003949; 	selectivity[32] = 0.004301; 	selectivity[33] = 0.004683; 	selectivity[34] = 0.005096;
-//					selectivity[35] = 0.005543; 	selectivity[36] = 0.006028; 	selectivity[37] = 0.006552; 	selectivity[38] = 0.007121; 	selectivity[39] = 0.007736;
-//					selectivity[40] = 0.008403; 	selectivity[41] = 0.009125; 	selectivity[42] = 0.009907; 	selectivity[43] = 0.010753; 	selectivity[44] = 0.011670;
-//					selectivity[45] = 0.012663; 	selectivity[46] = 0.013739; 	selectivity[47] = 0.014904; 	selectivity[48] = 0.016165; 	selectivity[49] = 0.017531;
-//					selectivity[50] = 0.019011; 	selectivity[51] = 0.020613; 	selectivity[52] = 0.022348; 	selectivity[53] = 0.024228; 	selectivity[54] = 0.026263;
-//					selectivity[55] = 0.028467; 	selectivity[56] = 0.030854; 	selectivity[57] = 0.033440; 	selectivity[58] = 0.036240; 	selectivity[59] = 0.039272;
-//					selectivity[60] = 0.042556; 	selectivity[61] = 0.046113; 	selectivity[62] = 0.049965; 	selectivity[63] = 0.054136; 	selectivity[64] = 0.058654;
-//					selectivity[65] = 0.063547; 	selectivity[66] = 0.068845; 	selectivity[67] = 0.074584; 	selectivity[68] = 0.080799; 	selectivity[69] = 0.087530;
-//					selectivity[70] = 0.094819; 	selectivity[71] = 0.102714; 	selectivity[72] = 0.111263; 	selectivity[73] = 0.120523; 	selectivity[74] = 0.130550;
-//					selectivity[75] = 0.141411; 	selectivity[76] = 0.153172; 	selectivity[77] = 0.165910; 	selectivity[78] = 0.179705; 	selectivity[79] = 0.194645;
-//					selectivity[80] = 0.210825; 	selectivity[81] = 0.228348; 	selectivity[82] = 0.247325; 	selectivity[83] = 0.267877; 	selectivity[84] = 0.290136;
-//					selectivity[85] = 0.314241; 	selectivity[86] = 0.340348; 	selectivity[87] = 0.368621; 	selectivity[88] = 0.399241; 	selectivity[89] = 0.432403;
-//					selectivity[90] = 0.468316; 	selectivity[91] = 0.507211; 	selectivity[92] = 0.549334; 	selectivity[93] = 0.594953; 	selectivity[94] = 0.644359;
-//					selectivity[95] = 0.697865; 	selectivity[96] = 0.755812; 	selectivity[97] = 0.818569; 	selectivity[98] = 0.886535; 	selectivity[99] = 0.990142;
+//					selectivity[0] = 0.000064f; 	selectivity[1] = 0.000093f; 	selectivity[2] = 0.000126f; 	selectivity[3] = 0.000161f; 	selectivity[4] = 0.000198f;
+//					selectivity[5] = 0.000239f; 	selectivity[6] = 0.000284f; 	selectivity[7] = 0.000332f; 	selectivity[8] = 0.000384f; 	selectivity[9] = 0.000440f;
+//					selectivity[10] = 0.000501f; 	selectivity[11] = 0.000567f; 	selectivity[12] = 0.000638f; 	selectivity[13] = 0.000716f; 	selectivity[14] = 0.000800f;
+//					selectivity[15] = 0.000890f; 	selectivity[16] = 0.000989f; 	selectivity[17] = 0.001095f; 	selectivity[18] = 0.001211f; 	selectivity[19] = 0.001335f;
+//					selectivity[20] = 0.001471f; 	selectivity[21] = 0.001617f; 	selectivity[22] = 0.001776f; 	selectivity[23] = 0.001948f; 	selectivity[24] = 0.002134f;
+//					selectivity[25] = 0.002335f; 	selectivity[26] = 0.002554f; 	selectivity[27] = 0.002790f; 	selectivity[28] = 0.003046f; 	selectivity[29] = 0.003323f;
+//					selectivity[30] = 0.003624f; 	selectivity[31] = 0.003949f; 	selectivity[32] = 0.004301f; 	selectivity[33] = 0.004683f; 	selectivity[34] = 0.005096f;
+//					selectivity[35] = 0.005543f; 	selectivity[36] = 0.006028f; 	selectivity[37] = 0.006552f; 	selectivity[38] = 0.007121f; 	selectivity[39] = 0.007736f;
+//					selectivity[40] = 0.008403f; 	selectivity[41] = 0.009125f; 	selectivity[42] = 0.009907f; 	selectivity[43] = 0.010753f; 	selectivity[44] = 0.011670f;
+//					selectivity[45] = 0.012663f; 	selectivity[46] = 0.013739f; 	selectivity[47] = 0.014904f; 	selectivity[48] = 0.016165f; 	selectivity[49] = 0.017531f;
+//					selectivity[50] = 0.019011f; 	selectivity[51] = 0.020613f; 	selectivity[52] = 0.022348f; 	selectivity[53] = 0.024228f; 	selectivity[54] = 0.026263f;
+//					selectivity[55] = 0.028467f; 	selectivity[56] = 0.030854f; 	selectivity[57] = 0.033440f; 	selectivity[58] = 0.036240f; 	selectivity[59] = 0.039272f;
+//					selectivity[60] = 0.042556f; 	selectivity[61] = 0.046113f; 	selectivity[62] = 0.049965f; 	selectivity[63] = 0.054136f; 	selectivity[64] = 0.058654f;
+//					selectivity[65] = 0.063547f; 	selectivity[66] = 0.068845f; 	selectivity[67] = 0.074584f; 	selectivity[68] = 0.080799f; 	selectivity[69] = 0.087530f;
+//					selectivity[70] = 0.094819f; 	selectivity[71] = 0.102714f; 	selectivity[72] = 0.111263f; 	selectivity[73] = 0.120523f; 	selectivity[74] = 0.130550f;
+//					selectivity[75] = 0.141411f; 	selectivity[76] = 0.153172f; 	selectivity[77] = 0.165910f; 	selectivity[78] = 0.179705f; 	selectivity[79] = 0.194645f;
+//					selectivity[80] = 0.210825f; 	selectivity[81] = 0.228348f; 	selectivity[82] = 0.247325f; 	selectivity[83] = 0.267877f; 	selectivity[84] = 0.290136f;
+//					selectivity[85] = 0.314241f; 	selectivity[86] = 0.340348f; 	selectivity[87] = 0.368621f; 	selectivity[88] = 0.399241f; 	selectivity[89] = 0.432403f;
+//					selectivity[90] = 0.468316f; 	selectivity[91] = 0.507211f; 	selectivity[92] = 0.549334f; 	selectivity[93] = 0.594953f; 	selectivity[94] = 0.644359f;
+//					selectivity[95] = 0.697865f; 	selectivity[96] = 0.755812f; 	selectivity[97] = 0.818569f; 	selectivity[98] = 0.886535f; 	selectivity[99] = 0.990142f;
 
 					//this is used for onlinePB
 					selectivity[0] = 0.0001035f; 	selectivity[1] = 0.0001111f; 	selectivity[2] = 0.0001194f; 	selectivity[3] = 0.0001286f; 	selectivity[4] = 0.0001387f; 	

@@ -81,6 +81,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 	static int num_of_usable_threads;
 	static boolean extra_locations = true;
 	static int no_extra_locs = 6;
+	static boolean only_apkt_gen = false; //required for only ess generation without both pcst (all plans cost) and plan structure storage 
 	//static DataValues [] data = new DataValues[totalPoints];
 	
 	public static void main(String[] args) throws IOException, PicassoException, SQLException {
@@ -194,11 +195,16 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		//Write the new apkt file
 		//ADP.setPlans(plans);
 		//ADP.setMaxPlanNumber(plans.size());
+		String fName = apktPath + qtName + "_new9.4_R"+resolution+".apkt";		
 		try
 		{
 //			String fName = PicassoConstants.SAVE_PATH + "packets"+ System.getProperty("file.separator")	+ sqp.getQueryName() + ".apkt";
-			String fName = apktPath + qtName + "_new9.4_R"+resolution+".apkt";		
-			FileOutputStream fis = new FileOutputStream (pktPath);
+			
+			FileOutputStream fis;
+			if(only_apkt_gen)
+				fis = new FileOutputStream (fName);
+			else
+				fis = new FileOutputStream (pktPath); //just to rewrite the existing apkt file
 			ObjectOutputStream ois;				
 			ois = new ObjectOutputStream (fis);			
 			ois.writeObject(gdp);			
@@ -211,7 +217,12 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 			ex.printStackTrace();
 		}		
 		
-		ADiagramPacket gdp_new = obj.getGDP(new File(pktPath));
+		ADiagramPacket gdp_new;
+		if(only_apkt_gen)
+			gdp_new = obj.getGDP(new File(fName));
+		else
+			gdp_new = obj.getGDP(new File(pktPath));
+		
 		obj.readpkt(gdp_new, false);
 		/*
 		int nativeplan = obj.getNativePlan();
@@ -305,7 +316,8 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 //							if(true){
 								plan_number = planHashMap.size();
 								planHashMap.put(hash_val,plan_number);
-								writeXMLPlan(key,plan_number);
+								if(!only_apkt_gen)
+									writeXMLPlan(key,plan_number);
 						}
 						else{
 								plan_number = planHashMap.get(hash_val);
@@ -832,6 +844,66 @@ File plansFile = new File(apktPath+"planStructure_new");
 		return plan;
 		
 	}
+
+	public void getForcedPlanStructure(int plan_no) throws PicassoException, IOException, SQLException {
+
+		
+
+		Vector textualPlan = new Vector();
+		Plan plan = new Plan();
+		try{      	
+			Statement stmt = conn.createStatement();
+			String exp_query = new String(select_query);
+			exp_query = "explain " + exp_query +" fpc "+apktPath+"planStructureXML/"+plan_no+".xml";
+			
+			ResultSet rs = stmt.executeQuery(exp_query);
+			//System.out.println("coming here");
+			while(rs.next())  {
+				textualPlan.add(rs.getString(1)); 
+			}
+			
+			if(textualPlan.size()<=0)
+				return ;
+				
+			rs.close();
+			stmt.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+			ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+			throw new PicassoException("Error getting plan: "+e);
+		}
+
+		String str = (String)textualPlan.remove(0);
+		CreateNode(plan, str, 0, -1);
+		//plan.isOptimal = true;
+		FindChilds(plan, 0, 1, textualPlan, 2);
+		//if(PicassoConstants.saveExtraPlans == false ||  PicassoConstants.topkquery == false)
+		SwapSORTChilds(plan);
+		
+		
+		//Write temp_plan
+		String path = apktPath+"planStructure_new/"+plan_no+".txt";
+		File fnative=new File(path);
+		try {
+			
+			FileWriter fw = new FileWriter(fnative, false);   //overwrites if the file already exists
+			for(int n=0;n<plan.getSize();n++){
+				Node node = plan.getNode(n);
+				if(node!=null && node.getId()>=0)
+					fw.write(node.getId()+","+node.getParentId()+","+node.getName()+","+node.getPredicate()+"\n");
+			}
+
+
+			fw.close();
+			
+
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} 
+	}
+
 	
 public void writeXMLPlan(int loc, int plan_no) throws PicassoException, IOException, SQLException {
 
@@ -855,7 +927,7 @@ public void writeXMLPlan(int loc, int plan_no) throws PicassoException, IOExcept
 			xml_query = "explain (format xml) "+ exp_query ;
 			
 			//String exp_query = new String(query_opt_spill);
-			//System.out.println(exp_query);
+			System.out.println("Plan = "+plan_no+" : "+xml_query);
 //			stmt.execute("set work_mem = '100MB'");
 //			//NOTE,Settings: 4GB for DS and 1GB for H
 //			if(database_conn==0){

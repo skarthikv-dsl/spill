@@ -469,6 +469,9 @@ public void getFPCCost(int p_no) throws SQLException{
 		if(loc>0 && planCost[loc-1] < (double)10 )
 			loc--;
 		
+		if(loc == 7601 && p_no == 1)
+			System.out.println("Interesting");
+		
 		//System.out.println("loc = "+loc);
 		int  index [] = new int[dimension] ;
 		index = getCoordinates(dimension, resolution, loc);

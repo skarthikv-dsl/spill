@@ -34,6 +34,10 @@ public class test {
 		float  val1 = (zero * 10000);
 		int val2 = (int) val1;
 		
+		int arr[] = new int[3];
+		System.out.println(arr);
+		
+		
 		obj.CheckifProcessRunning();
 		//obj.size_of_object();
 		

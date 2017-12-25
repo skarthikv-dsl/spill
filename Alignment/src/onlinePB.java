@@ -815,7 +815,7 @@ public class onlinePB {
 			HashMap<Short,ArrayList<location>> planstoLocationsMap = new HashMap<Short,ArrayList<location>>();
 			HashSet<Short> unique_plans = new HashSet();
 			int unique_points =0;
-			float max_cost =0 , min_cost = Float.MAX_VALUE;
+			float max_cost =0 , min_cost = Float.MAX_VALUE, sum_cost =0;
 			
 			for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
 
@@ -828,6 +828,8 @@ public class onlinePB {
 				if(p.get_cost() < min_cost)
 					min_cost = p.get_cost();
 
+				sum_cost += p.get_cost();
+				
 				if(!unique_plans.contains(p.reduced_planNumber)){				
 					unique_plans.add(p.reduced_planNumber);
 				}
@@ -846,8 +848,9 @@ public class onlinePB {
 			contour_plan_locationMap.put(contour_no, planstoLocationsMap);
 			ArrayList<Float> min_max_cost = new ArrayList<Float>();
 			assert(min_cost <= max_cost) : "min cost is greater than max_cost in a contour";
-			//first element in the arraylist is min cost and the second element is max cost
-			min_max_cost.add(min_cost); min_max_cost.add(max_cost);
+			//first element in the arraylist is min cost and the second element is max cost, third is average
+			float avg_cost = (float) (sum_cost/(unique_points*1.0f));
+			min_max_cost.add(min_cost); min_max_cost.add(max_cost); min_max_cost.add(avg_cost); 
 			min_max_contour_costMap.put(contour_no, min_max_cost);
 			
 			if(!uniquePlansMap.containsKey(contour_no))
@@ -864,7 +867,7 @@ public class onlinePB {
 		  {
 			System.out.println("Entering loop "+j);
 
-//			if(j != 76757)
+//			if(j != 109455)
 //				continue;
 			//initialization for every loop
 			
@@ -978,7 +981,16 @@ public class onlinePB {
 			Iterator itr = planstoLocationsMap.keySet().iterator();
 			while(itr.hasNext()) {
 				short key = (short) itr.next();
-				learning_cost_pb += planstoLocationsMap.get(key).get(0).opt_cost;
+				float temp_cost = planstoLocationsMap.get(key).get(0).opt_cost;
+				float avg_cost = min_max_contour_costMap.get(contour_no).get(2);
+				
+				if(temp_cost > avg_cost)
+					temp_cost = avg_cost;
+				
+				if(temp_cost > alpha*cost)
+					temp_cost = alpha*cost;
+				
+				learning_cost_pb += temp_cost;
 			}
 			
 			System.out.println("The number unique plans are "+uniquePlansMap.get(contour_no).size());
@@ -1009,7 +1021,15 @@ public class onlinePB {
 					break;
 			}	
 			
-				learning_cost_pb += curr_cost; 
+			float temp_cost = curr_cost;
+			float avg_cost = min_max_contour_costMap.get(contour_no).get(2);
+			
+			if(temp_cost > avg_cost)
+				temp_cost = avg_cost;
+			
+			if(temp_cost > alpha*cost)
+				temp_cost = alpha*cost;
+				learning_cost_pb += temp_cost; 
 			
 			
 			if(flag){
@@ -3154,6 +3174,7 @@ public class onlinePB {
 
 			select_query = prop.getProperty("select_query");
 			predicates= prop.getProperty("predicates");
+			resolution = Integer.parseInt(prop.getProperty("resolution"));
 
 
 			/*
