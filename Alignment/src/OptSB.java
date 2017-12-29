@@ -23,6 +23,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -62,6 +63,9 @@ import java.util.regex.Pattern;
 
 
 
+
+
+
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -84,7 +88,7 @@ public class OptSB
 	static int resolution;
 	static DataValues[] data;
 	static int totalPoints;
-	static double selectivity[];
+	static float selectivity[];
 	static String apktPath;
 	static String qtName ;
 	static Jdbc3PoolingDataSource source;
@@ -107,6 +111,7 @@ public class OptSB
 	static ArrayList<Integer> completedQas = new ArrayList<Integer>();
 	static HashMap<Integer,Integer> learntDimIndices = new HashMap<Integer,Integer>();
 	static HashMap<Integer,ArrayList<Integer>> predicateOrderMap = new HashMap<Integer,ArrayList<Integer>>();
+	static ArrayList<Float[]> group_id_gen = new ArrayList<Float[]>(); 
 	//	point[][] points_list;
 	static plan[] plans_list;
 	static double max_sum_t=0;
@@ -121,6 +126,9 @@ public class OptSB
 	static double picsel[], locationWeight[];
 	static double areaSpace =0,totalEstimatedArea = 0;
 	static float minimum_selectivity = 0.0001f;
+	static float max_selectivity = 0.01f;
+	static int decimalPrecision = 6;
+	static float beta;
 	//-----------------------------------FLAGS
 	// Use the plansPath as ./src/ --> This is for making jar and running it
 	static boolean src_flag=true;
@@ -139,7 +147,7 @@ public class OptSB
 	
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
-	static boolean singleThread = false;
+	static boolean singleThread = true;
 	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
@@ -171,8 +179,8 @@ public class OptSB
 	double p_t_max_part = 0;
 	double p_t_max_tol = 0;
 
-	double  minIndex [];
-	double  maxIndex [];
+	float  minIndex [];
+	float  maxIndex [];
 
 	int currentContourPoints=0;
 	double min_cost=Double.MAX_VALUE;
@@ -196,7 +204,7 @@ public class OptSB
 
 	point_generic []maxPoints;
 
-	double[] actual_sel;
+	float[] actual_sel;
 
 	int n_partition_best = 0;
 
@@ -221,8 +229,8 @@ public class OptSB
 public OptSB(){}
 	
 	public OptSB(OptSB obj){
-		minIndex = new double[obj.dimension];
-		maxIndex = new double[obj.dimension];		
+		minIndex = new float[obj.dimension];
+		maxIndex = new float[obj.dimension];		
 		this.remainingDim = new ArrayList<Integer>(obj.remainingDim);
 		this.ContourPointsMap = new HashMap<Integer, ArrayList<point_generic>>();
 		HashMap<Integer,ArrayList<Integer>> cur_partition = new HashMap<Integer,ArrayList<Integer>>();
@@ -248,7 +256,7 @@ public OptSB(){}
 		this.max_no_executions = 0;
 		this.max_no_repeat_executions = 0;
 		this.already_visited = new boolean[obj.dimension];  
-		this.actual_sel = new double[obj.dimension];
+		this.actual_sel = new float[obj.dimension];
 		this.maxPoints= new point_generic[dimension];
 		//point_generic []maxPoints; 
 	}
@@ -274,6 +282,12 @@ public OptSB(){}
 			System.out.println("minimum_selectivity = "+minimum_selectivity);
 			//writeMapstoFile = false;
 		}
+		
+		onlinePB opb = new onlinePB();
+		minimum_selectivity = opb.minimum_selectivity;
+		max_selectivity = opb.max_selectivity;
+		decimalPrecision = opb.decimalPrecision;
+		beta = (float)Math.pow(alpha,(1.0 / dimension*1.0));
 		
 		if(src_flag)
 		{
@@ -338,6 +352,7 @@ public OptSB(){}
 		double cost = obj.getOptimalCost(0);
 		
 		if(covering_contoursReadFromFile && onlineSB) {
+			obj.loadPredicateOrder();
 			obj.readCoveringContourFromFile();
 		}
 		else if(!Nexus_algo && !generateSpecificContour && contoursReadFromFile){
@@ -517,7 +532,8 @@ public OptSB(){}
 		//create logs directory if it does not exist
 		File filelog =  new File(apktPath+"TSB_logs/");
 		if(!filelog.exists())
-			assert(filelog.mkdir()) : "was not able to create log directory";
+			filelog.mkdirs();
+			//assert() : "was not able to create log directory";
 			//FileUtils.cleanDirectory(filelog);
 
 						String[] myFiles;    
@@ -1042,11 +1058,11 @@ public OptSB(){}
 	
 	public void loadPredicateOrder() throws NumberFormatException, IOException{
 		
-		int numPlans = new File(apktPath+"planStructure_new/").listFiles().length ;
+		int numPlans = new File(apktPath+"planStructureXML/").listFiles().length ;
 		
 		for(int i=0; i< numPlans; i++)
 		try{
-			FileReader file = new FileReader(apktPath+"planStructure_new/"+i+".txt");
+			FileReader file = new FileReader(apktPath+"predicateOrder/"+i+".txt");
 
 			BufferedReader br = new BufferedReader(file);
 			String s;
@@ -1064,6 +1080,30 @@ public OptSB(){}
 			e.printStackTrace();
 		}
 
+	}
+	
+	public int getGroup_id(float dim_values[]){
+		
+		//search in the arraylist if the dim_values already exist. 
+		//we will just compare the first (D-2) dimensions
+		for(int i=0; i < group_id_gen.size(); i++){
+			Float[] arr = group_id_gen.get(i);
+			boolean flag = true;
+			for(int j = 0; j < dim_values.length-2; j++){
+				if(Math.abs(arr[j].floatValue() - dim_values[j]) > 0.0000001f){
+					flag = false;
+					break;
+				}
+			}
+			if(flag == true)
+				return i;
+		}
+		Float convert_to_float [] = new Float[dimension];
+		for(int i=0; i < dim_values.length; i++)
+			convert_to_float[i] = (Float)dim_values[i];
+		group_id_gen.add(convert_to_float);
+		return group_id_gen.size()-1;
+		
 	}
 	
 	public void readCoveringContourFromFile() throws ClassNotFoundException {
@@ -1084,12 +1124,14 @@ public OptSB(){}
 				System.out.println("--------------------------------------------------------------------------------------");
 				
 			}
+			 
 			
 			for (short k = 1; k <= ContourLocationsMap.size(); k++) {
 				Iterator iter = ContourLocationsMap.get(k).iterator();
 				while (iter.hasNext()) {
 					location objContourPt = (location) iter.next();
-					point_generic p = new point_generic(objContourPt.dim_values, objContourPt.get_plan_no(), objContourPt.get_cost(), remainingDim, predicateOrderMap.get(objContourPt.get_plan_no()));
+					point_generic p = new point_generic(objContourPt.dim_values, objContourPt.get_plan_no(), objContourPt.get_cost(), remainingDim, predicateOrderMap.get((int)objContourPt.get_plan_no()));
+					p.group_id = getGroup_id(objContourPt.dim_values);
 					if(!ContourPointsMap.containsKey((int)k)){
 						ArrayList<point_generic> al = new ArrayList<point_generic>();
 						al.add(p);
@@ -1228,8 +1270,8 @@ public OptSB(){}
 				max_cost = p.get_cost();
 			if(p.get_cost()<min_cost){
 				min_cost = p.get_cost();
-				for(int d=0;d<dimension;d++)
-					min_cost_index[d] = p.get_dimension(d);
+//				for(int d=0;d<dimension;d++)
+//					min_cost_index[d] = p.get_dimension(d);
 			}
 
 			assert(min_cost<=max_cost) : funName+"min cost is less than or equal to max. cost in the contour";
@@ -2137,7 +2179,7 @@ public OptSB(){}
 		int ld;
 		int [] min_cost_index = new int[dimension];
 
-		double [] sel_max = new double[dimension];
+		float [] sel_max = new float[dimension];
 		//		double min_fpc_cost = Double.MAX_VALUE;
 		//		int min_fpc_plan = Integer.MAX_VALUE;
 		//		int min_fpc_dim =Integer.MAX_VALUE;
@@ -2328,6 +2370,7 @@ public OptSB(){}
 						min_block_cost = this.maxPoints[j].get_cost();
 					}
 					else{
+						assert(false) : "should not come here: p.badguy()";
 						min_block_cost = this.maxPoints[j].getfpc_cost();
 					} 
 				}
@@ -2483,6 +2526,8 @@ public OptSB(){}
 		double c_min = getOptimalCost(0);
 		//&& (Math.pow(2, contour_no-1)*c_min <= q_a_cost)
 		if(currentContourPoints  ==0) {
+			
+			assert(false) : "cannot expect to here: currentContourPoints size is Zero";
 			if((Math.pow(2, contour_no)*c_min >= q_a_cost)){
 				int [] arr = new int[dimension];	
 				//update the learnt dimensions selectivity
@@ -2585,6 +2630,7 @@ public OptSB(){}
 			}
 			else
 			{
+				assert(false) : "should not come here: p.badguy()";
 				assert(plans_list[p.get_plan_no()].getcategory(remainingDim)!=key):"Error in assignment of good guy!";
 				fpc_plan = p.getfpc_plan();
 				//assert(fpc_plan != -1): "bad guy doesn't have a fpc plan!!";
@@ -2612,7 +2658,7 @@ public OptSB(){}
 				//		if(sel_max[d] != (double)-1){  //TODO is type casting Okay?: Ans: It is fine
 
 
-				double sel = 0;
+				float sel = 0;
 				//		point_generic p = points_max.get(new Integer(d));
 				//sel = Simulated_Spilling(max_x_plan, cg_obj, 0, cur_val);
 
@@ -2621,13 +2667,14 @@ public OptSB(){}
 				 * 
 				 */
 				if(p.get_goodguy()){
-					//if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getopt_plan()))))
 					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.get_plan_no()))))
+					//if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.get_plan_no()))))
 						
 						continue;
 				}
 				else
 				{
+					assert(false) : "should not come here: p.badguy()";
 					if(executions.contains(new Pair(new Integer(learning_dim),new Integer(p.getfpc_plan()))) && p.getfpc_plan()!=-2 )
 						continue;
 				}
@@ -2635,18 +2682,20 @@ public OptSB(){}
 				writer.println("current contour points is "+currentContourPoints);
 				//System.out.println("current contour points is "+currentContourPoints);
 				
+				assert(tolerance < 1.000001): "tolerance is not less than or equal to 1.0";
+				
 				double temp_learning_cost = learning_cost;
-				sel = getLearntSelectivity(writer,learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance), p, contour_no, loop);
+				sel = getLearntSelectivity(writer,learning_dim,p.get_cost(), p, contour_no, loop);
 		//		sel = getLearntSelectivity(learning_dim,(Math.pow(2, contour_no-1)*getOptimalCost(0)), p, contour_no);
 				//					if(sel_max[d]<=sel)
 				d= learning_dim;
 				
-				if(selectivity[p.get_dimension(learning_dim)]>=actual_sel[learning_dim] && 
-						q_a_cost <= (Math.pow(2, contour_no-1)*getOptimalCost(0)*tolerance)){
+				if(p.dim_sel_values[learning_dim]>=actual_sel[learning_dim] && 
+						q_a_cost <= p.get_cost()){
 					sel = actual_sel[learning_dim];
-					temp_learning_cost += (Math.pow(2, contour_no-1)*getOptimalCost(0))*tolerance;
-					writer.println("The cost of learning this dimension is revised to "+(Math.pow(2, contour_no-1)*getOptimalCost(0))*tolerance)
-;;					if(learning_cost > temp_learning_cost){
+					temp_learning_cost += p.get_cost();
+					writer.println("The cost of learning this dimension is revised to "+p.get_cost());;				
+					if(learning_cost > temp_learning_cost){
 						learning_cost = temp_learning_cost;
 					}
 				}
@@ -2671,8 +2720,10 @@ public OptSB(){}
 				//WRONG: TODO: change this to p.getfpc_plan
 				if(p.get_goodguy())
 					executions.add(new Pair(new Integer(d),new Integer(p.get_plan_no())));
-				else
+				else{
+					assert(false) : "should not come here: p.badguy()";
 					executions.add(new Pair(new Integer(d),new Integer(p.getfpc_plan())));
+				}
 
 
 				/*
@@ -2682,14 +2733,6 @@ public OptSB(){}
 				if(already_visited[d]==true)
 					no_repeat_executions++;
 				already_visited[d] = true;
-
-				//					File file = new File(cardinalityPath+"spill_cost");
-				//					FileReader fr = new FileReader(file);
-				//					BufferedReader br = new BufferedReader(fr);
-				//					learning_cost += Double.parseDouble(br.readLine());
-				//					System.out.println("Cost of the spilled execution is "+learning_cost);
-				//					br.close();
-				//					fr.close();
 
 
 				if(sel_max[d]>=actual_sel[d]){
@@ -2701,27 +2744,29 @@ public OptSB(){}
 						if(print_flag)
 						{
 							writer.print("\n Plan "+p.get_plan_no()+" executed at ");
-							for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
+							for(int m=0;m<dimension;m++) writer.print(p.dim_sel_values[m]+",");
 							writer.println(" and learnt "+d+" dimension completely");
 						}
 					}
 					else
 					{
+						assert(false) : "should not come here: p.badguy()";
 						if(print_flag)
 						{
 							//	System.out.println("--------------FPC CASE-------------");
 							//	System.out.println("Point p");
 							writer.print("\n FPC Plan "+p.getfpc_plan()+" with fpc_percent_err= "+p.getpercent_err()+" executed at ");
-							for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
+							for(int m=0;m<dimension;m++) writer.print(p.dim_sel_values[m]+",");
 							writer.println(" and learnt "+d+" dimension completely");
 						}
 					}
 
-					minIndex[d] = maxIndex[d] = findNearestSelectivity(actual_sel[d]);
+					minIndex[d] = maxIndex[d] = actual_sel[d];
 					remainingDim.remove(remainingDim.indexOf(d));
 					assert(!remainingDim.contains(d)) : funName+ " even after removing the dimension the dimension remains in remaining_dimension";
 					remove_from_partition(d);
 					test_if_dimension_in_partition(d);
+					remove_points_covering_contour(d, actual_sel[d], contour_no);
 					removeDimensionFromContourPoints(d);
 					return;
 				}
@@ -2731,16 +2776,17 @@ public OptSB(){}
 					if(print_flag)
 					{
 						writer.print("\n Plan "+p.get_plan_no()+" executed at ");
-						for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
+						for(int m=0;m<dimension;m++) writer.print(p.dim_sel_values[m]+",");
 						writer.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
 					}
 				}
 				else
 				{
+					assert(false) : "should not come here: p.badguy()";
 					if(print_flag)
 					{
 						writer.print("\n FPCPlan "+p.getfpc_plan()+" executed at ");
-						for(int m=0;m<dimension;m++) writer.print(p.get_dimension(m)+",");
+						for(int m=0;m<dimension;m++) writer.print(p.dim_sel_values[m]+",");
 						writer.println(" and learnt "+sel_max[d]+" selectivity for "+d+"dimension");
 					}
 				}
@@ -2761,13 +2807,14 @@ public OptSB(){}
 
 		//to avoid the inter contour pruning		
 		for(d=0;d<dimension;d++){
-			if(remainingDim.contains(d) &&  sel_max[d]!=(double)-1 && findNearestSelectivity(sel_max[d])<findNearestSelectivity(actual_sel[d]))
+			if(remainingDim.contains(d) &&  sel_max[d]!=(double)-1 && sel_max[d]<findNearestSelectivity(actual_sel[d]))
 				if(sel_max[d]>minIndex[d])
 					minIndex[d] = sel_max[d];
 		}
 
 	}
 
+	
 	public double getBestSpillingPlan(point_generic p, int dim_index) {
 
 		String funName = "getBestSpillingPlan";
@@ -3139,12 +3186,118 @@ public OptSB(){}
 		String funName = "removeDimensionFromContourPoints";
 		//TODO should we have to check for empty contours and points? 
 		for(int c=1;c<=ContourPointsMap.size();c++){
+			//ArrayList<Integer> removable_points = new ArrayList<Integer>();
 			for(point_generic p: ContourPointsMap.get(c)){
 				p.remove_dimension(d);
+				//add the index of the points to be removed
+				//removable_points.add(ContourPointsMap.get(c).indexOf(p));
 			}
 		}
 
 	}
+
+	
+	public void remove_points_covering_contour(int learnt_dim, float sel, int contour_no){
+		
+		int removable_pnt_cnt = 0, original_pnt_cnt = 0, current_cnt =0;
+
+		
+		for(int cnt  =1; cnt <= ContourPointsMap.size(); cnt++){
+			original_pnt_cnt += ContourPointsMap.get(cnt).size();
+		}
+		
+		if(learnt_dim < dimension-2){
+			
+			float var = minimum_selectivity;
+			while(true) {
+				if(var >= sel) {
+					break;
+				}
+				var = roundToDouble(var * beta);
+			}
+			
+			// pruning the contours from current contour since there is no point pruning the 
+			//lower contours
+			for(int c=contour_no;c<=ContourPointsMap.size();c++){
+				ArrayList<Integer> removable_points = new ArrayList<Integer>();
+				for(point_generic p: ContourPointsMap.get(c)){
+					
+					if(p.dim_sel_values[learnt_dim] >= sel && p.dim_sel_values[learnt_dim] <= beta*sel)
+						assert (p.dim_sel_values[learnt_dim] <= 1.2*var) : " covering set does not seem correct"; //retained the point 
+					else	{
+						//add the index of the points to be removed
+						removable_points.add(ContourPointsMap.get(c).indexOf(p));
+						
+					}
+				}
+				
+				for(Integer idx: removable_points){
+					ContourPointsMap.get(c).remove(idx);
+				}
+				removable_pnt_cnt += removable_points.size();
+				current_cnt += ContourPointsMap.get(c).size();
+			}	
+			
+		}
+		
+		else{
+			
+			
+			
+			// pruning the contours from current contour since there is no point pruning the 
+			//lower contours
+			for(int c= contour_no;c<=ContourPointsMap.size();c++){
+				//for a fixed group-id (determined by the first D-2 dimensions) we have to retain the
+				// point just above the selectivity value 'sel' and discard the rest
+				
+				// the following structure maps the group id to selectivity wherein the least selectivity
+				// above 'sel' is maintained.
+				HashMap<Integer,point_generic> group_sel =  new HashMap<Integer,point_generic>();
+				ArrayList<Integer> removable_points = new ArrayList<Integer>();
+				for(point_generic p: ContourPointsMap.get(c)){
+					if(p.dim_sel_values[learnt_dim] >= sel ){
+						Integer key = new Integer(p.group_id);
+						if(!group_sel.containsKey(key))
+							group_sel.put(key, p);
+						else if(group_sel.get(key).dim_sel_values[learnt_dim] > p.dim_sel_values[learnt_dim]){
+							removable_points.add(ContourPointsMap.get(c).indexOf(group_sel.get(key)));
+							group_sel.remove(key);
+							group_sel.put(key, p);
+						}
+						else if(group_sel.get(key).dim_sel_values[learnt_dim] < p.dim_sel_values[learnt_dim]){
+							removable_points.add(ContourPointsMap.get(c).indexOf(p));
+						}
+						
+					}
+					else{	
+						//add the index of the points to be removed
+						removable_points.add(ContourPointsMap.get(c).indexOf(p));
+					}
+				}
+				
+				for(Integer idx: removable_points){
+					ContourPointsMap.get(c).remove(idx);
+				}
+				
+				removable_pnt_cnt += removable_points.size();
+				current_cnt += ContourPointsMap.get(c).size();
+			}
+			 
+		}
+		
+		assert(original_pnt_cnt == (removable_pnt_cnt + current_cnt)): "removed point cnt not matching with actually removed";
+		
+	}
+
+	public  float roundToDouble(float d) {
+		
+			
+        BigDecimal bd = new BigDecimal(Float.toString(d));
+        bd = bd.setScale(decimalPrecision, BigDecimal.ROUND_HALF_UP);
+        float f = bd.floatValue(); 
+        return f;
+    }
+	
 
 	void make_local_partition(List<List<Integer>> part){
 		int n = this.remainingDim.size();
@@ -3267,7 +3420,7 @@ public OptSB(){}
 		return point_selec;
 	}
 
-	private int[] convertSelectivitytoIndex (double[] point_sel) {
+	private int[] convertSelectivitytoIndex (float[] point_sel) {
 
 		String funName = "convertSelectivitytoIndex";
 
@@ -3280,7 +3433,7 @@ public OptSB(){}
 
 
 
-	public double getLearntSelectivity(PrintWriter writer, int dim, double cost,point_generic p, int contour_no, int loop) {
+	public float getLearntSelectivity(PrintWriter writer, int dim, double cost,point_generic p, int contour_no, int loop) {
 
 		int loc;
 		memo m;
@@ -3295,25 +3448,19 @@ public OptSB(){}
 			return 0;   //TODO dont do spilling in the 1D case, until we fix the INL case
 		}
 		double temp_cost;
-		int p_loc;
+		
 		boolean minus_flag=false;
 		double dir_cost;
 		int dir_sel_index;
-		p_loc = getIndex(p.get_point_Index(),resolution);
-		if(p.get_goodguy() || !FPC_for_Alignment)
-		{
-			//If it is a good guy
-			plan = p.get_plan_no();
-			q_index = p.get_point_Index();
-		}
-		else if(FPC_for_Alignment)
-		{	
-			plan = p.getfpc_plan();
-			loc = plans_list[plan].getPoints().get(0);
-			q_index=getCoordinates(dimension, resolution, loc);
-		}
+		
+		plan = p.get_plan_no();
+		for(int i=0; i < dimension; i++)
+		q_index = p.get_point_Index();
+		
+		
 
-		double multiplier = 1,selLearnt = Double.MIN_VALUE,execCost=Double.MIN_VALUE, prevExecCost = Double.MIN_VALUE;
+		float selLearnt = Float.MIN_VALUE;
+		double multiplier = 1,execCost=Double.MIN_VALUE, prevExecCost = Double.MIN_VALUE;
 		boolean sel_completely_learnt = false;
 		int [] actual_sel_index = convertSelectivitytoIndex(actual_sel);
 		//Connection conn = null;
@@ -3337,16 +3484,16 @@ public OptSB(){}
 			 *or learn the actual selectivity. Note the change. 
 			 */
 			//double[] temp_act_sel = new double[dimension];
-			int [] temp_actual_index = new int[dimension];
+            float [] temp_actual = new float[dimension];
 			for(int d=0;d<dimension;d++){
 				if(dim==d){
 					//				if(selectivity[p.get_dimension(d)] >= actual_sel[d])
 					//					temp_act_sel[d] = actual_sel[d]; //This line posed a problem, and hence commenting it. 
 					//				else
-					temp_actual_index[d] = p.get_dimension(d);
+					temp_actual[d] = p.dim_sel_values[d];
 				}
 				else
-					temp_actual_index[d] = actual_sel_index[d];
+					temp_actual[d] = actual_sel[d];
 			}
 
 
@@ -3357,13 +3504,14 @@ public OptSB(){}
 			if(p.get_goodguy())
 				temp_cost = p.get_cost();
 			else{
+				assert(false) : "cannot come here : p is a bad guy()";
 				//temp_cost = AllPlanCosts[plan][p_loc];
 				temp_cost = p.getfpc_cost();
 				//assert(temp_cost == p.getfpc_cost()) : funName+ "temp_cost wrt fpc is not set correctly";
 			}
 			
-			if(temp_cost < 2*cost && (temp_cost > cost) )
-				budget = temp_cost;
+			
+			budget = temp_cost;
 
 			//			if((p.get_cost() <2*cost) && (p.get_cost()>cost))
 			//				budget = p.get_cost();
@@ -3412,58 +3560,17 @@ public OptSB(){}
 			//				return selLearnt;
 			//			}
 
-			while((temp_actual_index[dim] <= actual_sel_index[dim]) || (execCost<=budget))
+			while((temp_actual[dim] <= actual_sel[dim]) || (execCost<=budget))
 			{	
 				minus_flag = false;
-				//stmt.execute("set spill_node = 999");
 
-//				stmt.execute("set work_mem = '100MB'");
-//				//NOTE,Settings: 4GB for DS and 1GB for H
-//				if(database_conn==0){
-//					stmt.execute("set effective_cache_size='1GB'");
-//				}
-//				else{
-//					stmt.execute("set effective_cache_size='4GB'");
-//				}
-//
-//				//NOTE,Settings: need not set the page cost's
-//				stmt.execute("set  seq_page_cost = 1");
-//				stmt.execute("set  random_page_cost=4");
-//				stmt.execute("set cpu_operator_cost=0.0025");
-//				stmt.execute("set cpu_index_tuple_cost=0.005");
-//				stmt.execute("set cpu_tuple_cost=0.01");	
-
-//				stmt.execute("set full_robustness = on");
-//				stmt.execute("set oneFPCfull_robustness = on");
-//				if(FPC_for_Alignment)
-//					stmt.execute("set spill_optimization = off");
-				 if (spill_opt_for_Alignment){
-					stmt.execute("set spill_optimization = on");
-					String selectedEPP=null, nonSelectedEPP=null;
-					for(int i=0;i<varyingJoins.length();i+=2){
-						if(i/2 == dim){
-							selectedEPP = new String(varyingJoins.substring(i, i+2));
-						}
-						else if(remainingDim.contains(i/2)){
-							if(nonSelectedEPP==null)
-								nonSelectedEPP = new String(varyingJoins.substring(i, i+2));
-							else{
-								String str = new String(varyingJoins.substring(i, i+2));
-								nonSelectedEPP = nonSelectedEPP.concat(str);
-							}					
-						}
-					}
-					stmt.execute("set selectedEPP = "+selectedEPP);
-					stmt.execute("set nonSelectedEPP = "+nonSelectedEPP);
-					
-				}
 				String exp_query = new String("Selectivity ( "+predicates+ ") (");
 				for(int i=0;i<dimension;i++){
 					if(i !=dimension-1){
-						exp_query = exp_query + (selectivity[temp_actual_index[i]])+ ", ";
+						exp_query = exp_query + (temp_actual[i])+ ", ";
 					}
 					else{
-						exp_query = exp_query + (selectivity[temp_actual_index[i]]) + " )";
+						exp_query = exp_query + (temp_actual[i]) + " )";
 					}
 				}
 				//this is for selectivity injection plus fpc
@@ -3472,7 +3579,7 @@ public OptSB(){}
 				//this is for pure fpc
 				//exp_query = select_query;
 				
-				exp_query = "explain " + exp_query + " fpc "+apktPath+"planStructureXML/"+plan+".xml";
+				exp_query = "explain " + exp_query + " fpc "+apktPath+"onlinePB/planStructureXML/"+plan+".xml";
 				ResultSet rs = stmt.executeQuery(exp_query);
 				//   if(spill_node == 543){
 				// 	System.out.println("We are at node 23");
@@ -3522,12 +3629,10 @@ public OptSB(){}
 						double rows = hash_rows;
 						double remainingBudget = budget -execCost; 
 						double  budget_needed=Double.MIN_VALUE;
-						if(remainingBudget<=0)
+						if(remainingBudget< 0)
 						{
-							temp_actual_index[dim] = temp_actual_index[dim] -1;
-							if(temp_actual_index[dim] < 0){
-								temp_actual_index[dim] = 0;
-							}
+							temp_actual[dim] = findNearestPrevSelectivity(temp_actual[dim]);
+							
 							//m.add(temp_actual_index[dim], cost);
 							break;
 						}
@@ -3554,22 +3659,22 @@ public OptSB(){}
 						 * temp_act_sel[dim] contains the selectivity that would have been learnt
 						 * with the remaining budget
 						 */
-						double temp_sel_learnt = Double.MIN_VALUE;
+						float temp_sel_learnt = Float.MIN_VALUE;
 						//			temp_sel_learnt = selectivity[p.get_dimension(dim)] + (selectivity[k]- selectivity[p.get_dimension(dim)])*(remainingBudget/budget_needed);
 
-						temp_sel_learnt = selectivity[p.get_dimension(dim)]*(1+(remainingBudget/(rows*0.01)));
+						temp_sel_learnt = (float)(p.dim_sel_values[dim]*(1+(remainingBudget/(rows*0.01))));
 
-						assert(temp_sel_learnt > selectivity[p.get_dimension(dim)]) : funName+" there is no increment in learnt selectivity even with increase in budget";
-						temp_actual_index[dim] = findNearestPoint(temp_sel_learnt);
-						if(selectivity[temp_actual_index[dim]]> temp_sel_learnt){					
-							temp_actual_index[dim]--;
-							assert(temp_actual_index[dim]>=0) : funName+" index going below 0";
+						assert(temp_sel_learnt > p.dim_sel_values[dim]) : funName+" there is no increment in learnt selectivity even with increase in budget";
+						temp_actual[dim] = findNearestSelectivity(temp_sel_learnt);
+						if(temp_actual[dim]> temp_sel_learnt){					
+							temp_actual[dim] = findNearestPrevSelectivity(temp_actual[dim]);
+							assert(temp_actual[dim]>=0) : funName+" index going below 0";
 						}
-						selLearnt = selectivity[temp_actual_index[dim]];
+						selLearnt = temp_actual[dim];
 						
-						double extra_budget_consumed = (rows*0.01)*(selectivity[temp_actual_index[dim]]/selectivity[p.get_dimension(dim)] -1);
+						double extra_budget_consumed = (rows*0.01)*(temp_actual[dim]/p.dim_sel_values[dim] -1);
 						prevExecCost = execCost + extra_budget_consumed;
-						if(temp_actual_index[dim] >= actual_sel_index[dim])
+						if(temp_actual[dim] >= actual_sel_index[dim])
 						{
 							sel_completely_learnt=true;
 						}
@@ -3609,21 +3714,21 @@ public OptSB(){}
 				
 
 				prevExecCost = execCost;
-				if(temp_actual_index[dim] == resolution-1)
+				if(temp_actual[dim] == resolution-1)
 				{
 					sel_completely_learnt=true;
 					break;
 				}
 				//adding the code for oneshot learning of predicate
 
-				temp_actual_index[dim] = temp_actual_index[dim]+1;
+				temp_actual[dim] = selectivity[findNearestPoint(temp_actual[dim])+1];
 
 
 
-				assert(temp_actual_index[dim]<resolution) : funName+" index exceeding resolution";
+				assert(temp_actual[dim]< 1.0f) : funName+" index exceeding resolution";
 
 			
-			if(prevExecCost!=Double.MIN_VALUE && temp_actual_index[dim] > actual_sel_index[dim]){
+			if(prevExecCost!=Double.MIN_VALUE && temp_actual[dim] >= actual_sel[dim]){
 
 				sel_completely_learnt = true;
 				//			assert(prevExecCost!=Double.MIN_VALUE):"PrevExec Cost is still the default value";
@@ -3636,9 +3741,9 @@ public OptSB(){}
 			if(sel_completely_learnt){			
 				learning_cost += prevExecCost;
 				if(minus_flag == true)
-					selLearnt = selectivity[temp_actual_index[dim]-1];
+					selLearnt = findNearestPrevSelectivity(temp_actual[dim]);
 				else
-					selLearnt = selectivity[temp_actual_index[dim]];
+					selLearnt = temp_actual[dim];
 				//				if(temp_actual_index[dim]!=actual_sel_index[dim])
 				//				{
 				//				System.out.println("dim= "+dim+", temp= "+temp_actual_index[dim]+", Actual= "+actual_sel_index[dim]);
@@ -3657,17 +3762,14 @@ public OptSB(){}
 				if(prevExecCost==Double.MIN_VALUE){
 					learning_cost += cost; //just adding the cost of the contour in the while loop zips through in the starting iteration itself
 					prevExecCost = cost; //for the sake of printing
-					selLearnt = selectivity[p.get_dimension(dim)];
+					selLearnt = p.dim_sel_values[dim];
 					if(hashjoinFlag){
-						if(temp_actual_index[dim]==-1)
-							System.out.println("the loop is "+loop);
-						selLearnt = selectivity[temp_actual_index[dim]];
+						selLearnt = temp_actual[dim];
 					}
-					int idx = temp_actual_index[dim];
-					if(!hashjoinFlag && idx>0){	
-						idx --;
-						assert(idx>=0): funName+" idx going below 0";
-						selLearnt = selectivity[idx];
+			
+					if(!hashjoinFlag){	
+			
+						selLearnt = findNearestPrevSelectivity(temp_actual[dim]);
 					}
 //					if(!hashjoinFlag)
 //						m.add(idx, cost);
@@ -3686,11 +3788,9 @@ public OptSB(){}
 						writer.println("hashjoinFlag= "+hashjoinFlag);
 						writer.println("Cost of the spilled execution (not sucessful) is "+prevExecCost);
 					}
-					int idx = temp_actual_index[dim];
-					if(!hashjoinFlag && idx>0){	
-						idx --;
-						assert(idx>=0): funName+" idx going below 0";
-						selLearnt = selectivity[idx];
+					
+					if(!hashjoinFlag){	
+						selLearnt = findNearestPrevSelectivity(temp_actual[dim]);
 					}
 				}
 				execCost = prevExecCost;
@@ -3830,8 +3930,8 @@ public OptSB(){}
 		String funName = "initialize";
 		//updating the feasible region
 		for(int i=0;i<dimension;i++){
-			minIndex[i] =  findNearestSelectivity(0);
-			maxIndex[i] = findNearestSelectivity(0.99);
+			minIndex[i] =  findNearestSelectivity(0f);
+			maxIndex[i] = findNearestSelectivity(0.99f);
 		}
 		//updating the remaining dimensions data structure
 		remainingDim.clear();
@@ -3873,7 +3973,7 @@ public OptSB(){}
 		//updating the actual selectivities for each of the dimensions
 		int index[] = getCoordinates(dimension, resolution, location);
 
-		actual_sel = new double[dimension];
+		actual_sel = new float[dimension];
 		if(print_flag)
 		{
 			writer.print("\nactual_sel=[");
@@ -4084,16 +4184,8 @@ public OptSB(){}
 		return false;
 	}
 
-
-
-
-
-
-
-
-
 	// Return the index near to the selecitivity=mid;
-	public int findNearestPoint(double mid)
+	public int findNearestPoint(float mid)
 	{
 		int i;
 		int return_index = 0;
@@ -4103,7 +4195,7 @@ public OptSB(){}
 		for(i=0;i<resolution;i++)
 		{
 			diff = mid - selectivity[i];
-			if(diff <= 0)
+			if(diff <= 0.00000001)
 			{
 				return_index = i;
 				break;
@@ -4121,25 +4213,48 @@ public OptSB(){}
 
 
 	// Return the selectivity just greater than selecitivity=mid;
-	public double findNearestSelectivity(double mid)
+	public float findNearestPrevSelectivity(float mid)
 	{
 		int i;
 		int return_index = 0;
-		double diff;
+		float diff;
 		if(mid >= selectivity[resolution-1])
 			return selectivity[resolution-1];
 		for(i=0;i<resolution;i++)
 		{
 			diff = mid - selectivity[i];
-			if(diff <= 0)
+			if(diff <= 0.00000001)
 			{
 				return_index = i;
 				break;
 			}
 		}
 		//System.out.println("return_index="+return_index);
+		if(return_index > 0)
+			return_index --;
 		return selectivity[return_index];
 	}
+	
+	// Return the selectivity just greater than selecitivity=mid;
+		public float findNearestSelectivity(float mid)
+		{
+			int i;
+			int return_index = 0;
+			float diff;
+			if(mid >= selectivity[resolution-1])
+				return selectivity[resolution-1];
+			for(i=0;i<resolution;i++)
+			{
+				diff = mid - selectivity[i];
+				if(diff <= 0.00000001)
+				{
+					return_index = i;
+					break;
+				}
+			}
+
+			return selectivity[return_index];
+		}
 
 
 	void readpkt(ADiagramPacket gdp, boolean allPlanCost) throws IOException
@@ -4212,8 +4327,8 @@ public OptSB(){}
 
 
 
-		minIndex = new double[dimension];
-		maxIndex = new double[dimension];
+		minIndex = new float[dimension];
+		maxIndex = new float[dimension];
 
 		// ------------------------------------- Read pcst files
 		nPlans = totalPlans;
@@ -4421,22 +4536,22 @@ public OptSB(){}
 		String funName = "loadSelectivity: ";
 		System.out.println(funName+" Resolution = "+resolution);
 		double sel;
-		this.selectivity = new double [resolution];
+		this.selectivity = new float [resolution];
 
 		if(resolution == 10){
 			if(sel_distribution == 0){
 
 				//This is for TPCH queries 
-				selectivity[0] = 0.0005;	selectivity[1] = 0.005;selectivity[2] = 0.01;	selectivity[3] = 0.02;
-				selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.20;	selectivity[7] = 0.40;
-				selectivity[8] = 0.60;		selectivity[9] = 0.95;                                   // oct - 2012
+				selectivity[0] = 0.0005f;	selectivity[1] = 0.005f;selectivity[2] = 0.01f;	selectivity[3] = 0.02f;
+				selectivity[4] = 0.05f;		selectivity[5] = 0.10f;	selectivity[6] = 0.20f;	selectivity[7] = 0.40f;
+				selectivity[8] = 0.60f;		selectivity[9] = 0.95f;                                   // oct - 2012
 			}
 			else if( sel_distribution ==1){
 
 				//This is for TPCDS queries
-				selectivity[0] = 0.0001;	selectivity[1] = 0.0005;selectivity[2] = 0.005;	selectivity[3] = 0.02;
-				selectivity[4] = 0.05;		selectivity[5] = 0.10;	selectivity[6] = 0.15;	selectivity[7] = 0.25;
-				selectivity[8] = 0.50;		selectivity[9] = 0.99;                                // dec - 2012
+				selectivity[0] = 0.0001f;	selectivity[1] = 0.0005f;selectivity[2] = 0.005f;	selectivity[3] = 0.02f;
+				selectivity[4] = 0.05f;		selectivity[5] = 0.10f;	selectivity[6] = 0.15f;	selectivity[7] = 0.25f;
+				selectivity[8] = 0.50f;		selectivity[9] = 0.99f;                                // dec - 2012
 			}
 			else
 				assert (false) :funName+ "ERROR: should not come here";
@@ -4446,19 +4561,19 @@ public OptSB(){}
 
 			if(sel_distribution == 0){
 
-				selectivity[0] = 0.0005;   selectivity[1] = 0.0008;		selectivity[2] = 0.001;	selectivity[3] = 0.002;
-				selectivity[4] = 0.004;   selectivity[5] = 0.006;		selectivity[6] = 0.008;	selectivity[7] = 0.01;
-				selectivity[8] = 0.03;	selectivity[9] = 0.05;	selectivity[10] = 0.08;	selectivity[11] = 0.10;
-				selectivity[12] = 0.200;	selectivity[13] = 0.300;	selectivity[14] = 0.400;	selectivity[15] = 0.500;
-				selectivity[16] = 0.600;	selectivity[17] = 0.700;	selectivity[18] = 0.800;	selectivity[19] = 0.99;
+				selectivity[0] = 0.0005f;   selectivity[1] = 0.0008f;		selectivity[2] = 0.001f;	selectivity[3] = 0.002f;
+				selectivity[4] = 0.004f;   selectivity[5] = 0.006f;		selectivity[6] = 0.008f;	selectivity[7] = 0.01f;
+				selectivity[8] = 0.03f;	selectivity[9] = 0.05f;	selectivity[10] = 0.08f;	selectivity[11] = 0.10f;
+				selectivity[12] = 0.200f;	selectivity[13] = 0.300f;	selectivity[14] = 0.400f;	selectivity[15] = 0.500f;
+				selectivity[16] = 0.600f;	selectivity[17] = 0.700f;	selectivity[18] = 0.800f;	selectivity[19] = 0.99f;
 			}
 			else if(sel_distribution == 1){
 
-				selectivity[0] = 0.0001;   selectivity[1] = 0.0003;		selectivity[2] = 0.0005;	selectivity[3] = 0.0007;
-				selectivity[4] = 0.001;   selectivity[5] = 0.003;		selectivity[6] = 0.005;	selectivity[7] = 0.007;
-				selectivity[8] = 0.01;	selectivity[9] = 0.03;	selectivity[10] = 0.05;	selectivity[11] = 0.07;
-				selectivity[12] = 0.1;	selectivity[13] = 0.15;	selectivity[14] = 0.25;	selectivity[15] = 0.4;
-				selectivity[16] = 0.50;	selectivity[17] = 0.60;	selectivity[18] = 0.80;	selectivity[19] = 0.99;
+				selectivity[0] = 0.0001f;   selectivity[1] = 0.0003f;		selectivity[2] = 0.0005f;	selectivity[3] = 0.0007f;
+				selectivity[4] = 0.001f;   selectivity[5] = 0.003f;		selectivity[6] = 0.005f;	selectivity[7] = 0.007f;
+				selectivity[8] = 0.01f;	selectivity[9] = 0.03f;	selectivity[10] = 0.05f;	selectivity[11] = 0.07f;
+				selectivity[12] = 0.1f;	selectivity[13] = 0.15f;	selectivity[14] = 0.25f;	selectivity[15] = 0.4f;
+				selectivity[16] = 0.50f;	selectivity[17] = 0.60f;	selectivity[18] = 0.80f;	selectivity[19] = 0.99f;
 			}
 			else
 				assert (false) :funName+ "ERROR: should not come here";
@@ -4470,25 +4585,25 @@ public OptSB(){}
 
 			if(sel_distribution == 0){
 				//tpch
-				selectivity[0] = 0.0005;  selectivity[1] = 0.0008;	selectivity[2] = 0.001;	selectivity[3] = 0.002;
-				selectivity[4] = 0.004;   selectivity[5] = 0.006;	selectivity[6] = 0.008;	selectivity[7] = 0.01;
-				selectivity[8] = 0.03;	selectivity[9] = 0.05;
-				selectivity[10] = 0.07;	selectivity[11] = 0.1;	selectivity[12] = 0.15;	selectivity[13] = 0.20;
-				selectivity[14] = 0.25;	selectivity[15] = 0.30;	selectivity[16] = 0.35;	selectivity[17] = 0.40;
-				selectivity[18] = 0.45;	selectivity[19] = 0.50;	selectivity[20] = 0.55;	selectivity[21] = 0.60;
-				selectivity[22] = 0.65;	selectivity[23] = 0.70;	selectivity[24] = 0.75;	selectivity[25] = 0.80;
-				selectivity[26] = 0.85;	selectivity[27] = 0.90;	selectivity[28] = 0.95;	selectivity[29] = 0.99;
+				selectivity[0] = 0.0005f;  selectivity[1] = 0.0008f;	selectivity[2] = 0.001f;	selectivity[3] = 0.002f;
+				selectivity[4] = 0.004f;   selectivity[5] = 0.006f;	selectivity[6] = 0.008f;	selectivity[7] = 0.01f;
+				selectivity[8] = 0.03f;	selectivity[9] = 0.05f;
+				selectivity[10] = 0.07f;	selectivity[11] = 0.1f;	selectivity[12] = 0.15f;	selectivity[13] = 0.20f;
+				selectivity[14] = 0.25f;	selectivity[15] = 0.30f;	selectivity[16] = 0.35f;	selectivity[17] = 0.40f;
+				selectivity[18] = 0.45f;	selectivity[19] = 0.50f;	selectivity[20] = 0.55f;	selectivity[21] = 0.60f;
+				selectivity[22] = 0.65f;	selectivity[23] = 0.70f;	selectivity[24] = 0.75f;	selectivity[25] = 0.80f;
+				selectivity[26] = 0.85f;	selectivity[27] = 0.90f;	selectivity[28] = 0.95f;	selectivity[29] = 0.99f;
 			}
 
 			else if(sel_distribution == 1){
-				selectivity[0] = 0.0001;  selectivity[1] = 0.0002;	selectivity[2] = 0.0004;	selectivity[3] = 0.0006;
-				selectivity[4] = 0.0008;   selectivity[5] = 0.001;	selectivity[6] = 0.002;	selectivity[7] = 0.003;
-				selectivity[8] = 0.004;	selectivity[9] = 0.006;	selectivity[10] = 0.008;	selectivity[11] = 0.01;
-				selectivity[12] = 0.0200;	selectivity[13] = 0.0400;	selectivity[14] = 0.0600;	selectivity[15] = 0.08;
-				selectivity[16] = 0.1000;	selectivity[17] = 0.1500;	selectivity[18] = 0.2000;	selectivity[19] = 0.2500;
-				selectivity[20] = 0.3000;	selectivity[21] = 0.3500;	selectivity[22] = 0.4000;	selectivity[23] = 0.4500;
-				selectivity[24] = 0.5000;	selectivity[25] = 0.6000;	selectivity[26] = 0.7000;	selectivity[27] = 0.8000;
-				selectivity[28] = 0.9000;	selectivity[29] = 0.9950;
+				selectivity[0] = 0.0001f;  selectivity[1] = 0.0002f;	selectivity[2] = 0.0004f;	selectivity[3] = 0.0006f;
+				selectivity[4] = 0.0008f;   selectivity[5] = 0.001f;	selectivity[6] = 0.002f;	selectivity[7] = 0.003f;
+				selectivity[8] = 0.004f;	selectivity[9] = 0.006f;	selectivity[10] = 0.008f;	selectivity[11] = 0.01f;
+				selectivity[12] = 0.0200f;	selectivity[13] = 0.0400f;	selectivity[14] = 0.0600f;	selectivity[15] = 0.08f;
+				selectivity[16] = 0.1000f;	selectivity[17] = 0.1500f;	selectivity[18] = 0.2000f;	selectivity[19] = 0.2500f;
+				selectivity[20] = 0.3000f;	selectivity[21] = 0.3500f;	selectivity[22] = 0.4000f;	selectivity[23] = 0.4500f;
+				selectivity[24] = 0.5000f;	selectivity[25] = 0.6000f;	selectivity[26] = 0.7000f;	selectivity[27] = 0.8000f;
+				selectivity[28] = 0.9000f;	selectivity[29] = 0.9950f;
 			}
 
 			else
@@ -4544,26 +4659,26 @@ public OptSB(){}
 
 			}
 			else if(sel_distribution == 0){
-				selectivity[0] = 0.005995; 	selectivity[1] = 0.015985; 	selectivity[2] = 0.025975; 	selectivity[3] = 0.035965; 	selectivity[4] = 0.045955; 	
-				selectivity[5] = 0.055945; 	selectivity[6] = 0.065935; 	selectivity[7] = 0.075925; 	selectivity[8] = 0.085915; 	selectivity[9] = 0.095905; 	
-				selectivity[10] = 0.105895; 	selectivity[11] = 0.115885; 	selectivity[12] = 0.125875; 	selectivity[13] = 0.135865; 	selectivity[14] = 0.145855; 	
-				selectivity[15] = 0.155845; 	selectivity[16] = 0.165835; 	selectivity[17] = 0.175825; 	selectivity[18] = 0.185815; 	selectivity[19] = 0.195805; 	
-				selectivity[20] = 0.205795; 	selectivity[21] = 0.215785; 	selectivity[22] = 0.225775; 	selectivity[23] = 0.235765; 	selectivity[24] = 0.245755; 	
-				selectivity[25] = 0.255745; 	selectivity[26] = 0.265735; 	selectivity[27] = 0.275725; 	selectivity[28] = 0.285715; 	selectivity[29] = 0.295705; 	
-				selectivity[30] = 0.305695; 	selectivity[31] = 0.315685; 	selectivity[32] = 0.325675; 	selectivity[33] = 0.335665; 	selectivity[34] = 0.345655; 	
-				selectivity[35] = 0.355645; 	selectivity[36] = 0.365635; 	selectivity[37] = 0.375625; 	selectivity[38] = 0.385615; 	selectivity[39] = 0.395605; 	
-				selectivity[40] = 0.405595; 	selectivity[41] = 0.415585; 	selectivity[42] = 0.425575; 	selectivity[43] = 0.435565; 	selectivity[44] = 0.445555; 	
-				selectivity[45] = 0.455545; 	selectivity[46] = 0.465535; 	selectivity[47] = 0.475525; 	selectivity[48] = 0.485515; 	selectivity[49] = 0.495505; 	
-				selectivity[50] = 0.505495; 	selectivity[51] = 0.515485; 	selectivity[52] = 0.525475; 	selectivity[53] = 0.535465; 	selectivity[54] = 0.545455; 	
-				selectivity[55] = 0.555445; 	selectivity[56] = 0.565435; 	selectivity[57] = 0.575425; 	selectivity[58] = 0.585415; 	selectivity[59] = 0.595405; 	
-				selectivity[60] = 0.605395; 	selectivity[61] = 0.615385; 	selectivity[62] = 0.625375; 	selectivity[63] = 0.635365; 	selectivity[64] = 0.645355; 	
-				selectivity[65] = 0.655345; 	selectivity[66] = 0.665335; 	selectivity[67] = 0.675325; 	selectivity[68] = 0.685315; 	selectivity[69] = 0.695305; 	
-				selectivity[70] = 0.705295; 	selectivity[71] = 0.715285; 	selectivity[72] = 0.725275; 	selectivity[73] = 0.735265; 	selectivity[74] = 0.745255; 	
-				selectivity[75] = 0.755245; 	selectivity[76] = 0.765235; 	selectivity[77] = 0.775225; 	selectivity[78] = 0.785215; 	selectivity[79] = 0.795205; 	
-				selectivity[80] = 0.805195; 	selectivity[81] = 0.815185; 	selectivity[82] = 0.825175; 	selectivity[83] = 0.835165; 	selectivity[84] = 0.845155; 	
-				selectivity[85] = 0.855145; 	selectivity[86] = 0.865135; 	selectivity[87] = 0.875125; 	selectivity[88] = 0.885115; 	selectivity[89] = 0.895105; 	
-				selectivity[90] = 0.905095; 	selectivity[91] = 0.915085; 	selectivity[92] = 0.925075; 	selectivity[93] = 0.935065; 	selectivity[94] = 0.945055; 	
-				selectivity[95] = 0.955045; 	selectivity[96] = 0.965035; 	selectivity[97] = 0.975025; 	selectivity[98] = 0.985015; 	selectivity[99] = 0.995005;
+				selectivity[0] = 0.005995f; 	selectivity[1] = 0.015985f; 	selectivity[2] = 0.025975f; 	selectivity[3] = 0.035965f; 	selectivity[4] = 0.045955f; 	
+				selectivity[5] = 0.055945f; 	selectivity[6] = 0.065935f; 	selectivity[7] = 0.075925f; 	selectivity[8] = 0.085915f; 	selectivity[9] = 0.095905f; 	
+				selectivity[10] = 0.105895f; 	selectivity[11] = 0.115885f; 	selectivity[12] = 0.125875f; 	selectivity[13] = 0.135865f; 	selectivity[14] = 0.145855f; 	
+				selectivity[15] = 0.155845f; 	selectivity[16] = 0.165835f; 	selectivity[17] = 0.175825f; 	selectivity[18] = 0.185815f; 	selectivity[19] = 0.195805f; 	
+				selectivity[20] = 0.205795f; 	selectivity[21] = 0.215785f; 	selectivity[22] = 0.225775f; 	selectivity[23] = 0.235765f; 	selectivity[24] = 0.245755f; 	
+				selectivity[25] = 0.255745f; 	selectivity[26] = 0.265735f; 	selectivity[27] = 0.275725f; 	selectivity[28] = 0.285715f; 	selectivity[29] = 0.295705f; 	
+				selectivity[30] = 0.305695f; 	selectivity[31] = 0.315685f; 	selectivity[32] = 0.325675f; 	selectivity[33] = 0.335665f; 	selectivity[34] = 0.345655f; 	
+				selectivity[35] = 0.355645f; 	selectivity[36] = 0.365635f; 	selectivity[37] = 0.375625f; 	selectivity[38] = 0.385615f; 	selectivity[39] = 0.395605f; 	
+				selectivity[40] = 0.405595f; 	selectivity[41] = 0.415585f; 	selectivity[42] = 0.425575f; 	selectivity[43] = 0.435565f; 	selectivity[44] = 0.445555f; 	
+				selectivity[45] = 0.455545f; 	selectivity[46] = 0.465535f; 	selectivity[47] = 0.475525f; 	selectivity[48] = 0.485515f; 	selectivity[49] = 0.495505f; 	
+				selectivity[50] = 0.505495f; 	selectivity[51] = 0.515485f; 	selectivity[52] = 0.525475f; 	selectivity[53] = 0.535465f; 	selectivity[54] = 0.545455f; 	
+				selectivity[55] = 0.555445f; 	selectivity[56] = 0.565435f; 	selectivity[57] = 0.575425f; 	selectivity[58] = 0.585415f; 	selectivity[59] = 0.595405f; 	
+				selectivity[60] = 0.605395f; 	selectivity[61] = 0.615385f; 	selectivity[62] = 0.625375f; 	selectivity[63] = 0.635365f; 	selectivity[64] = 0.645355f; 	
+				selectivity[65] = 0.655345f; 	selectivity[66] = 0.665335f; 	selectivity[67] = 0.675325f; 	selectivity[68] = 0.685315f; 	selectivity[69] = 0.695305f; 	
+				selectivity[70] = 0.705295f; 	selectivity[71] = 0.715285f; 	selectivity[72] = 0.725275f; 	selectivity[73] = 0.735265f; 	selectivity[74] = 0.745255f; 	
+				selectivity[75] = 0.755245f; 	selectivity[76] = 0.765235f; 	selectivity[77] = 0.775225f; 	selectivity[78] = 0.785215f; 	selectivity[79] = 0.795205f; 	
+				selectivity[80] = 0.805195f; 	selectivity[81] = 0.815185f; 	selectivity[82] = 0.825175f; 	selectivity[83] = 0.835165f; 	selectivity[84] = 0.845155f; 	
+				selectivity[85] = 0.855145f; 	selectivity[86] = 0.865135f; 	selectivity[87] = 0.875125f; 	selectivity[88] = 0.885115f; 	selectivity[89] = 0.895105f; 	
+				selectivity[90] = 0.905095f; 	selectivity[91] = 0.915085f; 	selectivity[92] = 0.925075f; 	selectivity[93] = 0.935065f; 	selectivity[94] = 0.945055f; 	
+				selectivity[95] = 0.955045f; 	selectivity[96] = 0.965035f; 	selectivity[97] = 0.975025f; 	selectivity[98] = 0.985015f; 	selectivity[99] = 0.995005f;
 			}
 
 			else
@@ -4572,206 +4687,206 @@ public OptSB(){}
 		
 		if(resolution == 1000){
 
-			selectivity[0] = 0.00051000; 	selectivity[1] = 0.00150999; 	selectivity[2] = 0.00250998; 	selectivity[3] = 0.00350997; 	selectivity[4] = 0.00450996; 	
-			selectivity[5] = 0.00550995; 	selectivity[6] = 0.00650994; 	selectivity[7] = 0.00750993; 	selectivity[8] = 0.00850992; 	selectivity[9] = 0.00950990; 	
-			selectivity[10] = 0.01050989; 	selectivity[11] = 0.01150988; 	selectivity[12] = 0.01250987; 	selectivity[13] = 0.01350986; 	selectivity[14] = 0.01450985; 	
-			selectivity[15] = 0.01550984; 	selectivity[16] = 0.01650983; 	selectivity[17] = 0.01750982; 	selectivity[18] = 0.01850981; 	selectivity[19] = 0.01950980; 	
-			selectivity[20] = 0.02050979; 	selectivity[21] = 0.02150978; 	selectivity[22] = 0.02250977; 	selectivity[23] = 0.02350976; 	selectivity[24] = 0.02450975; 	
-			selectivity[25] = 0.02550974; 	selectivity[26] = 0.02650973; 	selectivity[27] = 0.02750972; 	selectivity[28] = 0.02850971; 	selectivity[29] = 0.02950970; 	
-			selectivity[30] = 0.03050969; 	selectivity[31] = 0.03150968; 	selectivity[32] = 0.03250967; 	selectivity[33] = 0.03350966; 	selectivity[34] = 0.03450965; 	
-			selectivity[35] = 0.03550964; 	selectivity[36] = 0.03650963; 	selectivity[37] = 0.03750962; 	selectivity[38] = 0.03850961; 	selectivity[39] = 0.03950960; 	
-			selectivity[40] = 0.04050959; 	selectivity[41] = 0.04150958; 	selectivity[42] = 0.04250957; 	selectivity[43] = 0.04350956; 	selectivity[44] = 0.04450955; 	
-			selectivity[45] = 0.04550954; 	selectivity[46] = 0.04650953; 	selectivity[47] = 0.04750952; 	selectivity[48] = 0.04850951; 	selectivity[49] = 0.04950950; 	
-			selectivity[50] = 0.05050949; 	selectivity[51] = 0.05150948; 	selectivity[52] = 0.05250947; 	selectivity[53] = 0.05350946; 	selectivity[54] = 0.05450945; 	
-			selectivity[55] = 0.05550944; 	selectivity[56] = 0.05650943; 	selectivity[57] = 0.05750942; 	selectivity[58] = 0.05850941; 	selectivity[59] = 0.05950940; 	
-			selectivity[60] = 0.06050939; 	selectivity[61] = 0.06150938; 	selectivity[62] = 0.06250937; 	selectivity[63] = 0.06350936; 	selectivity[64] = 0.06450935; 	
-			selectivity[65] = 0.06550934; 	selectivity[66] = 0.06650933; 	selectivity[67] = 0.06750933; 	selectivity[68] = 0.06850932; 	selectivity[69] = 0.06950931; 	
-			selectivity[70] = 0.07050930; 	selectivity[71] = 0.07150929; 	selectivity[72] = 0.07250928; 	selectivity[73] = 0.07350927; 	selectivity[74] = 0.07450926; 	
-			selectivity[75] = 0.07550925; 	selectivity[76] = 0.07650924; 	selectivity[77] = 0.07750923; 	selectivity[78] = 0.07850922; 	selectivity[79] = 0.07950921; 	
-			selectivity[80] = 0.08050920; 	selectivity[81] = 0.08150919; 	selectivity[82] = 0.08250918; 	selectivity[83] = 0.08350917; 	selectivity[84] = 0.08450916; 	
-			selectivity[85] = 0.08550915; 	selectivity[86] = 0.08650914; 	selectivity[87] = 0.08750913; 	selectivity[88] = 0.08850912; 	selectivity[89] = 0.08950911; 	
-			selectivity[90] = 0.09050910; 	selectivity[91] = 0.09150909; 	selectivity[92] = 0.09250908; 	selectivity[93] = 0.09350907; 	selectivity[94] = 0.09450906; 	
-			selectivity[95] = 0.09550905; 	selectivity[96] = 0.09650904; 	selectivity[97] = 0.09750903; 	selectivity[98] = 0.09850902; 	selectivity[99] = 0.09950901; 	
-			selectivity[100] = 0.10050900; 	selectivity[101] = 0.10150899; 	selectivity[102] = 0.10250898; 	selectivity[103] = 0.10350897; 	selectivity[104] = 0.10450896; 	
-			selectivity[105] = 0.10550895; 	selectivity[106] = 0.10650894; 	selectivity[107] = 0.10750893; 	selectivity[108] = 0.10850892; 	selectivity[109] = 0.10950891; 	
-			selectivity[110] = 0.11050890; 	selectivity[111] = 0.11150889; 	selectivity[112] = 0.11250888; 	selectivity[113] = 0.11350887; 	selectivity[114] = 0.11450886; 	
-			selectivity[115] = 0.11550885; 	selectivity[116] = 0.11650884; 	selectivity[117] = 0.11750883; 	selectivity[118] = 0.11850882; 	selectivity[119] = 0.11950881; 	
-			selectivity[120] = 0.12050880; 	selectivity[121] = 0.12150879; 	selectivity[122] = 0.12250878; 	selectivity[123] = 0.12350877; 	selectivity[124] = 0.12450876; 	
-			selectivity[125] = 0.12550875; 	selectivity[126] = 0.12650874; 	selectivity[127] = 0.12750873; 	selectivity[128] = 0.12850872; 	selectivity[129] = 0.12950871; 	
-			selectivity[130] = 0.13050870; 	selectivity[131] = 0.13150869; 	selectivity[132] = 0.13250868; 	selectivity[133] = 0.13350867; 	selectivity[134] = 0.13450866; 	
-			selectivity[135] = 0.13550865; 	selectivity[136] = 0.13650864; 	selectivity[137] = 0.13750863; 	selectivity[138] = 0.13850862; 	selectivity[139] = 0.13950861; 	
-			selectivity[140] = 0.14050860; 	selectivity[141] = 0.14150859; 	selectivity[142] = 0.14250858; 	selectivity[143] = 0.14350857; 	selectivity[144] = 0.14450856; 	
-			selectivity[145] = 0.14550855; 	selectivity[146] = 0.14650854; 	selectivity[147] = 0.14750853; 	selectivity[148] = 0.14850852; 	selectivity[149] = 0.14950851; 	
-			selectivity[150] = 0.15050850; 	selectivity[151] = 0.15150849; 	selectivity[152] = 0.15250848; 	selectivity[153] = 0.15350847; 	selectivity[154] = 0.15450846; 	
-			selectivity[155] = 0.15550845; 	selectivity[156] = 0.15650844; 	selectivity[157] = 0.15750843; 	selectivity[158] = 0.15850842; 	selectivity[159] = 0.15950841; 	
-			selectivity[160] = 0.16050840; 	selectivity[161] = 0.16150839; 	selectivity[162] = 0.16250838; 	selectivity[163] = 0.16350837; 	selectivity[164] = 0.16450836; 	
-			selectivity[165] = 0.16550835; 	selectivity[166] = 0.16650834; 	selectivity[167] = 0.16750833; 	selectivity[168] = 0.16850832; 	selectivity[169] = 0.16950831; 	
-			selectivity[170] = 0.17050830; 	selectivity[171] = 0.17150829; 	selectivity[172] = 0.17250828; 	selectivity[173] = 0.17350827; 	selectivity[174] = 0.17450826; 	
-			selectivity[175] = 0.17550825; 	selectivity[176] = 0.17650824; 	selectivity[177] = 0.17750823; 	selectivity[178] = 0.17850822; 	selectivity[179] = 0.17950821; 	
-			selectivity[180] = 0.18050820; 	selectivity[181] = 0.18150819; 	selectivity[182] = 0.18250818; 	selectivity[183] = 0.18350817; 	selectivity[184] = 0.18450816; 	
-			selectivity[185] = 0.18550815; 	selectivity[186] = 0.18650814; 	selectivity[187] = 0.18750813; 	selectivity[188] = 0.18850812; 	selectivity[189] = 0.18950811; 	
-			selectivity[190] = 0.19050810; 	selectivity[191] = 0.19150809; 	selectivity[192] = 0.19250808; 	selectivity[193] = 0.19350807; 	selectivity[194] = 0.19450806; 	
-			selectivity[195] = 0.19550805; 	selectivity[196] = 0.19650804; 	selectivity[197] = 0.19750803; 	selectivity[198] = 0.19850802; 	selectivity[199] = 0.19950801; 	
-			selectivity[200] = 0.20050800; 	selectivity[201] = 0.20150799; 	selectivity[202] = 0.20250798; 	selectivity[203] = 0.20350797; 	selectivity[204] = 0.20450796; 	
-			selectivity[205] = 0.20550795; 	selectivity[206] = 0.20650794; 	selectivity[207] = 0.20750793; 	selectivity[208] = 0.20850792; 	selectivity[209] = 0.20950791; 	
-			selectivity[210] = 0.21050790; 	selectivity[211] = 0.21150789; 	selectivity[212] = 0.21250788; 	selectivity[213] = 0.21350787; 	selectivity[214] = 0.21450786; 	
-			selectivity[215] = 0.21550785; 	selectivity[216] = 0.21650784; 	selectivity[217] = 0.21750783; 	selectivity[218] = 0.21850782; 	selectivity[219] = 0.21950781; 	
-			selectivity[220] = 0.22050780; 	selectivity[221] = 0.22150779; 	selectivity[222] = 0.22250778; 	selectivity[223] = 0.22350777; 	selectivity[224] = 0.22450776; 	
-			selectivity[225] = 0.22550775; 	selectivity[226] = 0.22650774; 	selectivity[227] = 0.22750773; 	selectivity[228] = 0.22850772; 	selectivity[229] = 0.22950771; 	
-			selectivity[230] = 0.23050770; 	selectivity[231] = 0.23150769; 	selectivity[232] = 0.23250768; 	selectivity[233] = 0.23350767; 	selectivity[234] = 0.23450766; 	
-			selectivity[235] = 0.23550765; 	selectivity[236] = 0.23650764; 	selectivity[237] = 0.23750763; 	selectivity[238] = 0.23850762; 	selectivity[239] = 0.23950761; 	
-			selectivity[240] = 0.24050760; 	selectivity[241] = 0.24150759; 	selectivity[242] = 0.24250758; 	selectivity[243] = 0.24350757; 	selectivity[244] = 0.24450756; 	
-			selectivity[245] = 0.24550755; 	selectivity[246] = 0.24650754; 	selectivity[247] = 0.24750753; 	selectivity[248] = 0.24850752; 	selectivity[249] = 0.24950751; 	
-			selectivity[250] = 0.25050750; 	selectivity[251] = 0.25150749; 	selectivity[252] = 0.25250748; 	selectivity[253] = 0.25350747; 	selectivity[254] = 0.25450746; 	
-			selectivity[255] = 0.25550745; 	selectivity[256] = 0.25650744; 	selectivity[257] = 0.25750743; 	selectivity[258] = 0.25850742; 	selectivity[259] = 0.25950741; 	
-			selectivity[260] = 0.26050740; 	selectivity[261] = 0.26150739; 	selectivity[262] = 0.26250738; 	selectivity[263] = 0.26350737; 	selectivity[264] = 0.26450736; 	
-			selectivity[265] = 0.26550735; 	selectivity[266] = 0.26650734; 	selectivity[267] = 0.26750733; 	selectivity[268] = 0.26850732; 	selectivity[269] = 0.26950731; 	
-			selectivity[270] = 0.27050730; 	selectivity[271] = 0.27150729; 	selectivity[272] = 0.27250728; 	selectivity[273] = 0.27350727; 	selectivity[274] = 0.27450726; 	
-			selectivity[275] = 0.27550725; 	selectivity[276] = 0.27650724; 	selectivity[277] = 0.27750723; 	selectivity[278] = 0.27850722; 	selectivity[279] = 0.27950721; 	
-			selectivity[280] = 0.28050720; 	selectivity[281] = 0.28150719; 	selectivity[282] = 0.28250718; 	selectivity[283] = 0.28350717; 	selectivity[284] = 0.28450716; 	
-			selectivity[285] = 0.28550715; 	selectivity[286] = 0.28650714; 	selectivity[287] = 0.28750713; 	selectivity[288] = 0.28850712; 	selectivity[289] = 0.28950711; 	
-			selectivity[290] = 0.29050710; 	selectivity[291] = 0.29150709; 	selectivity[292] = 0.29250708; 	selectivity[293] = 0.29350707; 	selectivity[294] = 0.29450706; 	
-			selectivity[295] = 0.29550705; 	selectivity[296] = 0.29650704; 	selectivity[297] = 0.29750703; 	selectivity[298] = 0.29850702; 	selectivity[299] = 0.29950701; 	
-			selectivity[300] = 0.30050700; 	selectivity[301] = 0.30150699; 	selectivity[302] = 0.30250698; 	selectivity[303] = 0.30350697; 	selectivity[304] = 0.30450696; 	
-			selectivity[305] = 0.30550695; 	selectivity[306] = 0.30650694; 	selectivity[307] = 0.30750693; 	selectivity[308] = 0.30850692; 	selectivity[309] = 0.30950691; 	
-			selectivity[310] = 0.31050690; 	selectivity[311] = 0.31150689; 	selectivity[312] = 0.31250688; 	selectivity[313] = 0.31350687; 	selectivity[314] = 0.31450686; 	
-			selectivity[315] = 0.31550685; 	selectivity[316] = 0.31650684; 	selectivity[317] = 0.31750683; 	selectivity[318] = 0.31850682; 	selectivity[319] = 0.31950681; 	
-			selectivity[320] = 0.32050680; 	selectivity[321] = 0.32150679; 	selectivity[322] = 0.32250678; 	selectivity[323] = 0.32350677; 	selectivity[324] = 0.32450676; 	
-			selectivity[325] = 0.32550675; 	selectivity[326] = 0.32650674; 	selectivity[327] = 0.32750673; 	selectivity[328] = 0.32850672; 	selectivity[329] = 0.32950671; 	
-			selectivity[330] = 0.33050670; 	selectivity[331] = 0.33150669; 	selectivity[332] = 0.33250668; 	selectivity[333] = 0.33350667; 	selectivity[334] = 0.33450666; 	
-			selectivity[335] = 0.33550665; 	selectivity[336] = 0.33650664; 	selectivity[337] = 0.33750663; 	selectivity[338] = 0.33850662; 	selectivity[339] = 0.33950661; 	
-			selectivity[340] = 0.34050660; 	selectivity[341] = 0.34150659; 	selectivity[342] = 0.34250658; 	selectivity[343] = 0.34350657; 	selectivity[344] = 0.34450656; 	
-			selectivity[345] = 0.34550655; 	selectivity[346] = 0.34650654; 	selectivity[347] = 0.34750653; 	selectivity[348] = 0.34850652; 	selectivity[349] = 0.34950651; 	
-			selectivity[350] = 0.35050650; 	selectivity[351] = 0.35150649; 	selectivity[352] = 0.35250648; 	selectivity[353] = 0.35350647; 	selectivity[354] = 0.35450646; 	
-			selectivity[355] = 0.35550645; 	selectivity[356] = 0.35650644; 	selectivity[357] = 0.35750643; 	selectivity[358] = 0.35850642; 	selectivity[359] = 0.35950641; 	
-			selectivity[360] = 0.36050640; 	selectivity[361] = 0.36150639; 	selectivity[362] = 0.36250638; 	selectivity[363] = 0.36350637; 	selectivity[364] = 0.36450636; 	
-			selectivity[365] = 0.36550635; 	selectivity[366] = 0.36650634; 	selectivity[367] = 0.36750633; 	selectivity[368] = 0.36850632; 	selectivity[369] = 0.36950631; 	
-			selectivity[370] = 0.37050630; 	selectivity[371] = 0.37150629; 	selectivity[372] = 0.37250628; 	selectivity[373] = 0.37350627; 	selectivity[374] = 0.37450626; 	
-			selectivity[375] = 0.37550625; 	selectivity[376] = 0.37650624; 	selectivity[377] = 0.37750623; 	selectivity[378] = 0.37850622; 	selectivity[379] = 0.37950621; 	
-			selectivity[380] = 0.38050620; 	selectivity[381] = 0.38150619; 	selectivity[382] = 0.38250618; 	selectivity[383] = 0.38350617; 	selectivity[384] = 0.38450616; 	
-			selectivity[385] = 0.38550615; 	selectivity[386] = 0.38650614; 	selectivity[387] = 0.38750613; 	selectivity[388] = 0.38850612; 	selectivity[389] = 0.38950611; 	
-			selectivity[390] = 0.39050610; 	selectivity[391] = 0.39150609; 	selectivity[392] = 0.39250608; 	selectivity[393] = 0.39350607; 	selectivity[394] = 0.39450606; 	
-			selectivity[395] = 0.39550605; 	selectivity[396] = 0.39650604; 	selectivity[397] = 0.39750603; 	selectivity[398] = 0.39850602; 	selectivity[399] = 0.39950601; 	
-			selectivity[400] = 0.40050600; 	selectivity[401] = 0.40150599; 	selectivity[402] = 0.40250598; 	selectivity[403] = 0.40350597; 	selectivity[404] = 0.40450596; 	
-			selectivity[405] = 0.40550595; 	selectivity[406] = 0.40650594; 	selectivity[407] = 0.40750593; 	selectivity[408] = 0.40850592; 	selectivity[409] = 0.40950591; 	
-			selectivity[410] = 0.41050590; 	selectivity[411] = 0.41150589; 	selectivity[412] = 0.41250588; 	selectivity[413] = 0.41350587; 	selectivity[414] = 0.41450586; 	
-			selectivity[415] = 0.41550585; 	selectivity[416] = 0.41650584; 	selectivity[417] = 0.41750583; 	selectivity[418] = 0.41850582; 	selectivity[419] = 0.41950581; 	
-			selectivity[420] = 0.42050580; 	selectivity[421] = 0.42150579; 	selectivity[422] = 0.42250578; 	selectivity[423] = 0.42350577; 	selectivity[424] = 0.42450576; 	
-			selectivity[425] = 0.42550575; 	selectivity[426] = 0.42650574; 	selectivity[427] = 0.42750573; 	selectivity[428] = 0.42850572; 	selectivity[429] = 0.42950571; 	
-			selectivity[430] = 0.43050570; 	selectivity[431] = 0.43150569; 	selectivity[432] = 0.43250568; 	selectivity[433] = 0.43350567; 	selectivity[434] = 0.43450566; 	
-			selectivity[435] = 0.43550565; 	selectivity[436] = 0.43650564; 	selectivity[437] = 0.43750563; 	selectivity[438] = 0.43850562; 	selectivity[439] = 0.43950561; 	
-			selectivity[440] = 0.44050560; 	selectivity[441] = 0.44150559; 	selectivity[442] = 0.44250558; 	selectivity[443] = 0.44350557; 	selectivity[444] = 0.44450556; 	
-			selectivity[445] = 0.44550555; 	selectivity[446] = 0.44650554; 	selectivity[447] = 0.44750553; 	selectivity[448] = 0.44850552; 	selectivity[449] = 0.44950551; 	
-			selectivity[450] = 0.45050550; 	selectivity[451] = 0.45150549; 	selectivity[452] = 0.45250548; 	selectivity[453] = 0.45350547; 	selectivity[454] = 0.45450546; 	
-			selectivity[455] = 0.45550545; 	selectivity[456] = 0.45650544; 	selectivity[457] = 0.45750543; 	selectivity[458] = 0.45850542; 	selectivity[459] = 0.45950541; 	
-			selectivity[460] = 0.46050540; 	selectivity[461] = 0.46150539; 	selectivity[462] = 0.46250538; 	selectivity[463] = 0.46350537; 	selectivity[464] = 0.46450536; 	
-			selectivity[465] = 0.46550535; 	selectivity[466] = 0.46650534; 	selectivity[467] = 0.46750533; 	selectivity[468] = 0.46850532; 	selectivity[469] = 0.46950531; 	
-			selectivity[470] = 0.47050530; 	selectivity[471] = 0.47150529; 	selectivity[472] = 0.47250528; 	selectivity[473] = 0.47350527; 	selectivity[474] = 0.47450526; 	
-			selectivity[475] = 0.47550525; 	selectivity[476] = 0.47650524; 	selectivity[477] = 0.47750523; 	selectivity[478] = 0.47850522; 	selectivity[479] = 0.47950521; 	
-			selectivity[480] = 0.48050520; 	selectivity[481] = 0.48150519; 	selectivity[482] = 0.48250518; 	selectivity[483] = 0.48350517; 	selectivity[484] = 0.48450516; 	
-			selectivity[485] = 0.48550515; 	selectivity[486] = 0.48650514; 	selectivity[487] = 0.48750513; 	selectivity[488] = 0.48850512; 	selectivity[489] = 0.48950511; 	
-			selectivity[490] = 0.49050510; 	selectivity[491] = 0.49150509; 	selectivity[492] = 0.49250508; 	selectivity[493] = 0.49350507; 	selectivity[494] = 0.49450506; 	
-			selectivity[495] = 0.49550505; 	selectivity[496] = 0.49650504; 	selectivity[497] = 0.49750503; 	selectivity[498] = 0.49850502; 	selectivity[499] = 0.49950501; 	
-			selectivity[500] = 0.50050500; 	selectivity[501] = 0.50150499; 	selectivity[502] = 0.50250498; 	selectivity[503] = 0.50350497; 	selectivity[504] = 0.50450496; 	
-			selectivity[505] = 0.50550495; 	selectivity[506] = 0.50650494; 	selectivity[507] = 0.50750493; 	selectivity[508] = 0.50850492; 	selectivity[509] = 0.50950491; 	
-			selectivity[510] = 0.51050490; 	selectivity[511] = 0.51150489; 	selectivity[512] = 0.51250488; 	selectivity[513] = 0.51350487; 	selectivity[514] = 0.51450486; 	
-			selectivity[515] = 0.51550485; 	selectivity[516] = 0.51650484; 	selectivity[517] = 0.51750483; 	selectivity[518] = 0.51850482; 	selectivity[519] = 0.51950481; 	
-			selectivity[520] = 0.52050480; 	selectivity[521] = 0.52150479; 	selectivity[522] = 0.52250478; 	selectivity[523] = 0.52350477; 	selectivity[524] = 0.52450476; 	
-			selectivity[525] = 0.52550475; 	selectivity[526] = 0.52650474; 	selectivity[527] = 0.52750473; 	selectivity[528] = 0.52850472; 	selectivity[529] = 0.52950471; 	
-			selectivity[530] = 0.53050470; 	selectivity[531] = 0.53150469; 	selectivity[532] = 0.53250468; 	selectivity[533] = 0.53350467; 	selectivity[534] = 0.53450466; 	
-			selectivity[535] = 0.53550465; 	selectivity[536] = 0.53650464; 	selectivity[537] = 0.53750463; 	selectivity[538] = 0.53850462; 	selectivity[539] = 0.53950461; 	
-			selectivity[540] = 0.54050460; 	selectivity[541] = 0.54150459; 	selectivity[542] = 0.54250458; 	selectivity[543] = 0.54350457; 	selectivity[544] = 0.54450456; 	
-			selectivity[545] = 0.54550455; 	selectivity[546] = 0.54650454; 	selectivity[547] = 0.54750453; 	selectivity[548] = 0.54850452; 	selectivity[549] = 0.54950451; 	
-			selectivity[550] = 0.55050450; 	selectivity[551] = 0.55150449; 	selectivity[552] = 0.55250448; 	selectivity[553] = 0.55350447; 	selectivity[554] = 0.55450445; 	
-			selectivity[555] = 0.55550444; 	selectivity[556] = 0.55650443; 	selectivity[557] = 0.55750442; 	selectivity[558] = 0.55850441; 	selectivity[559] = 0.55950440; 	
-			selectivity[560] = 0.56050439; 	selectivity[561] = 0.56150438; 	selectivity[562] = 0.56250437; 	selectivity[563] = 0.56350436; 	selectivity[564] = 0.56450435; 	
-			selectivity[565] = 0.56550434; 	selectivity[566] = 0.56650433; 	selectivity[567] = 0.56750432; 	selectivity[568] = 0.56850431; 	selectivity[569] = 0.56950430; 	
-			selectivity[570] = 0.57050429; 	selectivity[571] = 0.57150428; 	selectivity[572] = 0.57250427; 	selectivity[573] = 0.57350426; 	selectivity[574] = 0.57450425; 	
-			selectivity[575] = 0.57550424; 	selectivity[576] = 0.57650423; 	selectivity[577] = 0.57750422; 	selectivity[578] = 0.57850421; 	selectivity[579] = 0.57950420; 	
-			selectivity[580] = 0.58050419; 	selectivity[581] = 0.58150418; 	selectivity[582] = 0.58250417; 	selectivity[583] = 0.58350416; 	selectivity[584] = 0.58450415; 	
-			selectivity[585] = 0.58550414; 	selectivity[586] = 0.58650413; 	selectivity[587] = 0.58750412; 	selectivity[588] = 0.58850411; 	selectivity[589] = 0.58950410; 	
-			selectivity[590] = 0.59050409; 	selectivity[591] = 0.59150408; 	selectivity[592] = 0.59250407; 	selectivity[593] = 0.59350406; 	selectivity[594] = 0.59450405; 	
-			selectivity[595] = 0.59550404; 	selectivity[596] = 0.59650403; 	selectivity[597] = 0.59750402; 	selectivity[598] = 0.59850401; 	selectivity[599] = 0.59950400; 	
-			selectivity[600] = 0.60050399; 	selectivity[601] = 0.60150398; 	selectivity[602] = 0.60250397; 	selectivity[603] = 0.60350396; 	selectivity[604] = 0.60450395; 	
-			selectivity[605] = 0.60550394; 	selectivity[606] = 0.60650393; 	selectivity[607] = 0.60750392; 	selectivity[608] = 0.60850391; 	selectivity[609] = 0.60950390; 	
-			selectivity[610] = 0.61050389; 	selectivity[611] = 0.61150388; 	selectivity[612] = 0.61250387; 	selectivity[613] = 0.61350386; 	selectivity[614] = 0.61450385; 	
-			selectivity[615] = 0.61550384; 	selectivity[616] = 0.61650383; 	selectivity[617] = 0.61750382; 	selectivity[618] = 0.61850381; 	selectivity[619] = 0.61950380; 	
-			selectivity[620] = 0.62050379; 	selectivity[621] = 0.62150378; 	selectivity[622] = 0.62250377; 	selectivity[623] = 0.62350376; 	selectivity[624] = 0.62450375; 	
-			selectivity[625] = 0.62550374; 	selectivity[626] = 0.62650373; 	selectivity[627] = 0.62750372; 	selectivity[628] = 0.62850371; 	selectivity[629] = 0.62950370; 	
-			selectivity[630] = 0.63050369; 	selectivity[631] = 0.63150368; 	selectivity[632] = 0.63250367; 	selectivity[633] = 0.63350366; 	selectivity[634] = 0.63450365; 	
-			selectivity[635] = 0.63550364; 	selectivity[636] = 0.63650363; 	selectivity[637] = 0.63750362; 	selectivity[638] = 0.63850361; 	selectivity[639] = 0.63950360; 	
-			selectivity[640] = 0.64050359; 	selectivity[641] = 0.64150358; 	selectivity[642] = 0.64250357; 	selectivity[643] = 0.64350356; 	selectivity[644] = 0.64450355; 	
-			selectivity[645] = 0.64550354; 	selectivity[646] = 0.64650353; 	selectivity[647] = 0.64750352; 	selectivity[648] = 0.64850351; 	selectivity[649] = 0.64950350; 	
-			selectivity[650] = 0.65050349; 	selectivity[651] = 0.65150348; 	selectivity[652] = 0.65250347; 	selectivity[653] = 0.65350346; 	selectivity[654] = 0.65450345; 	
-			selectivity[655] = 0.65550344; 	selectivity[656] = 0.65650343; 	selectivity[657] = 0.65750342; 	selectivity[658] = 0.65850341; 	selectivity[659] = 0.65950340; 	
-			selectivity[660] = 0.66050339; 	selectivity[661] = 0.66150338; 	selectivity[662] = 0.66250337; 	selectivity[663] = 0.66350336; 	selectivity[664] = 0.66450335; 	
-			selectivity[665] = 0.66550334; 	selectivity[666] = 0.66650333; 	selectivity[667] = 0.66750332; 	selectivity[668] = 0.66850331; 	selectivity[669] = 0.66950330; 	
-			selectivity[670] = 0.67050329; 	selectivity[671] = 0.67150328; 	selectivity[672] = 0.67250327; 	selectivity[673] = 0.67350326; 	selectivity[674] = 0.67450325; 	
-			selectivity[675] = 0.67550324; 	selectivity[676] = 0.67650323; 	selectivity[677] = 0.67750322; 	selectivity[678] = 0.67850321; 	selectivity[679] = 0.67950320; 	
-			selectivity[680] = 0.68050319; 	selectivity[681] = 0.68150318; 	selectivity[682] = 0.68250317; 	selectivity[683] = 0.68350316; 	selectivity[684] = 0.68450315; 	
-			selectivity[685] = 0.68550314; 	selectivity[686] = 0.68650313; 	selectivity[687] = 0.68750312; 	selectivity[688] = 0.68850311; 	selectivity[689] = 0.68950310; 	
-			selectivity[690] = 0.69050309; 	selectivity[691] = 0.69150308; 	selectivity[692] = 0.69250307; 	selectivity[693] = 0.69350306; 	selectivity[694] = 0.69450305; 	
-			selectivity[695] = 0.69550304; 	selectivity[696] = 0.69650303; 	selectivity[697] = 0.69750302; 	selectivity[698] = 0.69850301; 	selectivity[699] = 0.69950300; 	
-			selectivity[700] = 0.70050299; 	selectivity[701] = 0.70150298; 	selectivity[702] = 0.70250297; 	selectivity[703] = 0.70350296; 	selectivity[704] = 0.70450295; 	
-			selectivity[705] = 0.70550294; 	selectivity[706] = 0.70650293; 	selectivity[707] = 0.70750292; 	selectivity[708] = 0.70850291; 	selectivity[709] = 0.70950290; 	
-			selectivity[710] = 0.71050289; 	selectivity[711] = 0.71150288; 	selectivity[712] = 0.71250287; 	selectivity[713] = 0.71350286; 	selectivity[714] = 0.71450285; 	
-			selectivity[715] = 0.71550284; 	selectivity[716] = 0.71650283; 	selectivity[717] = 0.71750282; 	selectivity[718] = 0.71850281; 	selectivity[719] = 0.71950280; 	
-			selectivity[720] = 0.72050279; 	selectivity[721] = 0.72150278; 	selectivity[722] = 0.72250277; 	selectivity[723] = 0.72350276; 	selectivity[724] = 0.72450275; 	
-			selectivity[725] = 0.72550274; 	selectivity[726] = 0.72650273; 	selectivity[727] = 0.72750272; 	selectivity[728] = 0.72850271; 	selectivity[729] = 0.72950270; 	
-			selectivity[730] = 0.73050269; 	selectivity[731] = 0.73150268; 	selectivity[732] = 0.73250267; 	selectivity[733] = 0.73350266; 	selectivity[734] = 0.73450265; 	
-			selectivity[735] = 0.73550264; 	selectivity[736] = 0.73650263; 	selectivity[737] = 0.73750262; 	selectivity[738] = 0.73850261; 	selectivity[739] = 0.73950260; 	
-			selectivity[740] = 0.74050259; 	selectivity[741] = 0.74150258; 	selectivity[742] = 0.74250257; 	selectivity[743] = 0.74350256; 	selectivity[744] = 0.74450255; 	
-			selectivity[745] = 0.74550254; 	selectivity[746] = 0.74650253; 	selectivity[747] = 0.74750252; 	selectivity[748] = 0.74850251; 	selectivity[749] = 0.74950250; 	
-			selectivity[750] = 0.75050249; 	selectivity[751] = 0.75150248; 	selectivity[752] = 0.75250247; 	selectivity[753] = 0.75350246; 	selectivity[754] = 0.75450245; 	
-			selectivity[755] = 0.75550244; 	selectivity[756] = 0.75650243; 	selectivity[757] = 0.75750242; 	selectivity[758] = 0.75850241; 	selectivity[759] = 0.75950240; 	
-			selectivity[760] = 0.76050239; 	selectivity[761] = 0.76150238; 	selectivity[762] = 0.76250237; 	selectivity[763] = 0.76350236; 	selectivity[764] = 0.76450235; 	
-			selectivity[765] = 0.76550234; 	selectivity[766] = 0.76650233; 	selectivity[767] = 0.76750232; 	selectivity[768] = 0.76850231; 	selectivity[769] = 0.76950230; 	
-			selectivity[770] = 0.77050229; 	selectivity[771] = 0.77150228; 	selectivity[772] = 0.77250227; 	selectivity[773] = 0.77350226; 	selectivity[774] = 0.77450225; 	
-			selectivity[775] = 0.77550224; 	selectivity[776] = 0.77650223; 	selectivity[777] = 0.77750222; 	selectivity[778] = 0.77850221; 	selectivity[779] = 0.77950220; 	
-			selectivity[780] = 0.78050219; 	selectivity[781] = 0.78150218; 	selectivity[782] = 0.78250217; 	selectivity[783] = 0.78350216; 	selectivity[784] = 0.78450215; 	
-			selectivity[785] = 0.78550214; 	selectivity[786] = 0.78650213; 	selectivity[787] = 0.78750212; 	selectivity[788] = 0.78850211; 	selectivity[789] = 0.78950210; 	
-			selectivity[790] = 0.79050209; 	selectivity[791] = 0.79150208; 	selectivity[792] = 0.79250207; 	selectivity[793] = 0.79350206; 	selectivity[794] = 0.79450205; 	
-			selectivity[795] = 0.79550204; 	selectivity[796] = 0.79650203; 	selectivity[797] = 0.79750202; 	selectivity[798] = 0.79850201; 	selectivity[799] = 0.79950200; 	
-			selectivity[800] = 0.80050199; 	selectivity[801] = 0.80150198; 	selectivity[802] = 0.80250197; 	selectivity[803] = 0.80350196; 	selectivity[804] = 0.80450195; 	
-			selectivity[805] = 0.80550194; 	selectivity[806] = 0.80650193; 	selectivity[807] = 0.80750192; 	selectivity[808] = 0.80850191; 	selectivity[809] = 0.80950190; 	
-			selectivity[810] = 0.81050189; 	selectivity[811] = 0.81150188; 	selectivity[812] = 0.81250187; 	selectivity[813] = 0.81350186; 	selectivity[814] = 0.81450185; 	
-			selectivity[815] = 0.81550184; 	selectivity[816] = 0.81650183; 	selectivity[817] = 0.81750182; 	selectivity[818] = 0.81850181; 	selectivity[819] = 0.81950180; 	
-			selectivity[820] = 0.82050179; 	selectivity[821] = 0.82150178; 	selectivity[822] = 0.82250177; 	selectivity[823] = 0.82350176; 	selectivity[824] = 0.82450175; 	
-			selectivity[825] = 0.82550174; 	selectivity[826] = 0.82650173; 	selectivity[827] = 0.82750172; 	selectivity[828] = 0.82850171; 	selectivity[829] = 0.82950170; 	
-			selectivity[830] = 0.83050169; 	selectivity[831] = 0.83150168; 	selectivity[832] = 0.83250167; 	selectivity[833] = 0.83350166; 	selectivity[834] = 0.83450165; 	
-			selectivity[835] = 0.83550164; 	selectivity[836] = 0.83650163; 	selectivity[837] = 0.83750162; 	selectivity[838] = 0.83850161; 	selectivity[839] = 0.83950160; 	
-			selectivity[840] = 0.84050159; 	selectivity[841] = 0.84150158; 	selectivity[842] = 0.84250157; 	selectivity[843] = 0.84350156; 	selectivity[844] = 0.84450155; 	
-			selectivity[845] = 0.84550154; 	selectivity[846] = 0.84650153; 	selectivity[847] = 0.84750152; 	selectivity[848] = 0.84850151; 	selectivity[849] = 0.84950150; 	
-			selectivity[850] = 0.85050149; 	selectivity[851] = 0.85150148; 	selectivity[852] = 0.85250147; 	selectivity[853] = 0.85350146; 	selectivity[854] = 0.85450145; 	
-			selectivity[855] = 0.85550144; 	selectivity[856] = 0.85650143; 	selectivity[857] = 0.85750142; 	selectivity[858] = 0.85850141; 	selectivity[859] = 0.85950140; 	
-			selectivity[860] = 0.86050139; 	selectivity[861] = 0.86150138; 	selectivity[862] = 0.86250137; 	selectivity[863] = 0.86350136; 	selectivity[864] = 0.86450135; 	
-			selectivity[865] = 0.86550134; 	selectivity[866] = 0.86650133; 	selectivity[867] = 0.86750132; 	selectivity[868] = 0.86850131; 	selectivity[869] = 0.86950130; 	
-			selectivity[870] = 0.87050129; 	selectivity[871] = 0.87150128; 	selectivity[872] = 0.87250127; 	selectivity[873] = 0.87350126; 	selectivity[874] = 0.87450125; 	
-			selectivity[875] = 0.87550124; 	selectivity[876] = 0.87650123; 	selectivity[877] = 0.87750122; 	selectivity[878] = 0.87850121; 	selectivity[879] = 0.87950120; 	
-			selectivity[880] = 0.88050119; 	selectivity[881] = 0.88150118; 	selectivity[882] = 0.88250117; 	selectivity[883] = 0.88350116; 	selectivity[884] = 0.88450115; 	
-			selectivity[885] = 0.88550114; 	selectivity[886] = 0.88650113; 	selectivity[887] = 0.88750112; 	selectivity[888] = 0.88850111; 	selectivity[889] = 0.88950110; 	
-			selectivity[890] = 0.89050109; 	selectivity[891] = 0.89150108; 	selectivity[892] = 0.89250107; 	selectivity[893] = 0.89350106; 	selectivity[894] = 0.89450105; 	
-			selectivity[895] = 0.89550104; 	selectivity[896] = 0.89650103; 	selectivity[897] = 0.89750102; 	selectivity[898] = 0.89850101; 	selectivity[899] = 0.89950100; 	
-			selectivity[900] = 0.90050099; 	selectivity[901] = 0.90150098; 	selectivity[902] = 0.90250097; 	selectivity[903] = 0.90350096; 	selectivity[904] = 0.90450095; 	
-			selectivity[905] = 0.90550094; 	selectivity[906] = 0.90650093; 	selectivity[907] = 0.90750092; 	selectivity[908] = 0.90850091; 	selectivity[909] = 0.90950090; 	
-			selectivity[910] = 0.91050089; 	selectivity[911] = 0.91150088; 	selectivity[912] = 0.91250087; 	selectivity[913] = 0.91350086; 	selectivity[914] = 0.91450085; 	
-			selectivity[915] = 0.91550084; 	selectivity[916] = 0.91650083; 	selectivity[917] = 0.91750082; 	selectivity[918] = 0.91850081; 	selectivity[919] = 0.91950080; 	
-			selectivity[920] = 0.92050079; 	selectivity[921] = 0.92150078; 	selectivity[922] = 0.92250077; 	selectivity[923] = 0.92350076; 	selectivity[924] = 0.92450075; 	
-			selectivity[925] = 0.92550074; 	selectivity[926] = 0.92650073; 	selectivity[927] = 0.92750072; 	selectivity[928] = 0.92850071; 	selectivity[929] = 0.92950070; 	
-			selectivity[930] = 0.93050069; 	selectivity[931] = 0.93150068; 	selectivity[932] = 0.93250067; 	selectivity[933] = 0.93350066; 	selectivity[934] = 0.93450065; 	
-			selectivity[935] = 0.93550064; 	selectivity[936] = 0.93650063; 	selectivity[937] = 0.93750062; 	selectivity[938] = 0.93850061; 	selectivity[939] = 0.93950060; 	
-			selectivity[940] = 0.94050059; 	selectivity[941] = 0.94150058; 	selectivity[942] = 0.94250057; 	selectivity[943] = 0.94350056; 	selectivity[944] = 0.94450055; 	
-			selectivity[945] = 0.94550054; 	selectivity[946] = 0.94650053; 	selectivity[947] = 0.94750052; 	selectivity[948] = 0.94850051; 	selectivity[949] = 0.94950050; 	
-			selectivity[950] = 0.95050049; 	selectivity[951] = 0.95150048; 	selectivity[952] = 0.95250047; 	selectivity[953] = 0.95350046; 	selectivity[954] = 0.95450045; 	
-			selectivity[955] = 0.95550044; 	selectivity[956] = 0.95650043; 	selectivity[957] = 0.95750042; 	selectivity[958] = 0.95850041; 	selectivity[959] = 0.95950040; 	
-			selectivity[960] = 0.96050039; 	selectivity[961] = 0.96150038; 	selectivity[962] = 0.96250037; 	selectivity[963] = 0.96350036; 	selectivity[964] = 0.96450035; 	
-			selectivity[965] = 0.96550034; 	selectivity[966] = 0.96650033; 	selectivity[967] = 0.96750032; 	selectivity[968] = 0.96850031; 	selectivity[969] = 0.96950030; 	
-			selectivity[970] = 0.97050029; 	selectivity[971] = 0.97150028; 	selectivity[972] = 0.97250027; 	selectivity[973] = 0.97350026; 	selectivity[974] = 0.97450025; 	
-			selectivity[975] = 0.97550024; 	selectivity[976] = 0.97650023; 	selectivity[977] = 0.97750022; 	selectivity[978] = 0.97850021; 	selectivity[979] = 0.97950020; 	
-			selectivity[980] = 0.98050019; 	selectivity[981] = 0.98150018; 	selectivity[982] = 0.98250017; 	selectivity[983] = 0.98350016; 	selectivity[984] = 0.98450015; 	
-			selectivity[985] = 0.98550014; 	selectivity[986] = 0.98650013; 	selectivity[987] = 0.98750012; 	selectivity[988] = 0.98850011; 	selectivity[989] = 0.98950010; 	
-			selectivity[990] = 0.99050009; 	selectivity[991] = 0.99150008; 	selectivity[992] = 0.99250007; 	selectivity[993] = 0.99350006; 	selectivity[994] = 0.99450005; 	
-			selectivity[995] = 0.99550004; 	selectivity[996] = 0.99650003; 	selectivity[997] = 0.99750002; 	selectivity[998] = 0.99850001; 	selectivity[999] = 0.99950000; 	
+			selectivity[0] = 0.00051000f; 	selectivity[1] = 0.00150999f; 	selectivity[2] = 0.00250998f; 	selectivity[3] = 0.00350997f; 	selectivity[4] = 0.00450996f; 	
+			selectivity[5] = 0.00550995f; 	selectivity[6] = 0.00650994f; 	selectivity[7] = 0.00750993f; 	selectivity[8] = 0.00850992f; 	selectivity[9] = 0.00950990f; 	
+			selectivity[10] = 0.01050989f; 	selectivity[11] = 0.01150988f; 	selectivity[12] = 0.01250987f; 	selectivity[13] = 0.01350986f; 	selectivity[14] = 0.01450985f; 	
+			selectivity[15] = 0.01550984f; 	selectivity[16] = 0.01650983f; 	selectivity[17] = 0.01750982f; 	selectivity[18] = 0.01850981f; 	selectivity[19] = 0.01950980f; 	
+			selectivity[20] = 0.02050979f; 	selectivity[21] = 0.02150978f; 	selectivity[22] = 0.02250977f; 	selectivity[23] = 0.02350976f; 	selectivity[24] = 0.02450975f; 	
+			selectivity[25] = 0.02550974f; 	selectivity[26] = 0.02650973f; 	selectivity[27] = 0.02750972f; 	selectivity[28] = 0.02850971f; 	selectivity[29] = 0.02950970f; 	
+			selectivity[30] = 0.03050969f; 	selectivity[31] = 0.03150968f; 	selectivity[32] = 0.03250967f; 	selectivity[33] = 0.03350966f; 	selectivity[34] = 0.03450965f; 	
+			selectivity[35] = 0.03550964f; 	selectivity[36] = 0.03650963f; 	selectivity[37] = 0.03750962f; 	selectivity[38] = 0.03850961f; 	selectivity[39] = 0.03950960f; 	
+			selectivity[40] = 0.04050959f; 	selectivity[41] = 0.04150958f; 	selectivity[42] = 0.04250957f; 	selectivity[43] = 0.04350956f; 	selectivity[44] = 0.04450955f; 	
+			selectivity[45] = 0.04550954f; 	selectivity[46] = 0.04650953f; 	selectivity[47] = 0.04750952f; 	selectivity[48] = 0.04850951f; 	selectivity[49] = 0.04950950f; 	
+			selectivity[50] = 0.05050949f; 	selectivity[51] = 0.05150948f; 	selectivity[52] = 0.05250947f; 	selectivity[53] = 0.05350946f; 	selectivity[54] = 0.05450945f; 	
+			selectivity[55] = 0.05550944f; 	selectivity[56] = 0.05650943f; 	selectivity[57] = 0.05750942f; 	selectivity[58] = 0.05850941f; 	selectivity[59] = 0.05950940f; 	
+			selectivity[60] = 0.06050939f; 	selectivity[61] = 0.06150938f; 	selectivity[62] = 0.06250937f; 	selectivity[63] = 0.06350936f; 	selectivity[64] = 0.06450935f; 	
+			selectivity[65] = 0.06550934f; 	selectivity[66] = 0.06650933f; 	selectivity[67] = 0.06750933f; 	selectivity[68] = 0.06850932f; 	selectivity[69] = 0.06950931f; 	
+			selectivity[70] = 0.07050930f; 	selectivity[71] = 0.07150929f; 	selectivity[72] = 0.07250928f; 	selectivity[73] = 0.07350927f; 	selectivity[74] = 0.07450926f; 	
+			selectivity[75] = 0.07550925f; 	selectivity[76] = 0.07650924f; 	selectivity[77] = 0.07750923f; 	selectivity[78] = 0.07850922f; 	selectivity[79] = 0.07950921f; 	
+			selectivity[80] = 0.08050920f; 	selectivity[81] = 0.08150919f; 	selectivity[82] = 0.08250918f; 	selectivity[83] = 0.08350917f; 	selectivity[84] = 0.08450916f; 	
+			selectivity[85] = 0.08550915f; 	selectivity[86] = 0.08650914f; 	selectivity[87] = 0.08750913f; 	selectivity[88] = 0.08850912f; 	selectivity[89] = 0.08950911f; 	
+			selectivity[90] = 0.09050910f; 	selectivity[91] = 0.09150909f; 	selectivity[92] = 0.09250908f; 	selectivity[93] = 0.09350907f; 	selectivity[94] = 0.09450906f; 	
+			selectivity[95] = 0.09550905f; 	selectivity[96] = 0.09650904f; 	selectivity[97] = 0.09750903f; 	selectivity[98] = 0.09850902f; 	selectivity[99] = 0.09950901f; 	
+			selectivity[100] = 0.10050900f; 	selectivity[101] = 0.10150899f; 	selectivity[102] = 0.10250898f; 	selectivity[103] = 0.10350897f; 	selectivity[104] = 0.10450896f; 	
+			selectivity[105] = 0.10550895f; 	selectivity[106] = 0.10650894f; 	selectivity[107] = 0.10750893f; 	selectivity[108] = 0.10850892f; 	selectivity[109] = 0.10950891f; 	
+			selectivity[110] = 0.11050890f; 	selectivity[111] = 0.11150889f; 	selectivity[112] = 0.11250888f; 	selectivity[113] = 0.11350887f; 	selectivity[114] = 0.11450886f; 	
+			selectivity[115] = 0.11550885f; 	selectivity[116] = 0.11650884f; 	selectivity[117] = 0.11750883f; 	selectivity[118] = 0.11850882f; 	selectivity[119] = 0.11950881f; 	
+			selectivity[120] = 0.12050880f; 	selectivity[121] = 0.12150879f; 	selectivity[122] = 0.12250878f; 	selectivity[123] = 0.12350877f; 	selectivity[124] = 0.12450876f; 	
+			selectivity[125] = 0.12550875f; 	selectivity[126] = 0.12650874f; 	selectivity[127] = 0.12750873f; 	selectivity[128] = 0.12850872f; 	selectivity[129] = 0.12950871f; 	
+			selectivity[130] = 0.13050870f; 	selectivity[131] = 0.13150869f; 	selectivity[132] = 0.13250868f; 	selectivity[133] = 0.13350867f; 	selectivity[134] = 0.13450866f; 	
+			selectivity[135] = 0.13550865f; 	selectivity[136] = 0.13650864f; 	selectivity[137] = 0.13750863f; 	selectivity[138] = 0.13850862f; 	selectivity[139] = 0.13950861f; 	
+			selectivity[140] = 0.14050860f; 	selectivity[141] = 0.14150859f; 	selectivity[142] = 0.14250858f; 	selectivity[143] = 0.14350857f; 	selectivity[144] = 0.14450856f; 	
+			selectivity[145] = 0.14550855f; 	selectivity[146] = 0.14650854f; 	selectivity[147] = 0.14750853f; 	selectivity[148] = 0.14850852f; 	selectivity[149] = 0.14950851f; 	
+			selectivity[150] = 0.15050850f; 	selectivity[151] = 0.15150849f; 	selectivity[152] = 0.15250848f; 	selectivity[153] = 0.15350847f; 	selectivity[154] = 0.15450846f; 	
+			selectivity[155] = 0.15550845f; 	selectivity[156] = 0.15650844f; 	selectivity[157] = 0.15750843f; 	selectivity[158] = 0.15850842f; 	selectivity[159] = 0.15950841f; 	
+			selectivity[160] = 0.16050840f; 	selectivity[161] = 0.16150839f; 	selectivity[162] = 0.16250838f; 	selectivity[163] = 0.16350837f; 	selectivity[164] = 0.16450836f; 	
+			selectivity[165] = 0.16550835f; 	selectivity[166] = 0.16650834f; 	selectivity[167] = 0.16750833f; 	selectivity[168] = 0.16850832f; 	selectivity[169] = 0.16950831f; 	
+			selectivity[170] = 0.17050830f; 	selectivity[171] = 0.17150829f; 	selectivity[172] = 0.17250828f; 	selectivity[173] = 0.17350827f; 	selectivity[174] = 0.17450826f; 	
+			selectivity[175] = 0.17550825f; 	selectivity[176] = 0.17650824f; 	selectivity[177] = 0.17750823f; 	selectivity[178] = 0.17850822f; 	selectivity[179] = 0.17950821f; 	
+			selectivity[180] = 0.18050820f; 	selectivity[181] = 0.18150819f; 	selectivity[182] = 0.18250818f; 	selectivity[183] = 0.18350817f; 	selectivity[184] = 0.18450816f; 	
+			selectivity[185] = 0.18550815f; 	selectivity[186] = 0.18650814f; 	selectivity[187] = 0.18750813f; 	selectivity[188] = 0.18850812f; 	selectivity[189] = 0.18950811f; 	
+			selectivity[190] = 0.19050810f; 	selectivity[191] = 0.19150809f; 	selectivity[192] = 0.19250808f; 	selectivity[193] = 0.19350807f; 	selectivity[194] = 0.19450806f; 	
+			selectivity[195] = 0.19550805f; 	selectivity[196] = 0.19650804f; 	selectivity[197] = 0.19750803f; 	selectivity[198] = 0.19850802f; 	selectivity[199] = 0.19950801f; 	
+			selectivity[200] = 0.20050800f; 	selectivity[201] = 0.20150799f; 	selectivity[202] = 0.20250798f; 	selectivity[203] = 0.20350797f; 	selectivity[204] = 0.20450796f; 	
+			selectivity[205] = 0.20550795f; 	selectivity[206] = 0.20650794f; 	selectivity[207] = 0.20750793f; 	selectivity[208] = 0.20850792f; 	selectivity[209] = 0.20950791f; 	
+			selectivity[210] = 0.21050790f; 	selectivity[211] = 0.21150789f; 	selectivity[212] = 0.21250788f; 	selectivity[213] = 0.21350787f; 	selectivity[214] = 0.21450786f; 	
+			selectivity[215] = 0.21550785f; 	selectivity[216] = 0.21650784f; 	selectivity[217] = 0.21750783f; 	selectivity[218] = 0.21850782f; 	selectivity[219] = 0.21950781f; 	
+			selectivity[220] = 0.22050780f; 	selectivity[221] = 0.22150779f; 	selectivity[222] = 0.22250778f; 	selectivity[223] = 0.22350777f; 	selectivity[224] = 0.22450776f; 	
+			selectivity[225] = 0.22550775f; 	selectivity[226] = 0.22650774f; 	selectivity[227] = 0.22750773f; 	selectivity[228] = 0.22850772f; 	selectivity[229] = 0.22950771f; 	
+			selectivity[230] = 0.23050770f; 	selectivity[231] = 0.23150769f; 	selectivity[232] = 0.23250768f; 	selectivity[233] = 0.23350767f; 	selectivity[234] = 0.23450766f; 	
+			selectivity[235] = 0.23550765f; 	selectivity[236] = 0.23650764f; 	selectivity[237] = 0.23750763f; 	selectivity[238] = 0.23850762f; 	selectivity[239] = 0.23950761f; 	
+			selectivity[240] = 0.24050760f; 	selectivity[241] = 0.24150759f; 	selectivity[242] = 0.24250758f; 	selectivity[243] = 0.24350757f; 	selectivity[244] = 0.24450756f; 	
+			selectivity[245] = 0.24550755f; 	selectivity[246] = 0.24650754f; 	selectivity[247] = 0.24750753f; 	selectivity[248] = 0.24850752f; 	selectivity[249] = 0.24950751f; 	
+			selectivity[250] = 0.25050750f; 	selectivity[251] = 0.25150749f; 	selectivity[252] = 0.25250748f; 	selectivity[253] = 0.25350747f; 	selectivity[254] = 0.25450746f; 	
+			selectivity[255] = 0.25550745f; 	selectivity[256] = 0.25650744f; 	selectivity[257] = 0.25750743f; 	selectivity[258] = 0.25850742f; 	selectivity[259] = 0.25950741f; 	
+			selectivity[260] = 0.26050740f; 	selectivity[261] = 0.26150739f; 	selectivity[262] = 0.26250738f; 	selectivity[263] = 0.26350737f; 	selectivity[264] = 0.26450736f; 	
+			selectivity[265] = 0.26550735f; 	selectivity[266] = 0.26650734f; 	selectivity[267] = 0.26750733f; 	selectivity[268] = 0.26850732f; 	selectivity[269] = 0.26950731f; 	
+			selectivity[270] = 0.27050730f; 	selectivity[271] = 0.27150729f; 	selectivity[272] = 0.27250728f; 	selectivity[273] = 0.27350727f; 	selectivity[274] = 0.27450726f; 	
+			selectivity[275] = 0.27550725f; 	selectivity[276] = 0.27650724f; 	selectivity[277] = 0.27750723f; 	selectivity[278] = 0.27850722f; 	selectivity[279] = 0.27950721f; 	
+			selectivity[280] = 0.28050720f; 	selectivity[281] = 0.28150719f; 	selectivity[282] = 0.28250718f; 	selectivity[283] = 0.28350717f; 	selectivity[284] = 0.28450716f; 	
+			selectivity[285] = 0.28550715f; 	selectivity[286] = 0.28650714f; 	selectivity[287] = 0.28750713f; 	selectivity[288] = 0.28850712f; 	selectivity[289] = 0.28950711f; 	
+			selectivity[290] = 0.29050710f; 	selectivity[291] = 0.29150709f; 	selectivity[292] = 0.29250708f; 	selectivity[293] = 0.29350707f; 	selectivity[294] = 0.29450706f; 	
+			selectivity[295] = 0.29550705f; 	selectivity[296] = 0.29650704f; 	selectivity[297] = 0.29750703f; 	selectivity[298] = 0.29850702f; 	selectivity[299] = 0.29950701f; 	
+			selectivity[300] = 0.30050700f; 	selectivity[301] = 0.30150699f; 	selectivity[302] = 0.30250698f; 	selectivity[303] = 0.30350697f; 	selectivity[304] = 0.30450696f; 	
+			selectivity[305] = 0.30550695f; 	selectivity[306] = 0.30650694f; 	selectivity[307] = 0.30750693f; 	selectivity[308] = 0.30850692f; 	selectivity[309] = 0.30950691f; 	
+			selectivity[310] = 0.31050690f; 	selectivity[311] = 0.31150689f; 	selectivity[312] = 0.31250688f; 	selectivity[313] = 0.31350687f; 	selectivity[314] = 0.31450686f; 	
+			selectivity[315] = 0.31550685f; 	selectivity[316] = 0.31650684f; 	selectivity[317] = 0.31750683f; 	selectivity[318] = 0.31850682f; 	selectivity[319] = 0.31950681f; 	
+			selectivity[320] = 0.32050680f; 	selectivity[321] = 0.32150679f; 	selectivity[322] = 0.32250678f; 	selectivity[323] = 0.32350677f; 	selectivity[324] = 0.32450676f; 	
+			selectivity[325] = 0.32550675f; 	selectivity[326] = 0.32650674f; 	selectivity[327] = 0.32750673f; 	selectivity[328] = 0.32850672f; 	selectivity[329] = 0.32950671f; 	
+			selectivity[330] = 0.33050670f; 	selectivity[331] = 0.33150669f; 	selectivity[332] = 0.33250668f; 	selectivity[333] = 0.33350667f; 	selectivity[334] = 0.33450666f; 	
+			selectivity[335] = 0.33550665f; 	selectivity[336] = 0.33650664f; 	selectivity[337] = 0.33750663f; 	selectivity[338] = 0.33850662f; 	selectivity[339] = 0.33950661f; 	
+			selectivity[340] = 0.34050660f; 	selectivity[341] = 0.34150659f; 	selectivity[342] = 0.34250658f; 	selectivity[343] = 0.34350657f; 	selectivity[344] = 0.34450656f; 	
+			selectivity[345] = 0.34550655f; 	selectivity[346] = 0.34650654f; 	selectivity[347] = 0.34750653f; 	selectivity[348] = 0.34850652f; 	selectivity[349] = 0.34950651f; 	
+			selectivity[350] = 0.35050650f; 	selectivity[351] = 0.35150649f; 	selectivity[352] = 0.35250648f; 	selectivity[353] = 0.35350647f; 	selectivity[354] = 0.35450646f; 	
+			selectivity[355] = 0.35550645f; 	selectivity[356] = 0.35650644f; 	selectivity[357] = 0.35750643f; 	selectivity[358] = 0.35850642f; 	selectivity[359] = 0.35950641f; 	
+			selectivity[360] = 0.36050640f; 	selectivity[361] = 0.36150639f; 	selectivity[362] = 0.36250638f; 	selectivity[363] = 0.36350637f; 	selectivity[364] = 0.36450636f; 	
+			selectivity[365] = 0.36550635f; 	selectivity[366] = 0.36650634f; 	selectivity[367] = 0.36750633f; 	selectivity[368] = 0.36850632f; 	selectivity[369] = 0.36950631f; 	
+			selectivity[370] = 0.37050630f; 	selectivity[371] = 0.37150629f; 	selectivity[372] = 0.37250628f; 	selectivity[373] = 0.37350627f; 	selectivity[374] = 0.37450626f; 	
+			selectivity[375] = 0.37550625f; 	selectivity[376] = 0.37650624f; 	selectivity[377] = 0.37750623f; 	selectivity[378] = 0.37850622f; 	selectivity[379] = 0.37950621f; 	
+			selectivity[380] = 0.38050620f; 	selectivity[381] = 0.38150619f; 	selectivity[382] = 0.38250618f; 	selectivity[383] = 0.38350617f; 	selectivity[384] = 0.38450616f; 	
+			selectivity[385] = 0.38550615f; 	selectivity[386] = 0.38650614f; 	selectivity[387] = 0.38750613f; 	selectivity[388] = 0.38850612f; 	selectivity[389] = 0.38950611f; 	
+			selectivity[390] = 0.39050610f; 	selectivity[391] = 0.39150609f; 	selectivity[392] = 0.39250608f; 	selectivity[393] = 0.39350607f; 	selectivity[394] = 0.39450606f; 	
+			selectivity[395] = 0.39550605f; 	selectivity[396] = 0.39650604f; 	selectivity[397] = 0.39750603f; 	selectivity[398] = 0.39850602f; 	selectivity[399] = 0.39950601f; 	
+			selectivity[400] = 0.40050600f; 	selectivity[401] = 0.40150599f; 	selectivity[402] = 0.40250598f; 	selectivity[403] = 0.40350597f; 	selectivity[404] = 0.40450596f; 	
+			selectivity[405] = 0.40550595f; 	selectivity[406] = 0.40650594f; 	selectivity[407] = 0.40750593f; 	selectivity[408] = 0.40850592f; 	selectivity[409] = 0.40950591f; 	
+			selectivity[410] = 0.41050590f; 	selectivity[411] = 0.41150589f; 	selectivity[412] = 0.41250588f; 	selectivity[413] = 0.41350587f; 	selectivity[414] = 0.41450586f; 	
+			selectivity[415] = 0.41550585f; 	selectivity[416] = 0.41650584f; 	selectivity[417] = 0.41750583f; 	selectivity[418] = 0.41850582f; 	selectivity[419] = 0.41950581f; 	
+			selectivity[420] = 0.42050580f; 	selectivity[421] = 0.42150579f; 	selectivity[422] = 0.42250578f; 	selectivity[423] = 0.42350577f; 	selectivity[424] = 0.42450576f; 	
+			selectivity[425] = 0.42550575f; 	selectivity[426] = 0.42650574f; 	selectivity[427] = 0.42750573f; 	selectivity[428] = 0.42850572f; 	selectivity[429] = 0.42950571f; 	
+			selectivity[430] = 0.43050570f; 	selectivity[431] = 0.43150569f; 	selectivity[432] = 0.43250568f; 	selectivity[433] = 0.43350567f; 	selectivity[434] = 0.43450566f; 	
+			selectivity[435] = 0.43550565f; 	selectivity[436] = 0.43650564f; 	selectivity[437] = 0.43750563f; 	selectivity[438] = 0.43850562f; 	selectivity[439] = 0.43950561f; 	
+			selectivity[440] = 0.44050560f; 	selectivity[441] = 0.44150559f; 	selectivity[442] = 0.44250558f; 	selectivity[443] = 0.44350557f; 	selectivity[444] = 0.44450556f; 	
+			selectivity[445] = 0.44550555f; 	selectivity[446] = 0.44650554f; 	selectivity[447] = 0.44750553f; 	selectivity[448] = 0.44850552f; 	selectivity[449] = 0.44950551f; 	
+			selectivity[450] = 0.45050550f; 	selectivity[451] = 0.45150549f; 	selectivity[452] = 0.45250548f; 	selectivity[453] = 0.45350547f; 	selectivity[454] = 0.45450546f; 	
+			selectivity[455] = 0.45550545f; 	selectivity[456] = 0.45650544f; 	selectivity[457] = 0.45750543f; 	selectivity[458] = 0.45850542f; 	selectivity[459] = 0.45950541f; 	
+			selectivity[460] = 0.46050540f; 	selectivity[461] = 0.46150539f; 	selectivity[462] = 0.46250538f; 	selectivity[463] = 0.46350537f; 	selectivity[464] = 0.46450536f; 	
+			selectivity[465] = 0.46550535f; 	selectivity[466] = 0.46650534f; 	selectivity[467] = 0.46750533f; 	selectivity[468] = 0.46850532f; 	selectivity[469] = 0.46950531f; 	
+			selectivity[470] = 0.47050530f; 	selectivity[471] = 0.47150529f; 	selectivity[472] = 0.47250528f; 	selectivity[473] = 0.47350527f; 	selectivity[474] = 0.47450526f; 	
+			selectivity[475] = 0.47550525f; 	selectivity[476] = 0.47650524f; 	selectivity[477] = 0.47750523f; 	selectivity[478] = 0.47850522f; 	selectivity[479] = 0.47950521f; 	
+			selectivity[480] = 0.48050520f; 	selectivity[481] = 0.48150519f; 	selectivity[482] = 0.48250518f; 	selectivity[483] = 0.48350517f; 	selectivity[484] = 0.48450516f; 	
+			selectivity[485] = 0.48550515f; 	selectivity[486] = 0.48650514f; 	selectivity[487] = 0.48750513f;	selectivity[488] = 0.48850512f; 	selectivity[489] = 0.48950511f; 	
+			selectivity[490] = 0.49050510f; 	selectivity[491] = 0.49150509f; 	selectivity[492] = 0.49250508f; 	selectivity[493] = 0.49350507f; 	selectivity[494] = 0.49450506f; 	
+			selectivity[495] = 0.49550505f; 	selectivity[496] = 0.49650504f; 	selectivity[497] = 0.49750503f; 	selectivity[498] = 0.49850502f; 	selectivity[499] = 0.49950501f; 	
+			selectivity[500] = 0.50050500f; 	selectivity[501] = 0.50150499f; 	selectivity[502] = 0.50250498f; 	selectivity[503] = 0.50350497f; 	selectivity[504] = 0.50450496f; 	
+			selectivity[505] = 0.50550495f; 	selectivity[506] = 0.50650494f; 	selectivity[507] = 0.50750493f; 	selectivity[508] = 0.50850492f; 	selectivity[509] = 0.50950491f; 	
+			selectivity[510] = 0.51050490f; 	selectivity[511] = 0.51150489f; 	selectivity[512] = 0.51250488f; 	selectivity[513] = 0.51350487f; 	selectivity[514] = 0.51450486f; 	
+			selectivity[515] = 0.51550485f; 	selectivity[516] = 0.51650484f; 	selectivity[517] = 0.51750483f; 	selectivity[518] = 0.51850482f; 	selectivity[519] = 0.51950481f; 	
+			selectivity[520] = 0.52050480f; 	selectivity[521] = 0.52150479f; 	selectivity[522] = 0.52250478f; 	selectivity[523] = 0.52350477f; 	selectivity[524] = 0.52450476f; 	
+			selectivity[525] = 0.52550475f; 	selectivity[526] = 0.52650474f; 	selectivity[527] = 0.52750473f; 	selectivity[528] = 0.52850472f; 	selectivity[529] = 0.52950471f; 	
+			selectivity[530] = 0.53050470f; 	selectivity[531] = 0.53150469f; 	selectivity[532] = 0.53250468f; 	selectivity[533] = 0.53350467f; 	selectivity[534] = 0.53450466f; 	
+			selectivity[535] = 0.53550465f; 	selectivity[536] = 0.53650464f; 	selectivity[537] = 0.53750463f; 	selectivity[538] = 0.53850462f; 	selectivity[539] = 0.53950461f; 	
+			selectivity[540] = 0.54050460f; 	selectivity[541] = 0.54150459f; 	selectivity[542] = 0.54250458f; 	selectivity[543] = 0.54350457f; 	selectivity[544] = 0.54450456f; 	
+			selectivity[545] = 0.54550455f; 	selectivity[546] = 0.54650454f; 	selectivity[547] = 0.54750453f; 	selectivity[548] = 0.54850452f; 	selectivity[549] = 0.54950451f; 	
+			selectivity[550] = 0.55050450f; 	selectivity[551] = 0.55150449f; 	selectivity[552] = 0.55250448f; 	selectivity[553] = 0.55350447f; 	selectivity[554] = 0.55450445f; 	
+			selectivity[555] = 0.55550444f; 	selectivity[556] = 0.55650443f; 	selectivity[557] = 0.55750442f; 	selectivity[558] = 0.55850441f; 	selectivity[559] = 0.55950440f; 	
+			selectivity[560] = 0.56050439f; 	selectivity[561] = 0.56150438f; 	selectivity[562] = 0.56250437f; 	selectivity[563] = 0.56350436f; 	selectivity[564] = 0.56450435f; 	
+			selectivity[565] = 0.56550434f; 	selectivity[566] = 0.56650433f; 	selectivity[567] = 0.56750432f; 	selectivity[568] = 0.56850431f; 	selectivity[569] = 0.56950430f; 	
+			selectivity[570] = 0.57050429f; 	selectivity[571] = 0.57150428f; 	selectivity[572] = 0.57250427f; 	selectivity[573] = 0.57350426f; 	selectivity[574] = 0.57450425f; 	
+			selectivity[575] = 0.57550424f; 	selectivity[576] = 0.57650423f; 	selectivity[577] = 0.57750422f; 	selectivity[578] = 0.57850421f; 	selectivity[579] = 0.57950420f; 	
+			selectivity[580] = 0.58050419f; 	selectivity[581] = 0.58150418f; 	selectivity[582] = 0.58250417f; 	selectivity[583] = 0.58350416f; 	selectivity[584] = 0.58450415f; 	
+			selectivity[585] = 0.58550414f; 	selectivity[586] = 0.58650413f; 	selectivity[587] = 0.58750412f; 	selectivity[588] = 0.58850411f; 	selectivity[589] = 0.58950410f; 	
+			selectivity[590] = 0.59050409f; 	selectivity[591] = 0.59150408f; 	selectivity[592] = 0.59250407f; 	selectivity[593] = 0.59350406f; 	selectivity[594] = 0.59450405f; 	
+			selectivity[595] = 0.59550404f; 	selectivity[596] = 0.59650403f; 	selectivity[597] = 0.59750402f; 	selectivity[598] = 0.59850401f; 	selectivity[599] = 0.59950400f; 	
+			selectivity[600] = 0.60050399f; 	selectivity[601] = 0.60150398f; 	selectivity[602] = 0.60250397f; 	selectivity[603] = 0.60350396f; 	selectivity[604] = 0.60450395f; 	
+			selectivity[605] = 0.60550394f; 	selectivity[606] = 0.60650393f; 	selectivity[607] = 0.60750392f; 	selectivity[608] = 0.60850391f; 	selectivity[609] = 0.60950390f; 	
+			selectivity[610] = 0.61050389f; 	selectivity[611] = 0.61150388f; 	selectivity[612] = 0.61250387f; 	selectivity[613] = 0.61350386f; 	selectivity[614] = 0.61450385f; 	
+			selectivity[615] = 0.61550384f; 	selectivity[616] = 0.61650383f; 	selectivity[617] = 0.61750382f; 	selectivity[618] = 0.61850381f; 	selectivity[619] = 0.61950380f; 	
+			selectivity[620] = 0.62050379f; 	selectivity[621] = 0.62150378f; 	selectivity[622] = 0.62250377f; 	selectivity[623] = 0.62350376f; 	selectivity[624] = 0.62450375f; 	
+			selectivity[625] = 0.62550374f; 	selectivity[626] = 0.62650373f; 	selectivity[627] = 0.62750372f; 	selectivity[628] = 0.62850371f; 	selectivity[629] = 0.62950370f; 	
+			selectivity[630] = 0.63050369f; 	selectivity[631] = 0.63150368f; 	selectivity[632] = 0.63250367f; 	selectivity[633] = 0.63350366f; 	selectivity[634] = 0.63450365f; 	
+			selectivity[635] = 0.63550364f; 	selectivity[636] = 0.63650363f; 	selectivity[637] = 0.63750362f; 	selectivity[638] = 0.63850361f; 	selectivity[639] = 0.63950360f; 	
+			selectivity[640] = 0.64050359f; 	selectivity[641] = 0.64150358f; 	selectivity[642] = 0.64250357f; 	selectivity[643] = 0.64350356f; 	selectivity[644] = 0.64450355f; 	
+			selectivity[645] = 0.64550354f; 	selectivity[646] = 0.64650353f; 	selectivity[647] = 0.64750352f; 	selectivity[648] = 0.64850351f; 	selectivity[649] = 0.64950350f; 	
+			selectivity[650] = 0.65050349f; 	selectivity[651] = 0.65150348f; 	selectivity[652] = 0.65250347f; 	selectivity[653] = 0.65350346f; 	selectivity[654] = 0.65450345f; 	
+			selectivity[655] = 0.65550344f; 	selectivity[656] = 0.65650343f; 	selectivity[657] = 0.65750342f; 	selectivity[658] = 0.65850341f; 	selectivity[659] = 0.65950340f; 	
+			selectivity[660] = 0.66050339f; 	selectivity[661] = 0.66150338f; 	selectivity[662] = 0.66250337f; 	selectivity[663] = 0.66350336f; 	selectivity[664] = 0.66450335f; 	
+			selectivity[665] = 0.66550334f; 	selectivity[666] = 0.66650333f; 	selectivity[667] = 0.66750332f; 	selectivity[668] = 0.66850331f; 	selectivity[669] = 0.66950330f; 	
+			selectivity[670] = 0.67050329f; 	selectivity[671] = 0.67150328f; 	selectivity[672] = 0.67250327f; 	selectivity[673] = 0.67350326f; 	selectivity[674] = 0.67450325f; 	
+			selectivity[675] = 0.67550324f; 	selectivity[676] = 0.67650323f; 	selectivity[677] = 0.67750322f; 	selectivity[678] = 0.67850321f; 	selectivity[679] = 0.67950320f; 	
+			selectivity[680] = 0.68050319f; 	selectivity[681] = 0.68150318f; 	selectivity[682] = 0.68250317f; 	selectivity[683] = 0.68350316f; 	selectivity[684] = 0.68450315f; 	
+			selectivity[685] = 0.68550314f; 	selectivity[686] = 0.68650313f; 	selectivity[687] = 0.68750312f; 	selectivity[688] = 0.68850311f; 	selectivity[689] = 0.68950310f; 	
+			selectivity[690] = 0.69050309f; 	selectivity[691] = 0.69150308f; 	selectivity[692] = 0.69250307f; 	selectivity[693] = 0.69350306f; 	selectivity[694] = 0.69450305f; 	
+			selectivity[695] = 0.69550304f; 	selectivity[696] = 0.69650303f; 	selectivity[697] = 0.69750302f; 	selectivity[698] = 0.69850301f; 	selectivity[699] = 0.69950300f; 	
+			selectivity[700] = 0.70050299f; 	selectivity[701] = 0.70150298f; 	selectivity[702] = 0.70250297f; 	selectivity[703] = 0.70350296f; 	selectivity[704] = 0.70450295f; 	
+			selectivity[705] = 0.70550294f; 	selectivity[706] = 0.70650293f; 	selectivity[707] = 0.70750292f; 	selectivity[708] = 0.70850291f; 	selectivity[709] = 0.70950290f; 	
+			selectivity[710] = 0.71050289f; 	selectivity[711] = 0.71150288f; 	selectivity[712] = 0.71250287f; 	selectivity[713] = 0.71350286f; 	selectivity[714] = 0.71450285f; 	
+			selectivity[715] = 0.71550284f; 	selectivity[716] = 0.71650283f; 	selectivity[717] = 0.71750282f; 	selectivity[718] = 0.71850281f; 	selectivity[719] = 0.71950280f; 	
+			selectivity[720] = 0.72050279f; 	selectivity[721] = 0.72150278f; 	selectivity[722] = 0.72250277f; 	selectivity[723] = 0.72350276f; 	selectivity[724] = 0.72450275f; 	
+			selectivity[725] = 0.72550274f; 	selectivity[726] = 0.72650273f; 	selectivity[727] = 0.72750272f; 	selectivity[728] = 0.72850271f; 	selectivity[729] = 0.72950270f; 	
+			selectivity[730] = 0.73050269f; 	selectivity[731] = 0.73150268f; 	selectivity[732] = 0.73250267f; 	selectivity[733] = 0.73350266f; 	selectivity[734] = 0.73450265f; 	
+			selectivity[735] = 0.73550264f; 	selectivity[736] = 0.73650263f; 	selectivity[737] = 0.73750262f; 	selectivity[738] = 0.73850261f; 	selectivity[739] = 0.73950260f; 	
+			selectivity[740] = 0.74050259f; 	selectivity[741] = 0.74150258f; 	selectivity[742] = 0.74250257f; 	selectivity[743] = 0.74350256f; 	selectivity[744] = 0.74450255f; 	
+			selectivity[745] = 0.74550254f; 	selectivity[746] = 0.74650253f; 	selectivity[747] = 0.74750252f; 	selectivity[748] = 0.74850251f; 	selectivity[749] = 0.74950250f; 	
+			selectivity[750] = 0.75050249f; 	selectivity[751] = 0.75150248f; 	selectivity[752] = 0.75250247f; 	selectivity[753] = 0.75350246f; 	selectivity[754] = 0.75450245f; 	
+			selectivity[755] = 0.75550244f; 	selectivity[756] = 0.75650243f; 	selectivity[757] = 0.75750242f; 	selectivity[758] = 0.75850241f; 	selectivity[759] = 0.75950240f; 	
+			selectivity[760] = 0.76050239f; 	selectivity[761] = 0.76150238f; 	selectivity[762] = 0.76250237f; 	selectivity[763] = 0.76350236f; 	selectivity[764] = 0.76450235f; 	
+			selectivity[765] = 0.76550234f; 	selectivity[766] = 0.76650233f; 	selectivity[767] = 0.76750232f; 	selectivity[768] = 0.76850231f; 	selectivity[769] = 0.76950230f; 	
+			selectivity[770] = 0.77050229f; 	selectivity[771] = 0.77150228f; 	selectivity[772] = 0.77250227f; 	selectivity[773] = 0.77350226f; 	selectivity[774] = 0.77450225f; 	
+			selectivity[775] = 0.77550224f; 	selectivity[776] = 0.77650223f; 	selectivity[777] = 0.77750222f; 	selectivity[778] = 0.77850221f; 	selectivity[779] = 0.77950220f; 	
+			selectivity[780] = 0.78050219f; 	selectivity[781] = 0.78150218f; 	selectivity[782] = 0.78250217f; 	selectivity[783] = 0.78350216f; 	selectivity[784] = 0.78450215f; 	
+			selectivity[785] = 0.78550214f; 	selectivity[786] = 0.78650213f; 	selectivity[787] = 0.78750212f; 	selectivity[788] = 0.78850211f; 	selectivity[789] = 0.78950210f; 	
+			selectivity[790] = 0.79050209f; 	selectivity[791] = 0.79150208f; 	selectivity[792] = 0.79250207f; 	selectivity[793] = 0.79350206f; 	selectivity[794] = 0.79450205f; 	
+			selectivity[795] = 0.79550204f; 	selectivity[796] = 0.79650203f; 	selectivity[797] = 0.79750202f; 	selectivity[798] = 0.79850201f; 	selectivity[799] = 0.79950200f; 	
+			selectivity[800] = 0.80050199f; 	selectivity[801] = 0.80150198f; 	selectivity[802] = 0.80250197f; 	selectivity[803] = 0.80350196f; 	selectivity[804] = 0.80450195f; 	
+			selectivity[805] = 0.80550194f; 	selectivity[806] = 0.80650193f; 	selectivity[807] = 0.80750192f; 	selectivity[808] = 0.80850191f; 	selectivity[809] = 0.80950190f; 	
+			selectivity[810] = 0.81050189f; 	selectivity[811] = 0.81150188f; 	selectivity[812] = 0.81250187f; 	selectivity[813] = 0.81350186f; 	selectivity[814] = 0.81450185f; 	
+			selectivity[815] = 0.81550184f; 	selectivity[816] = 0.81650183f; 	selectivity[817] = 0.81750182f; 	selectivity[818] = 0.81850181f; 	selectivity[819] = 0.81950180f; 	
+			selectivity[820] = 0.82050179f; 	selectivity[821] = 0.82150178f; 	selectivity[822] = 0.82250177f; 	selectivity[823] = 0.82350176f; 	selectivity[824] = 0.82450175f; 	
+			selectivity[825] = 0.82550174f; 	selectivity[826] = 0.82650173f; 	selectivity[827] = 0.82750172f; 	selectivity[828] = 0.82850171f; 	selectivity[829] = 0.82950170f; 	
+			selectivity[830] = 0.83050169f; 	selectivity[831] = 0.83150168f; 	selectivity[832] = 0.83250167f; 	selectivity[833] = 0.83350166f; 	selectivity[834] = 0.83450165f; 	
+			selectivity[835] = 0.83550164f; 	selectivity[836] = 0.83650163f; 	selectivity[837] = 0.83750162f; 	selectivity[838] = 0.83850161f; 	selectivity[839] = 0.83950160f; 	
+			selectivity[840] = 0.84050159f; 	selectivity[841] = 0.84150158f; 	selectivity[842] = 0.84250157f; 	selectivity[843] = 0.84350156f; 	selectivity[844] = 0.84450155f; 	
+			selectivity[845] = 0.84550154f; 	selectivity[846] = 0.84650153f; 	selectivity[847] = 0.84750152f; 	selectivity[848] = 0.84850151f; 	selectivity[849] = 0.84950150f; 	
+			selectivity[850] = 0.85050149f; 	selectivity[851] = 0.85150148f; 	selectivity[852] = 0.85250147f; 	selectivity[853] = 0.85350146f; 	selectivity[854] = 0.85450145f; 	
+			selectivity[855] = 0.85550144f; 	selectivity[856] = 0.85650143f; 	selectivity[857] = 0.85750142f; 	selectivity[858] = 0.85850141f; 	selectivity[859] = 0.85950140f; 	
+			selectivity[860] = 0.86050139f; 	selectivity[861] = 0.86150138f; 	selectivity[862] = 0.86250137f; 	selectivity[863] = 0.86350136f; 	selectivity[864] = 0.86450135f; 	
+			selectivity[865] = 0.86550134f; 	selectivity[866] = 0.86650133f; 	selectivity[867] = 0.86750132f; 	selectivity[868] = 0.86850131f; 	selectivity[869] = 0.86950130f; 	
+			selectivity[870] = 0.87050129f; 	selectivity[871] = 0.87150128f; 	selectivity[872] = 0.87250127f; 	selectivity[873] = 0.87350126f; 	selectivity[874] = 0.87450125f; 	
+			selectivity[875] = 0.87550124f; 	selectivity[876] = 0.87650123f; 	selectivity[877] = 0.87750122f; 	selectivity[878] = 0.87850121f; 	selectivity[879] = 0.87950120f; 	
+			selectivity[880] = 0.88050119f; 	selectivity[881] = 0.88150118f; 	selectivity[882] = 0.88250117f; 	selectivity[883] = 0.88350116f; 	selectivity[884] = 0.88450115f; 	
+			selectivity[885] = 0.88550114f; 	selectivity[886] = 0.88650113f; 	selectivity[887] = 0.88750112f; 	selectivity[888] = 0.88850111f; 	selectivity[889] = 0.88950110f; 	
+			selectivity[890] = 0.89050109f; 	selectivity[891] = 0.89150108f; 	selectivity[892] = 0.89250107f; 	selectivity[893] = 0.89350106f; 	selectivity[894] = 0.89450105f;	
+			selectivity[895] = 0.89550104f; 	selectivity[896] = 0.89650103f; 	selectivity[897] = 0.89750102f; 	selectivity[898] = 0.89850101f; 	selectivity[899] = 0.89950100f; 	
+			selectivity[900] = 0.90050099f; 	selectivity[901] = 0.90150098f; 	selectivity[902] = 0.90250097f; 	selectivity[903] = 0.90350096f; 	selectivity[904] = 0.90450095f; 	
+			selectivity[905] = 0.90550094f; 	selectivity[906] = 0.90650093f; 	selectivity[907] = 0.90750092f; 	selectivity[908] = 0.90850091f; 	selectivity[909] = 0.90950090f; 	
+			selectivity[910] = 0.91050089f; 	selectivity[911] = 0.91150088f; 	selectivity[912] = 0.91250087f; 	selectivity[913] = 0.91350086f; 	selectivity[914] = 0.91450085f; 	
+			selectivity[915] = 0.91550084f; 	selectivity[916] = 0.91650083f; 	selectivity[917] = 0.91750082f; 	selectivity[918] = 0.91850081f; 	selectivity[919] = 0.91950080f; 	
+			selectivity[920] = 0.92050079f; 	selectivity[921] = 0.92150078f; 	selectivity[922] = 0.92250077f; 	selectivity[923] = 0.92350076f; 	selectivity[924] = 0.92450075f; 	
+			selectivity[925] = 0.92550074f; 	selectivity[926] = 0.92650073f; 	selectivity[927] = 0.92750072f; 	selectivity[928] = 0.92850071f; 	selectivity[929] = 0.92950070f; 	
+			selectivity[930] = 0.93050069f; 	selectivity[931] = 0.93150068f; 	selectivity[932] = 0.93250067f; 	selectivity[933] = 0.93350066f; 	selectivity[934] = 0.93450065f; 	
+			selectivity[935] = 0.93550064f; 	selectivity[936] = 0.93650063f; 	selectivity[937] = 0.93750062f; 	selectivity[938] = 0.93850061f; 	selectivity[939] = 0.93950060f; 	
+			selectivity[940] = 0.94050059f; 	selectivity[941] = 0.94150058f; 	selectivity[942] = 0.94250057f; 	selectivity[943] = 0.94350056f; 	selectivity[944] = 0.94450055f; 	
+			selectivity[945] = 0.94550054f; 	selectivity[946] = 0.94650053f; 	selectivity[947] = 0.94750052f; 	selectivity[948] = 0.94850051f; 	selectivity[949] = 0.94950050f; 	
+			selectivity[950] = 0.95050049f; 	selectivity[951] = 0.95150048f; 	selectivity[952] = 0.95250047f; 	selectivity[953] = 0.95350046f; 	selectivity[954] = 0.95450045f; 	
+			selectivity[955] = 0.95550044f; 	selectivity[956] = 0.95650043f; 	selectivity[957] = 0.95750042f; 	selectivity[958] = 0.95850041f; 	selectivity[959] = 0.95950040f; 	
+			selectivity[960] = 0.96050039f; 	selectivity[961] = 0.96150038f; 	selectivity[962] = 0.96250037f; 	selectivity[963] = 0.96350036f; 	selectivity[964] = 0.96450035f; 	
+			selectivity[965] = 0.96550034f; 	selectivity[966] = 0.96650033f; 	selectivity[967] = 0.96750032f; 	selectivity[968] = 0.96850031f; 	selectivity[969] = 0.96950030f; 	
+			selectivity[970] = 0.97050029f; 	selectivity[971] = 0.97150028f; 	selectivity[972] = 0.97250027f; 	selectivity[973] = 0.97350026f; 	selectivity[974] = 0.97450025f; 	
+			selectivity[975] = 0.97550024f; 	selectivity[976] = 0.97650023f; 	selectivity[977] = 0.97750022f; 	selectivity[978] = 0.97850021f; 	selectivity[979] = 0.97950020f; 	
+			selectivity[980] = 0.98050019f; 	selectivity[981] = 0.98150018f; 	selectivity[982] = 0.98250017f; 	selectivity[983] = 0.98350016f; 	selectivity[984] = 0.98450015f; 	
+			selectivity[985] = 0.98550014f; 	selectivity[986] = 0.98650013f; 	selectivity[987] = 0.98750012f; 	selectivity[988] = 0.98850011f; 	selectivity[989] = 0.98950010f; 	
+			selectivity[990] = 0.99050009f; 	selectivity[991] = 0.99150008f; 	selectivity[992] = 0.99250007f; 	selectivity[993] = 0.99350006f; 	selectivity[994] = 0.99450005f; 	
+			selectivity[995] = 0.99550004f; 	selectivity[996] = 0.99650003f; 	selectivity[997] = 0.99750002f; 	selectivity[998] = 0.99850001f; 	selectivity[999] = 0.99950000f; 	
 
 		}
 
@@ -4782,6 +4897,8 @@ public OptSB(){}
 	/*
 	 * Populates the selectivity Matrix according to the input given
 	 * */
+	
+	/*
 	void loadSelectivity_SpillBound()
 	{
 		String funName = "loadSelectivity: ";
@@ -4918,7 +5035,7 @@ public OptSB(){}
 		//			System.out.println("\t"+selectivity[i]);
 	}
 
-
+*/
 	private ADiagramPacket getGDP(File file) {
 		ADiagramPacket gdp = null;
 		FileInputStream fis;
@@ -5716,7 +5833,7 @@ class point_generic implements Serializable
 	int p_no;
 	double cost;
 	static String plansPath;
-	int idx;
+	int group_id;
 	int [] dim_values;
 	float [] dim_sel_values;
 	
@@ -5734,11 +5851,11 @@ class point_generic implements Serializable
 		this.percent_err = pg.percent_err;
 		this.order = new ArrayList<Integer>();
 		this.storedOrder = new ArrayList<Integer>();
-		for(this.idx=0;this.idx < pg.order.size();this.idx++){
-			this.order.add(pg.order.get(this.idx));
+		for(int i=0; i  < pg.order.size();i++){
+			this.order.add(pg.order.get(i));
 		}
-		for(this.idx=0;this.idx < pg.storedOrder.size();this.idx++){
-			this.storedOrder.add(pg.storedOrder.get(this.idx));
+		for( int i=0;i < pg.storedOrder.size();i++){
+			this.storedOrder.add(pg.storedOrder.get(i));
 		}
 		this.value = pg.value;
 		this.p_no = pg.p_no;
@@ -5831,11 +5948,11 @@ class point_generic implements Serializable
 		//storedOrder = new ArrayList<Integer>(predicateOrder);	
 		this.order = new ArrayList<Integer>();
 		this.storedOrder = new ArrayList<Integer>();
-		for(this.idx=0;this.idx < predicateOrder.size();this.idx++){
-			this.order.add(predicateOrder.get(this.idx));
+		for(int i=0;i < predicateOrder.size();i++){
+			this.order.add(predicateOrder.get(i));
 		}
-		for(this.idx=0;this.idx < predicateOrder.size();this.idx++){
-			this.storedOrder.add(predicateOrder.get(this.idx));
+		for(int i=0;i < predicateOrder.size();i++){
+			this.storedOrder.add(predicateOrder.get(i));
 		}
 	}
 	
@@ -5855,12 +5972,12 @@ class point_generic implements Serializable
 		this.order = new ArrayList<Integer>();
 		this.storedOrder = new ArrayList<Integer>();
 		
-		for(this.idx=0;this.idx < predicateOrder.size();this.idx++){
-			this.order.add(predicateOrder.get(this.idx));
+		for(int i=0;i < predicateOrder.size();i++){
+			this.order.add(predicateOrder.get(i));
 		}
 		
-		for(this.idx=0;this.idx < predicateOrder.size();this.idx++){
-			this.storedOrder.add(predicateOrder.get(this.idx));
+		for(int i=0;i < predicateOrder.size();i++){
+			this.storedOrder.add(predicateOrder.get(i));
 		}
 	}
 
@@ -5878,6 +5995,9 @@ class point_generic implements Serializable
 		return dim_values[d];
 	}
 
+	public float get_selOfdimension(int d){
+		return dim_sel_values[d];
+	}
 	/*
 	 * get the plan number for this point
 	 */
@@ -6145,10 +6265,10 @@ class partition
 		{
 			i = dim_list[j];
 
-			if(OptSB.selectivity[p.get_dimension(i)] >= sel_max[i]){
+			if(p.dim_sel_values[i] >= sel_max[i]){
 			
 				//If it is strictly greater the existing points, then add only the new point, else append into the list
-				if(OptSB.selectivity[p.get_dimension(i)] > sel_max[i]){
+				if(p.dim_sel_values[i] > sel_max[i]){
 					if(points_max_local.containsKey(i))
 					{
 						points_max_local.remove(i);
@@ -6160,7 +6280,7 @@ class partition
 				}
 			//	}
 				points_max_local.get(i).add(p);
-				sel_max[i] = OptSB.selectivity[p.get_dimension(i)]; 
+				sel_max[i] = p.dim_sel_values[i]; 
 			}
 
 		}

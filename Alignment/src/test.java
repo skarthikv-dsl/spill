@@ -7,13 +7,14 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Vector;
 import java.util.concurrent.TimeUnit;
 
 import iisc.dsl.picasso.server.plan.Plan;
-import net.sourceforge.sizeof.SizeOf;
+//import net.sourceforge.sizeof.SizeOf;
 	
 public class test {
 
@@ -38,10 +39,13 @@ public class test {
 		System.out.println(arr);
 		
 		
+		obj.comparingTwoFloatArrays();
+		System.exit(0);
+		
 		obj.CheckifProcessRunning();
 		//obj.size_of_object();
 		
-		System.exit(0);
+		
 		//obj.arrayListMemoryTest();
 		//obj.staticMemoryTest();
 
@@ -78,6 +82,16 @@ public class test {
  
 	}
 	
+	private void comparingTwoFloatArrays() {
+		
+		float[] a1 = new float[] { 4.4444444f, 3.3f, 5.3f};
+	    float[] a2 = new float[] { 4.44444444f, 3.3f, 5.3f };
+
+	    System.out.println("Comparing two floats");
+	    System.out.println(Arrays.equals(a1, a2));
+		
+	}
+
 	public void CheckifProcessRunning() {
 		
 		// > /home/dsladmin/Srinivas/data/others/processKill
@@ -100,11 +114,11 @@ public class test {
 	}
 
 	private void size_of_object() {
-		SizeOf.skipStaticField(true); //java.sizeOf will not compute static fields
-		 SizeOf.skipFinalField(true); //java.sizeOf will not compute final fields
-		 //SizeOf.skipFlyweightObject(false); //java.sizeOf will not compute well-known flyweight objects
-		 //SizeOf.setMinSizeToLog(1024);
-		 System.out.println(SizeOf.humanReadable(SizeOf.deepSizeOf(new location())));
+//		SizeOf.skipStaticField(true); //java.sizeOf will not compute static fields
+//		 SizeOf.skipFinalField(true); //java.sizeOf will not compute final fields
+//		 //SizeOf.skipFlyweightObject(false); //java.sizeOf will not compute well-known flyweight objects
+//		 //SizeOf.setMinSizeToLog(1024);
+//		 System.out.println(SizeOf.humanReadable(SizeOf.deepSizeOf(new location())));
 		 
 	}
 	
