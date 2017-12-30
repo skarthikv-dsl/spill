@@ -3704,6 +3704,25 @@ class location implements Serializable
 		
 	}
 	
+	location(float arr[],  OptSB obj) throws  IOException, PicassoException{
+		
+		Connection conn = obj.conn;
+		dim_values = new float[dimension];
+		for(int i=0;i<dimension;i++){
+			dim_values[i] = roundToDouble(arr[i]);
+					//System.out.print(arr[i]+",");
+		}
+		//System.out.println();
+		try {
+			getPlan(conn);
+		} catch (SQLException e) {
+			
+			e.printStackTrace();
+		}
+		
+	}
+	
+	
 	location(float arr[], OfflinePB obj) throws  IOException, PicassoException{
 		
 		

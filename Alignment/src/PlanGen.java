@@ -81,7 +81,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 	static int num_of_usable_threads;
 	static boolean extra_locations = true;
 	static int no_extra_locs = 6;
-	static boolean only_apkt_gen = false; //required for only ess generation without both pcst (all plans cost) and plan structure storage 
+	static boolean only_apkt_gen = true; //required for only ess generation without both pcst (all plans cost) and plan structure storage 
 	//static DataValues [] data = new DataValues[totalPoints];
 	
 	public static void main(String[] args) throws IOException, PicassoException, SQLException {
