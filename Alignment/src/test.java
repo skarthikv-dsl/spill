@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.instrument.Instrumentation;
 import java.math.BigDecimal;
@@ -18,7 +19,7 @@ import iisc.dsl.picasso.server.plan.Plan;
 	
 public class test {
 
-	public static void main(String[] args) throws InterruptedException {
+	public static void main(String[] args) throws InterruptedException, IOException {
 		// TODO Auto-generated method stub
 
 		
@@ -39,8 +40,11 @@ public class test {
 		System.out.println(arr);
 		
 		
-		obj.comparingTwoFloatArrays();
+		obj.removingObjectsinArrayList();
+		
 		System.exit(0);
+		obj.comparingTwoFloatArrays();
+		
 		
 		obj.CheckifProcessRunning();
 		//obj.size_of_object();
@@ -82,6 +86,29 @@ public class test {
  
 	}
 	
+	public void removingObjectsinArrayList() throws IOException {
+		//soln: add @override and override the equals, hashcode method in point_generic class 
+		float [] arr = new float[3];
+		arr[0] = arr[1] = arr[2] = 1.0f;
+		ArrayList<Integer> al = new ArrayList<Integer>();
+		al.add(10);al.add(1);al.add(2);
+		point_generic p = new point_generic(arr,100,100.0f,al,al);
+		ArrayList<point_generic> pg_al = new ArrayList<point_generic>();
+		pg_al.add(p);
+		
+		arr[0] = arr[1] = arr[2] = 2.0f;
+		p = new point_generic(arr,100,100.0f,al,al);
+		pg_al.add(p);
+		
+		arr[0] = arr[1] = arr[2] = 3.0f;
+		p = new point_generic(arr,100,100.0f,al,al);
+		pg_al.add(p);
+		
+		arr[0] = arr[1] = arr[2] = 2.0f;
+		point_generic p_rem = new point_generic(arr,100,100.0f,al,al);
+		System.out.println(pg_al.indexOf(p_rem));
+	}
+
 	private void comparingTwoFloatArrays() {
 		
 		float[] a1 = new float[] { 4.4444444f, 3.3f, 5.3f};
@@ -340,8 +367,6 @@ public class test {
 
 	
 }
-
-
 
 
 

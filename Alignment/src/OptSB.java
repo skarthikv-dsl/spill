@@ -441,7 +441,7 @@ public OptSB(){}
 		opb.database_conn = obj.database_conn;
 		opb.apktPath = obj.apktPath;
 		
-		
+		assert((minimum_selectivity /selectivity[0] <= 1.01) || (selectivity[0]/minimum_selectivity <= 1.01)) : "minimum selectivity not matching with that of packet loaded";
 		
 		if(useCompletedQas)
 			obj.CompletedQas(apktPath);
@@ -595,17 +595,20 @@ public OptSB(){}
 		
 	{	
 		obj.conn = source.getConnection();
-		min_point = 0;
+		min_point = 10;
 		max_point = 100;
 		PrintWriter writer = new PrintWriter(apktPath+"TSB_logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
+			
+			
 		{
 //			if(j !=100004)
 //				continue;
 			if(print_flag || print_loop_flag)
 			{
 				 writer.println("Entering loop "+j);
+				 System.out.println("Entering loop "+j);
 			}
 			//		if(highSOqas.contains(new Integer(j)))
 			//			System.out.println("Interesting");
@@ -3246,7 +3249,7 @@ public OptSB(){}
 			
 			float var = minimum_selectivity;
 			while(true) {
-				if(var >= sel) {
+				if(var >= (1.01*sel)) {
 					break;
 				}
 				var = roundToDouble(var * beta);
@@ -3261,8 +3264,9 @@ public OptSB(){}
 				Iterator itr = ContourPointsMap.get(c).iterator();
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
-					if(p.dim_sel_values[learnt_dim] >= sel && p.dim_sel_values[learnt_dim] <= beta*sel)
-						assert (p.dim_sel_values[learnt_dim] <= 1.2*var) : " covering set does not seem correct"; //retained the point 
+					if(p.dim_sel_values[learnt_dim] >= sel && p.dim_sel_values[learnt_dim] <= beta*sel){
+						assert (p.dim_sel_values[learnt_dim] <= 1.2*var) : " covering set does not seem correct (var) "+(var)+" p.dim_sel_values[learnt_dim] = "+p.dim_sel_values[learnt_dim]+ " and sel = "+sel+" beta = "+beta; //retained the point
+					}
 					else	{
 						//add the index of the points to be removed
 						printSelectivityCost(p.dim_sel_values, -1);
@@ -3280,34 +3284,36 @@ public OptSB(){}
 		else{
 			
 			
-			
+			HashMap<Integer,HashMap<Integer,point_generic>> group_sel =  new HashMap<Integer,HashMap<Integer,point_generic>>();
 			// pruning the contours from current contour since there is no point pruning the 
 			//lower contours
 			for(int c= contour_no;c<=ContourPointsMap.size();c++){
 				//for a fixed group-id (determined by the first D-2 dimensions) we have to retain the
 				// point just above the selectivity value 'sel' and discard the rest
-				
+				HashMap<Integer,point_generic> ctr_group_sel = new HashMap<Integer,point_generic>(); 
 				// the following structure maps the group id to selectivity wherein the least selectivity
 				// above 'sel' is maintained.
-				HashMap<Integer,point_generic> group_sel =  new HashMap<Integer,point_generic>();
+				System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
 				
 				Iterator itr = ContourPointsMap.get(c).iterator();
 				
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
+					
+					if(c == 2 && (Math.abs(p.dim_sel_values[0] - 0.01) < 0.00001f) && (Math.abs(p.dim_sel_values[1] - 3.54E-4) < 0.00001f) && (Math.abs(p.dim_sel_values[2] - 1.0) < 0.00001f)  )
+						System.out.println("intereseting");
+
 					if(p.dim_sel_values[learnt_dim] >= sel ){
 						Integer key = new Integer(p.group_id);
-						if(!group_sel.containsKey(key))
-							group_sel.put(key, p);
-						else if(group_sel.get(key).dim_sel_values[learnt_dim] > p.dim_sel_values[learnt_dim]){
-							printSelectivityCost(p.dim_sel_values, -1);
-							itr.remove();
-							removable_pnt_cnt ++;
-							group_sel.remove(key);
-							group_sel.put(key, p);
+						if(!ctr_group_sel.containsKey(key))
+							ctr_group_sel.put(key, p);
+						else if(ctr_group_sel.get(key).dim_sel_values[learnt_dim] > p.dim_sel_values[learnt_dim]){
+							printSelectivityCost(p.dim_sel_values, p.group_id);
+							ctr_group_sel.remove(key);
+							ctr_group_sel.put(key, p);
 						}
-						else if(group_sel.get(key).dim_sel_values[learnt_dim] < p.dim_sel_values[learnt_dim]){
-							printSelectivityCost(p.dim_sel_values, -1);
+						else if(ctr_group_sel.get(key).dim_sel_values[learnt_dim] < p.dim_sel_values[learnt_dim]){
+							printSelectivityCost(p.dim_sel_values, p.group_id);
 							itr.remove();
 							removable_pnt_cnt ++;
 						}
@@ -3315,25 +3321,36 @@ public OptSB(){}
 					}
 					else{	
 						//add the index of the points to be removed
-						printSelectivityCost(p.dim_sel_values, -1);
+						printSelectivityCost(p.dim_sel_values, p.group_id);
 						itr.remove();
 						removable_pnt_cnt ++;
 					}
 				}
 				
-//				for(Integer idx: removable_points){
-//					ContourPointsMap.get(c).remove(idx);
-//				}
+				group_sel.put(c, ctr_group_sel);
 //				
 //				removable_pnt_cnt += removable_points.size();
 				current_cnt += ContourPointsMap.get(c).size();
 			}
-			 
-		}
+			
+			//again iterating over the ContourPointsMap to remove the redundant  points in a group
+			for(int c= contour_no;c<=ContourPointsMap.size();c++){
+				//System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
+				Iterator itr = ContourPointsMap.get(c).iterator();
+				HashMap<Integer,point_generic> ctr_group_sel = group_sel.get(c);
+				while(itr.hasNext()){
+					point_generic p = (point_generic) itr.next();
+				if(ctr_group_sel.get(new Integer(p.group_id)).dim_sel_values[learnt_dim]*1.01 < p.dim_sel_values[learnt_dim]){
+					if(p != ctr_group_sel.get(p.group_id))
+						itr.remove();
+				}
+			}
+		} 
+	}
 		
 		assert(original_pnt_cnt == (removable_pnt_cnt + current_cnt)): "removed point cnt not matching with actually removed with original = "+original_pnt_cnt+ " the count after removal is "+ (removable_pnt_cnt + current_cnt);
 		
-	}
+ }
 
 	public  float roundToDouble(float d) {
 		
@@ -6027,7 +6044,36 @@ class point_generic implements Serializable
 		}
 	}
 
+	@Override
+	 public boolean equals (Object pgo){
+		 
+		if (!(pgo instanceof point_generic)) {
+            return false; 
+		}
+     
+		 if(this == (point_generic) pgo) {
+             return true;
+        }
+        
+		point_generic pg = (point_generic) pgo;
+        boolean flag = true;
+        
+        for(int i =0; i < this.dimension; i++){
+        	
+        	if(Math.abs(this.dim_sel_values[i] - pg.dim_sel_values[i]) > 0.000001f)
+        		return false;
+        }
+        
+        return true;
+	 }
 	
+	@Override 
+	 public int hashCode () {
+	 
+		 return 0;
+	    }
+	 
+	 
 	int getLearningDimension(){
 		if(order.isEmpty())
 			System.out.println("ERROR: all dimensions learnt");
