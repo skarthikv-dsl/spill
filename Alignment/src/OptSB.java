@@ -595,8 +595,8 @@ public OptSB(){}
 		
 	{	
 		obj.conn = source.getConnection();
-		min_point = 10;
-		max_point = 100;
+		min_point = 1;
+		max_point = 2;
 		PrintWriter writer = new PrintWriter(apktPath+"TSB_logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -2045,7 +2045,8 @@ public OptSB(){}
 		assert (findNearestPoint(actual_sel[0]) == findNearestPoint(selectivity[findNearestPoint(actual_sel[0])])) : funName+ " : findNearPoint Error";
 
 		//  TODO: changed 2*cost to cost
-		if(cost_generic(convertSelectivitytoIndex(actual_sel)) > cost){
+		double opt_cost = cost_generic(convertSelectivitytoIndex(actual_sel));
+		if(opt_cost > cost){
 			oneDimCost = cost;
 			return;
 		}
@@ -2104,11 +2105,14 @@ public OptSB(){}
 						if(cost_generic(int_actual_sel)> oneDimCost){
 							oneDimCost = cost_generic(int_actual_sel);
 							
+							remainingDim.remove(remainingDim.indexOf(remDim));
+							remove_from_partition(remDim);
+							return;
 						}
 					}	
 				}
 			}
-		}
+		
 
 		if(cost_generic(convertSelectivitytoIndex(actual_sel)) < cost && oneDimCost > cost ){
 			sel_min = actual_sel[remDim];
@@ -2189,7 +2193,8 @@ public OptSB(){}
 			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 		}
 
-
+		}
+		
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -3249,7 +3254,7 @@ public OptSB(){}
 			
 			float var = minimum_selectivity;
 			while(true) {
-				if(var >= (1.01*sel)) {
+				if(var >= (1.001*sel)) {
 					break;
 				}
 				var = roundToDouble(var * beta);
@@ -3259,21 +3264,49 @@ public OptSB(){}
 			//lower contours
 			for(int c=contour_no;c<=ContourPointsMap.size();c++){
 				
+				Float used_sel_values =-1.0f; //to see if an elements already exist wrt a group_id  
 				System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
 				ArrayList<Integer> removable_points = new ArrayList<Integer>();
 				Iterator itr = ContourPointsMap.get(c).iterator();
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
-					if(p.dim_sel_values[learnt_dim] >= sel && p.dim_sel_values[learnt_dim] <= beta*sel){
-						assert (p.dim_sel_values[learnt_dim] <= 1.2*var) : " covering set does not seem correct (var) "+(var)+" p.dim_sel_values[learnt_dim] = "+p.dim_sel_values[learnt_dim]+ " and sel = "+sel+" beta = "+beta; //retained the point
-					}
-					else	{
-						//add the index of the points to be removed
-						printSelectivityCost(p.dim_sel_values, -1);
-						itr.remove();
-						removable_pnt_cnt ++;
+					if(sel < max_selectivity){
+						if( p.dim_sel_values[learnt_dim] >= sel && p.dim_sel_values[learnt_dim] <= beta*sel){
 						
+						if(used_sel_values > 0f && ((used_sel_values/p.dim_sel_values[learnt_dim] > 1.1f) || (p.dim_sel_values[learnt_dim]/used_sel_values > 1.1f))){ 
+							itr.remove();
+							removable_pnt_cnt ++;
+						}
+						else{
+						System.out.print("\n retained");
+						printSelectivityCost(p.dim_sel_values, -1);
+						used_sel_values = p.dim_sel_values[learnt_dim];
+						assert (p.dim_sel_values[learnt_dim] <= 1.3*var) : " covering set does not seem correct (var) "+(var)+" p.dim_sel_values[learnt_dim] = "+p.dim_sel_values[learnt_dim]+ " and sel = "+sel+" beta = "+beta; //retained the point
+							}
+						}
+						else{
+							//add the index of the points to be removed
+							System.out.print("\n removed");
+							printSelectivityCost(p.dim_sel_values, -1);
+							itr.remove();
+							removable_pnt_cnt ++;
+						}
 					}
+					else{
+						
+						if( p.dim_sel_values[learnt_dim] <= 1.02*sel && p.dim_sel_values[learnt_dim] >= 0.98*sel){
+							System.out.print("\n retained");
+							printSelectivityCost(p.dim_sel_values, -1);
+							}
+							else{
+								//add the index of the points to be removed
+								System.out.print("\n removed");
+								printSelectivityCost(p.dim_sel_values, -1);
+								itr.remove();
+								removable_pnt_cnt ++;
+							}
+					}
+					
 				}
 				
 				current_cnt += ContourPointsMap.get(c).size();
@@ -3305,14 +3338,18 @@ public OptSB(){}
 
 					if(p.dim_sel_values[learnt_dim] >= sel ){
 						Integer key = new Integer(p.group_id);
-						if(!ctr_group_sel.containsKey(key))
+						if(!ctr_group_sel.containsKey(key)){
+							System.out.print("\n retained");
 							ctr_group_sel.put(key, p);
+						}
 						else if(ctr_group_sel.get(key).dim_sel_values[learnt_dim] > p.dim_sel_values[learnt_dim]){
+							System.out.print("\n retained");
 							printSelectivityCost(p.dim_sel_values, p.group_id);
 							ctr_group_sel.remove(key);
 							ctr_group_sel.put(key, p);
 						}
 						else if(ctr_group_sel.get(key).dim_sel_values[learnt_dim] < p.dim_sel_values[learnt_dim]){
+							System.out.println("\n retained");
 							printSelectivityCost(p.dim_sel_values, p.group_id);
 							itr.remove();
 							removable_pnt_cnt ++;
@@ -3321,6 +3358,7 @@ public OptSB(){}
 					}
 					else{	
 						//add the index of the points to be removed
+						System.out.print("\n removed");
 						printSelectivityCost(p.dim_sel_values, p.group_id);
 						itr.remove();
 						removable_pnt_cnt ++;
@@ -3329,8 +3367,8 @@ public OptSB(){}
 				
 				group_sel.put(c, ctr_group_sel);
 //				
-//				removable_pnt_cnt += removable_points.size();
-				current_cnt += ContourPointsMap.get(c).size();
+
+			
 			}
 			
 			//again iterating over the ContourPointsMap to remove the redundant  points in a group
@@ -3340,15 +3378,19 @@ public OptSB(){}
 				HashMap<Integer,point_generic> ctr_group_sel = group_sel.get(c);
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
-				if(ctr_group_sel.get(new Integer(p.group_id)).dim_sel_values[learnt_dim]*1.01 < p.dim_sel_values[learnt_dim]){
+				if(ctr_group_sel.get(new Integer(p.group_id)).dim_sel_values[learnt_dim]*1.001 < p.dim_sel_values[learnt_dim]){
 					if(p != ctr_group_sel.get(p.group_id))
 						itr.remove();
+						removable_pnt_cnt ++;
 				}
 			}
-		} 
+//				removable_pnt_cnt += removable_points.size();
+				current_cnt += ContourPointsMap.get(c).size();	
+		}
+		 	
 	}
 		
-		assert(original_pnt_cnt == (removable_pnt_cnt + current_cnt)): "removed point cnt not matching with actually removed with original = "+original_pnt_cnt+ " the count after removal is "+ (removable_pnt_cnt + current_cnt);
+		//assert(original_pnt_cnt == (removable_pnt_cnt + current_cnt)): "removed point cnt not matching with actually removed with original = "+original_pnt_cnt+ " the count after removal is "+ (removable_pnt_cnt + current_cnt);
 		
  }
 
@@ -3363,7 +3405,7 @@ public OptSB(){}
 	
 	private void printSelectivityCost(float  sel_array[], float cost){
 		
-		System.out.println();
+		//System.out.println();
 		for(int i=0;i<dimension;i++)
 			System.out.print("\t"+sel_array[i]);
 		

@@ -39,10 +39,13 @@ public class test {
 		int arr[] = new int[3];
 		System.out.println(arr);
 		
-		
-		obj.removingObjectsinArrayList();
+
+		obj.compareTwoFloats();
 		
 		System.exit(0);
+
+		obj.removingObjectsinArrayList();
+		
 		obj.comparingTwoFloatArrays();
 		
 		
@@ -86,6 +89,17 @@ public class test {
  
 	}
 	
+	private void compareTwoFloats() {
+		
+		float f1 = 6f; //f2= 0;
+		
+		if(f1 > new Double(0))
+			System.out.println("correct");
+		else
+			System.out.println("false");
+		
+	}
+
 	public void removingObjectsinArrayList() throws IOException {
 		//soln: add @override and override the equals, hashcode method in point_generic class 
 		float [] arr = new float[3];
