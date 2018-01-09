@@ -31,6 +31,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -50,6 +51,8 @@ import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 //import  org.apache.commons.io.FileUtils;
+
+
 
 
 
@@ -1213,6 +1216,53 @@ public OptSB(){}
 		
 	}
 	
+	//read specific covering contour from file 
+	public void readCoveringContourFromFile(int contour) throws ClassNotFoundException {
+
+		try {
+			ObjectInputStream ip= null;//	System.out.println("   having cost = "+cost+" and plan "+num);
+			onlineLocationsMap obj;
+			
+			ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Contours"+alpha+".map")));
+			
+			obj = (onlineLocationsMap)ip.readObject();
+			HashMap<Short, ArrayList<location>> ContourLocationsMap = obj.getContourMap();
+			Iterator itr = ContourLocationsMap.keySet().iterator();
+			while(itr.hasNext()){
+				Short key = (Short) itr.next();
+				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
+				System.out.println("The no. of locations on contour "+(key.shortValue())+" is "+ContourLocationsMap.get(key.shortValue()).size());
+				//System.out.println("--------------------------------------------------------------------------------------");
+				
+			}
+			System.out.println("--------------------------------------------------------------------------------------");
+			
+				Iterator iter = ContourLocationsMap.get((short)contour).iterator();
+				while (iter.hasNext()) {
+					location objContourPt = (location) iter.next();
+					
+					//if((Math.abs(objContourPt.dim_values[0] - 0.02f) < 0.00001f) )
+						printSelectivityCost(objContourPt.dim_values, objContourPt.opt_cost);
+
+					
+					point_generic p = new point_generic(objContourPt.dim_values, objContourPt.get_plan_no(), objContourPt.get_cost(), remainingDim, predicateOrderMap.get((int)objContourPt.get_plan_no()));
+					p.group_id = getGroup_id(objContourPt.dim_values);
+					if(!ContourPointsMap.containsKey(contour)){
+						ArrayList<point_generic> al = new ArrayList<point_generic>();
+						al.add(p);
+						ContourPointsMap.put(contour,al);
+					}
+					else{
+						ContourPointsMap.get(contour).add(p);
+					}
+				}
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+	}
+
 	public void highSOQas(String filePath){
 		try{
 			//File fp = new File("/media/ssd256g4/data/DSQT916DR10_E/completedQas.log");
@@ -2250,7 +2300,7 @@ public OptSB(){}
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	private void spillBoundAlgo(PrintWriter writer, int contour_no, int loop) throws IOException {
+	private void spillBoundAlgo(PrintWriter writer, int contour_no, int loop) throws IOException, ClassNotFoundException {
 
 
 		String funName = "spillBoundAlgo";
@@ -2621,8 +2671,20 @@ public OptSB(){}
 		double q_a_cost = cost_generic(convertSelectivitytoIndex(actual_sel));
 		double c_min = m_cost;
 		//&& (Math.pow(2, contour_no-1)*c_min <= q_a_cost)
-		if(currentContourPoints  ==0) {
+		if(currentContourPoints == 0) {
 			
+			readCoveringContourFromFile(contour_no);
+			Collections.sort(ContourPointsMap.get(contour_no), new pointComparator());
+			
+			System.out.println("After sorting the current contour points ");
+			Iterator iter = ContourPointsMap.get(contour_no).iterator();
+			while (iter.hasNext()) {
+				point_generic objContourPt = (point_generic) iter.next();
+				
+				//if((Math.abs(objContourPt.dim_values[0] - 0.02f) < 0.00001f) )
+					printSelectivityCost(objContourPt.dim_sel_values,(float) objContourPt.get_cost());
+			}		
+					
 			assert(false) : "cannot expect to here: currentContourPoints size is Zero";
 			if((Math.pow(2, contour_no)*c_min >= q_a_cost)){
 				int [] arr = new int[dimension];	

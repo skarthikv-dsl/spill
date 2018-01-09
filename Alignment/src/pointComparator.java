@@ -18,8 +18,8 @@ public class pointComparator implements Comparator<point_generic> {
 			}
 			else if(p1.dim_sel_values != null && p2.dim_sel_values != null){
 				return new CompareToBuilder()
-            .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1))
-            .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0)).toComparison();
+            .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0))
+            .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1)).toComparison();
 			}
 
 		}
@@ -33,9 +33,9 @@ public class pointComparator implements Comparator<point_generic> {
 			}
 			else if(p1.dim_sel_values != null && p2.dim_sel_values!=null){
 		        return new CompareToBuilder()
-		        .append(p1.get_selOfdimension(2), p2.get_selOfdimension(2))
+		        .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0))
 	            .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1))
-	            .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0)).toComparison();
+	            .append(p1.get_selOfdimension(2), p2.get_selOfdimension(2)).toComparison();
 				}
 		}
 		else if(p1.get_no_of_dimension()==4){
@@ -49,10 +49,10 @@ public class pointComparator implements Comparator<point_generic> {
 			}
 			else if(p1.dim_sel_values != null && p2.dim_sel_values != null){
 		        return new CompareToBuilder()
-		        .append(p1.get_selOfdimension(3), p2.get_selOfdimension(3))
-		        .append(p1.get_selOfdimension(2), p2.get_selOfdimension(2))
-	            .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1))
-	            .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0)).toComparison();
+		        .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0))
+		        .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1))
+	            .append(p1.get_selOfdimension(2), p2.get_selOfdimension(2))
+	            .append(p1.get_selOfdimension(3), p2.get_selOfdimension(3)).toComparison();
 				}
 		}
 		
@@ -67,11 +67,11 @@ public class pointComparator implements Comparator<point_generic> {
 			}
 			else if(p1.dim_sel_values != null && p2.dim_sel_values != null){
 				return new CompareToBuilder()
-		        .append(p1.get_selOfdimension(4), p2.get_selOfdimension(4))
-		        .append(p1.get_selOfdimension(3), p2.get_selOfdimension(3))
+		        .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0))
+		        .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1))
 		        .append(p1.get_selOfdimension(2), p2.get_selOfdimension(2))
-	            .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1))
-	            .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0)).toComparison();
+	            .append(p1.get_selOfdimension(3), p2.get_selOfdimension(3))
+	            .append(p1.get_selOfdimension(4), p2.get_selOfdimension(4)).toComparison();
 			}
 		}
 		else if(p1.get_no_of_dimension()==6){
@@ -86,12 +86,12 @@ public class pointComparator implements Comparator<point_generic> {
 			}
 			else if(p1.dim_sel_values != null && p2.dim_sel_values != null){
 				return new CompareToBuilder()
-				.append(p1.get_selOfdimension(5), p2.get_selOfdimension(5))
-		        .append(p1.get_selOfdimension(4), p2.get_selOfdimension(4))
-		        .append(p1.get_selOfdimension(3), p2.get_selOfdimension(3))
+				.append(p1.get_selOfdimension(0), p2.get_selOfdimension(0))
+		        .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1))
 		        .append(p1.get_selOfdimension(2), p2.get_selOfdimension(2))
-	            .append(p1.get_selOfdimension(1), p2.get_selOfdimension(1))
-	            .append(p1.get_selOfdimension(0), p2.get_selOfdimension(0)).toComparison();
+		        .append(p1.get_selOfdimension(3), p2.get_selOfdimension(3))
+	            .append(p1.get_selOfdimension(4), p2.get_selOfdimension(4))
+	            .append(p1.get_selOfdimension(5), p2.get_selOfdimension(5)).toComparison();
 				
 			}
 		}
