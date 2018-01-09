@@ -99,13 +99,13 @@ public class onlinePB {
 	static boolean DEBUG_LEVEL_1 = false;
 	static boolean visualisation_2D = false;
 	static boolean enhancement = true; //toggling between last_dim1 and last_dim2
-	static boolean enhancement_end_contour = true; //if you are enabling this add opt++ in code
+	static boolean enhancement_end_contour = false; //if you are enabling this add opt++ in code
 	static boolean memoization = true;
 	static float cost_error = 0.12f;
 	static float float_error = 0.00000001f;
-	static boolean contoursReadFromFile = true;
+	static boolean contoursReadFromFile = false;
 	static boolean cg_contoursReadFromFile = true;
-	static boolean writeMapstoFile = false;
+	static boolean writeMapstoFile = true;
 	static boolean singleThread = false;
 	static boolean trie = true;
 	static boolean extra_locations = true;
@@ -1555,7 +1555,7 @@ public class onlinePB {
 			int last_dim1=-1, last_dim2=-1;
 			
 //			if((opt_call % 500) ==0 )
-//				System.out.println("running optimiation for debug along thread  ["+min_cc_sel_idx+"-"+max_cc_sel_idx+"] opt_call = "+opt_call+" fpc call = "+fpc_call+" location hits = "+location_hits);
+//				System.out.println("running optimization for debug along thread  ["+min_cc_sel_idx+"-"+max_cc_sel_idx+"] opt_call = "+opt_call+" fpc call = "+fpc_call+" location hits = "+location_hits);
 			
 			for(int i=0;i<dimension;i++)
 			{
@@ -1747,7 +1747,9 @@ public class onlinePB {
 					
 					boolean came_inside_dim2_loop = false;
 					contour_done = false;
-					while((qrun_copy[last_dim2] > minimum_selectivity) && (target_cost1 <= opt_cost_copy))
+					//while((qrun_copy[last_dim2] > minimum_selectivity) && (target_cost1 <= opt_cost_copy))
+					//changed from above to below after adding the extra locations
+					while((qrun_copy[last_dim2] > minimum_selectivity))	
 					{
 						
 //						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )
@@ -1859,7 +1861,9 @@ public class onlinePB {
 					
 					boolean came_inside_dim1_loop = false;
 					contour_done = false;
-					while((qrun_copy[last_dim1] < (1.0f-float_error)) && (opt_cost_copy <= target_cost3))
+					//while((qrun_copy[last_dim1] < (1.0f-float_error)) && (opt_cost_copy <= target_cost3))
+					//changed from above to below after adding the extra locations
+					while((qrun_copy[last_dim1] < (1.0f-float_error)))
 					{
 
 //						if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] - 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f)  )

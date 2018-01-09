@@ -70,6 +70,7 @@ import java.util.regex.Pattern;
 
 
 
+
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -93,6 +94,7 @@ public class OptSB
 	static DataValues[] data;
 	static int totalPoints;
 	static float selectivity[];
+	static float extra_selectivity[];
 	static String apktPath;
 	static String qtName ;
 	static Jdbc3PoolingDataSource source;
@@ -108,6 +110,7 @@ public class OptSB
 	static String sourcePath = "./src/";
 	static boolean MSOCalculation = true;
 	static boolean randomPredicateOrder = false;
+	static float float_error = 0.00000001f;
 	static ArrayList<ArrayList<Integer>> allPermutations = new ArrayList<ArrayList<Integer>>();
 	static ArrayList<point_generic> all_contour_points = new ArrayList<point_generic>();
 	static ArrayList<Integer> learntDim = new ArrayList<Integer>();
@@ -172,7 +175,9 @@ public class OptSB
 	static int mod_base = 3;
 	static boolean spillBound = true;
 	static boolean onlineSB = true;
-			
+	static boolean extra_locations = true;
+	static int no_extra_locs = 6;
+		
 	//---------------------------------------------------------
 	
 	
@@ -595,8 +600,8 @@ public OptSB(){}
 		
 	{	
 		obj.conn = source.getConnection();
-		min_point = 1;
-		max_point = 2;
+		min_point = 0;
+		max_point = 10000;
 		PrintWriter writer = new PrintWriter(apktPath+"TSB_logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -1167,9 +1172,17 @@ public OptSB(){}
 			
 			ContourPointsMap.clear();
 			for (short k = 1; k <= ContourLocationsMap.size(); k++) {
+				System.out.println("\n Contour no: "+k);
+				System.out.println("--------------------------------------------------------------------------------------");
+				
 				Iterator iter = ContourLocationsMap.get(k).iterator();
 				while (iter.hasNext()) {
 					location objContourPt = (location) iter.next();
+					
+					//if((Math.abs(objContourPt.dim_values[0] - 0.02f) < 0.00001f) )
+						printSelectivityCost(objContourPt.dim_values, objContourPt.opt_cost);
+
+					
 					point_generic p = new point_generic(objContourPt.dim_values, objContourPt.get_plan_no(), objContourPt.get_cost(), remainingDim, predicateOrderMap.get((int)objContourPt.get_plan_no()));
 					p.group_id = getGroup_id(objContourPt.dim_values);
 					if(!ContourPointsMap.containsKey((int)k)){
@@ -2034,7 +2047,7 @@ public OptSB(){}
 
 		}
 
-	public void oneDimensionSearch(PrintWriter writer, int contour_no, double cost) throws SQLException {
+	public void oneDimensionSearch(PrintWriter writer, int contour_no, double cost) throws SQLException, ClassNotFoundException {
 
 		String funName = "oneDimensionSearch";
 		/*
@@ -2047,11 +2060,11 @@ public OptSB(){}
 		//  TODO: changed 2*cost to cost
 		double opt_cost = cost_generic(convertSelectivitytoIndex(actual_sel));
 		if(opt_cost > cost){
-			oneDimCost = cost;
+			oneDimCost = alpha*cost;
 			return;
 		}
 
-		oneDimCost = 0;//initialization
+		oneDimCost = Double.MAX_VALUE;//initialization
 		assert (remainingDim.size() == 1): funName+": more than one dimension left";
 		float [] arr = new float[dimension];
 		int remDim = -1;
@@ -2064,8 +2077,22 @@ public OptSB(){}
 				arr[d] = actual_sel[d];
 		}
 
-		assert(ContourPointsMap.get(contour_no).size() == 1) : contour_no +" numbered contour has size "+ContourPointsMap.get(contour_no).size();
+		if(ContourPointsMap.get(contour_no).size() > 1){
+			System.out.println(funName+" the locations of contour "+contour_no);
+			for(point_generic p : ContourPointsMap.get(contour_no)){
+				printSelectivityCost(p.dim_sel_values,(float) p.get_cost());
+			}
+		}
+		
+		if(ContourPointsMap.get(contour_no).size() == 0){
+			System.out.println(funName+" the number of locations of contour "+contour_no+" is zero");
+			readCoveringContourFromFile();
+		}
+		
+		assert(ContourPointsMap.get(contour_no).size() >= 1) : contour_no +" numbered contour has size "+ContourPointsMap.get(contour_no).size();
 		//TODO: pick the sel_min in the contour in 1D
+		
+		point_generic p_min = null; // the location which JUST dominates the actual_sel[dim] in the contour
 		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
 
 			point_generic p = ContourPointsMap.get(contour_no).get(c);
@@ -2082,38 +2109,49 @@ public OptSB(){}
 				assert (learning_dim.intValue() == remDim) : funName+": ERROR plan's learning dimension not matching with remaining dimension";
 				assert (remainingDim.contains(learning_dim)) : funName+": ERROR remaining dimension does not contain the learning dimension";
 
-				if(p.dim_sel_values[remDim] >= actual_sel[remDim]){
+				if(p.dim_sel_values[remDim] >= actual_sel[remDim] && dominatesActSel(p)){
 					if(p.dim_sel_values[remDim] < sel_min){
 						sel_min = p.dim_sel_values[remDim]; 
-
-						
-						oneDimCost = p.get_cost();
-						//oneDimCost = cost;
-
-						/*
-						 * set it to plan's cost at q_a
-						 */
-						int fpc_plan = p.get_plan_no();
-						int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
-						opb.conn = conn;
-						double fpc_cost_generic = opb.getFPCCost(actual_sel, -2, apktPath+"/onlinePB/planStructureXML"+alpha+"/"+p.get_plan_no()+".xml");
-
-						assert(fpc_cost_generic > 1) : "cost returned from the optimizer is less than 1";
-						
-						if(fpc_cost_generic<oneDimCost)
-							oneDimCost = fpc_cost_generic;
-						if(cost_generic(int_actual_sel)> oneDimCost){
-							oneDimCost = cost_generic(int_actual_sel);
-							
-							remainingDim.remove(remainingDim.indexOf(remDim));
-							remove_from_partition(remDim);
-							return;
-						}
+						p_min = p;
 					}	
 				}
 			}
 		
+		}
+		
+		
+		if(p_min == null)
+			//only for the case when we will not a covering location which is also dominating q_a
+			p_min = ContourPointsMap.get(contour_no).get(0);
 
+		if(p_min.get_cost() < oneDimCost)
+			oneDimCost = p_min.get_cost();
+
+		//oneDimCost = cost;
+
+		/*
+		 * set it to plan's cost at q_a
+		 */
+		int fpc_plan = p_min.get_plan_no();
+		int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
+		opb.conn = conn;
+		double fpc_cost_generic = opb.getFPCCost(actual_sel, -2, apktPath+"/onlinePB/planStructureXML"+alpha+"/"+p_min.get_plan_no()+".xml");
+		
+		assert(fpc_cost_generic > 1) : "cost returned from the optimizer is less than 1";
+		
+		if(fpc_cost_generic<oneDimCost)
+			oneDimCost = fpc_cost_generic;
+		if(cost_generic(int_actual_sel)> oneDimCost){
+			oneDimCost = cost_generic(int_actual_sel);
+										
+		}
+		
+		remainingDim.remove(remainingDim.indexOf(remDim));
+		remove_from_partition(remDim);
+		return;
+
+	
+		/*
 		if(cost_generic(convertSelectivitytoIndex(actual_sel)) < cost && oneDimCost > cost ){
 			sel_min = actual_sel[remDim];
 			oneDimCost = cost;
@@ -2141,35 +2179,38 @@ public OptSB(){}
 			return; //done if the sel_min is greater than actual selectivity
 			
 		}
-
-
+		
+	
 		if(sel_min == (double)2){
 			arr[remDim] = 0;
-			/*
-			 * The following If condition is needed to skip the contour. If the condition fails then 
-			 * we can possibly we dominated by some point in the contour. Else, we can say the contour
-			 * can be skipped. 
-			 */
 			
+			// The following If condition is needed to skip the contour. If the condition fails then 
+			// we can possibly we dominated by some point in the contour. Else, we can say the contour
+			// can be skipped. 
+			
+			opb.conn = conn;
 			double cst = opb.getFPCCost(arr, -1, null);
+			
 			assert(cst > 1) : "cost from GetFPC function is less than 1";
 			if(cst > cost){
 				oneDimCost = 0;
 				return;
 			}
 		}
+		
+		
 		if(sel_min == (double)2){
-			/*
-			 * We turn to this case when there are no contour point for all the learnt
-			 * selectivities. But check if the point at arr[remDim] = resolution-1 has
-			 * cost less than the contour cost
-			 */
+			
+			// * We turn to this case when there are no contour point for all the learnt
+			// selectivities. But check if the point at arr[remDim] = resolution-1 has
+			// cost less than the contour cost
+			 
 			arr[remDim] = resolution-1;   //TODO is it okay to resolution -1 in 3D or higher
 			sel_min = selectivity[resolution-1];
 			oneDimCost = opb.getFPCCost(arr, -1, null);
-			/*
-			 * use the fpc_cost at q_a for oneDimCost
-			 */
+			
+			// use the fpc_cost at q_a for oneDimCost
+			 
 			
 			int [] int_actual_sel = convertSelectivitytoIndex(actual_sel);
 			double fpc_cost_generic = Double.MAX_VALUE;
@@ -2192,9 +2233,20 @@ public OptSB(){}
 			
 			//assert (oneDimCost<=2*cost) :funName+": oneDimCost is not less than 2*cost when setting to resolution-1";
 		}
-
-		}
+	*/
+	
 		
+	}
+
+	public boolean dominatesActSel(point_generic p) {
+
+
+		
+		for(int i=0; i < dimension; i++){
+			if( p.dim_sel_values[i] < actual_sel[i]*(1-float_error))
+				return false;
+		}
+		return true;
 	}
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -3245,13 +3297,13 @@ public OptSB(){}
 		
 		int removable_pnt_cnt = 0, original_pnt_cnt = 0, current_cnt =0;
 
-		
+
 		for(int cnt  =1; cnt <= ContourPointsMap.size(); cnt++){
 			original_pnt_cnt += ContourPointsMap.get(cnt).size();
 		}
-		
+
 		if(learnt_dim < dimension-2){
-			
+
 			float var = minimum_selectivity;
 			while(true) {
 				if(var >= (1.001*sel)) {
@@ -3259,29 +3311,38 @@ public OptSB(){}
 				}
 				var = roundToDouble(var * beta);
 			}
-			
+
+			HashMap<Integer,HashMap<Integer,point_generic>> group_sel =  new HashMap<Integer,HashMap<Integer,point_generic>>();
+
 			// pruning the contours from current contour since there is no point pruning the 
 			//lower contours
 			for(int c=contour_no;c<=ContourPointsMap.size();c++){
-				
+
+				HashMap<Integer,point_generic> ctr_group_sel = new HashMap<Integer,point_generic>(); 
+
 				Float used_sel_values =-1.0f; //to see if an elements already exist wrt a group_id  
 				System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
 				ArrayList<Integer> removable_points = new ArrayList<Integer>();
 				Iterator itr = ContourPointsMap.get(c).iterator();
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
+
+					//if(c == 2 && (Math.abs(p.dim_sel_values[0] - 0.02f) < 0.00001f) && (Math.abs(p.dim_sel_values[1] - 1.0f) < 0.00001f) && (Math.abs(p.dim_sel_values[2] - 2.97E-4f) < 0.00001f)  )
+					if(c == 7 )	
+					System.out.println("intereseting");
+
 					if(sel < max_selectivity){
 						if( p.dim_sel_values[learnt_dim] >= sel && p.dim_sel_values[learnt_dim] <= beta*sel){
-						
-						if(used_sel_values > 0f && ((used_sel_values/p.dim_sel_values[learnt_dim] > 1.1f) || (p.dim_sel_values[learnt_dim]/used_sel_values > 1.1f))){ 
-							itr.remove();
-							removable_pnt_cnt ++;
-						}
-						else{
-						System.out.print("\n retained");
-						printSelectivityCost(p.dim_sel_values, -1);
-						used_sel_values = p.dim_sel_values[learnt_dim];
-						assert (p.dim_sel_values[learnt_dim] <= 1.3*var) : " covering set does not seem correct (var) "+(var)+" p.dim_sel_values[learnt_dim] = "+p.dim_sel_values[learnt_dim]+ " and sel = "+sel+" beta = "+beta; //retained the point
+
+							if(used_sel_values > 0f && ((used_sel_values/p.dim_sel_values[learnt_dim] > 1.1f) || (p.dim_sel_values[learnt_dim]/used_sel_values > 1.1f))){ 
+								itr.remove();
+								removable_pnt_cnt ++;
+							}
+							else{
+								System.out.print("\n retained");
+								printSelectivityCost(p.dim_sel_values, -1);
+								used_sel_values = p.dim_sel_values[learnt_dim];
+								assert (p.dim_sel_values[learnt_dim] <= 1.3*var) : " covering set does not seem correct (var) "+(var)+" p.dim_sel_values[learnt_dim] = "+p.dim_sel_values[learnt_dim]+ " and sel = "+sel+" beta = "+beta; //retained the point
 							}
 						}
 						else{
@@ -3293,30 +3354,33 @@ public OptSB(){}
 						}
 					}
 					else{
-						
-						if( p.dim_sel_values[learnt_dim] <= 1.02*sel && p.dim_sel_values[learnt_dim] >= 0.98*sel){
+
+						float new_sel = findNearestExtraSelectivity(sel);
+						if( p.dim_sel_values[learnt_dim] <= 1.02*new_sel && p.dim_sel_values[learnt_dim] >= 0.98*new_sel){
 							System.out.print("\n retained");
 							printSelectivityCost(p.dim_sel_values, -1);
-							}
-							else{
-								//add the index of the points to be removed
-								System.out.print("\n removed");
-								printSelectivityCost(p.dim_sel_values, -1);
-								itr.remove();
-								removable_pnt_cnt ++;
-							}
+						}
+						else{
+							//add the index of the points to be removed
+							System.out.print("\n removed");
+							printSelectivityCost(p.dim_sel_values, -1);
+							itr.remove();
+							removable_pnt_cnt ++;
+						}
 					}
-					
+
 				}
-				
+
+				//iter
+
 				current_cnt += ContourPointsMap.get(c).size();
 			}	
-			
+
 		}
-		
+
 		else{
-			
-			
+
+
 			HashMap<Integer,HashMap<Integer,point_generic>> group_sel =  new HashMap<Integer,HashMap<Integer,point_generic>>();
 			// pruning the contours from current contour since there is no point pruning the 
 			//lower contours
@@ -3327,19 +3391,19 @@ public OptSB(){}
 				// the following structure maps the group id to selectivity wherein the least selectivity
 				// above 'sel' is maintained.
 				System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
-				
+
 				Iterator itr = ContourPointsMap.get(c).iterator();
-				
+
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
-					
+
 					if(c == 2 && (Math.abs(p.dim_sel_values[0] - 0.01) < 0.00001f) && (Math.abs(p.dim_sel_values[1] - 3.54E-4) < 0.00001f) && (Math.abs(p.dim_sel_values[2] - 1.0) < 0.00001f)  )
 						System.out.println("intereseting");
 
 					if(p.dim_sel_values[learnt_dim] >= sel ){
 						Integer key = new Integer(p.group_id);
 						if(!ctr_group_sel.containsKey(key)){
-							System.out.print("\n retained");
+							//System.out.print("\n retained");
 							ctr_group_sel.put(key, p);
 						}
 						else if(ctr_group_sel.get(key).dim_sel_values[learnt_dim] > p.dim_sel_values[learnt_dim]){
@@ -3354,7 +3418,7 @@ public OptSB(){}
 							itr.remove();
 							removable_pnt_cnt ++;
 						}
-						
+
 					}
 					else{	
 						//add the index of the points to be removed
@@ -3364,13 +3428,13 @@ public OptSB(){}
 						removable_pnt_cnt ++;
 					}
 				}
-				
-				group_sel.put(c, ctr_group_sel);
-//				
 
-			
+				group_sel.put(c, ctr_group_sel);
+				//				
+
+
 			}
-			
+
 			//again iterating over the ContourPointsMap to remove the redundant  points in a group
 			for(int c= contour_no;c<=ContourPointsMap.size();c++){
 				//System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
@@ -3378,18 +3442,18 @@ public OptSB(){}
 				HashMap<Integer,point_generic> ctr_group_sel = group_sel.get(c);
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
-				if(ctr_group_sel.get(new Integer(p.group_id)).dim_sel_values[learnt_dim]*1.001 < p.dim_sel_values[learnt_dim]){
-					if(p != ctr_group_sel.get(p.group_id))
-						itr.remove();
+					if(ctr_group_sel.get(new Integer(p.group_id)).dim_sel_values[learnt_dim]*1.001 < p.dim_sel_values[learnt_dim]){
+						if(p != ctr_group_sel.get(p.group_id))
+							itr.remove();
 						removable_pnt_cnt ++;
+					}
 				}
-			}
-//				removable_pnt_cnt += removable_points.size();
+				//				removable_pnt_cnt += removable_points.size();
 				current_cnt += ContourPointsMap.get(c).size();	
+			}
+
 		}
-		 	
-	}
-		
+
 		//assert(original_pnt_cnt == (removable_pnt_cnt + current_cnt)): "removed point cnt not matching with actually removed with original = "+original_pnt_cnt+ " the count after removal is "+ (removable_pnt_cnt + current_cnt);
 		
  }
@@ -4361,6 +4425,29 @@ public OptSB(){}
 			return selectivity[return_index];
 		}
 
+		// Return the selectivity just greater than selecitivity=mid;
+		public float findNearestExtraSelectivity(float mid)
+		{
+			int i;
+			int return_index = 0;
+			float diff;
+			int len = extra_selectivity.length;
+			assert (len == no_extra_locs): "no of extra locs not matching";
+			if(mid >= extra_selectivity[len-1])
+				return extra_selectivity[len-1];
+			for(i=0;i<len;i++)
+			{
+				diff = mid - extra_selectivity[i];
+				if(diff <= 0.00000001)
+				{
+					return_index = i;
+					break;
+				}
+			}
+
+			return extra_selectivity[return_index];
+		}
+		
 
 	void readpkt(ADiagramPacket gdp, boolean allPlanCost) throws IOException
 	{
@@ -4643,6 +4730,15 @@ public OptSB(){}
 		double sel;
 		this.selectivity = new float [resolution];
 
+		if(extra_locations) {
+			extra_selectivity = new float[no_extra_locs];
+			if(no_extra_locs == 6) {
+				extra_selectivity[0] = 0.03f; extra_selectivity[1] = 0.06f; extra_selectivity[2] = 0.09f;
+				extra_selectivity[3] = 0.3f; extra_selectivity[4] = 0.6f; extra_selectivity[5] = 1.0f;
+			}
+		}
+
+		
 		if(resolution == 10){
 			if(sel_distribution == 0){
 
