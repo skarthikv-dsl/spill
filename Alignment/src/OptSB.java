@@ -74,6 +74,8 @@ import java.util.regex.Pattern;
 
 
 
+
+import org.omg.CORBA.OBJ_ADAPTER;
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 import iisc.dsl.picasso.common.ds.DataValues;
@@ -603,8 +605,8 @@ public OptSB(){}
 		
 	{	
 		obj.conn = source.getConnection();
-		min_point = 0;
-		max_point = 10000;
+		min_point = 10000;
+		max_point = totalPoints;
 		PrintWriter writer = new PrintWriter(apktPath+"TSB_logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -1242,7 +1244,7 @@ public OptSB(){}
 					location objContourPt = (location) iter.next();
 					
 					//if((Math.abs(objContourPt.dim_values[0] - 0.02f) < 0.00001f) )
-						printSelectivityCost(objContourPt.dim_values, objContourPt.opt_cost);
+						//printSelectivityCost(objContourPt.dim_values, objContourPt.opt_cost);
 
 					
 					point_generic p = new point_generic(objContourPt.dim_values, objContourPt.get_plan_no(), objContourPt.get_cost(), remainingDim, predicateOrderMap.get((int)objContourPt.get_plan_no()));
@@ -1360,6 +1362,7 @@ public OptSB(){}
 		}
 
 		ArrayList<point_generic> cur_contour_points = new ArrayList<point_generic>();
+		
 		//--
 		/*
 		 * Iterate over the List
@@ -2299,6 +2302,16 @@ public OptSB(){}
 		return true;
 	}
 
+	public boolean dominatesActSelProjection(point_generic p) {
+		//check if p dominates actual_sel for the dimensions projected on learntDims
+				
+		for(int i=0; i < dimension; i++){
+			if( (p.dim_sel_values[i] < actual_sel[i]*(1-float_error)) && !remainingDim.contains(i))
+				return false;
+		}
+		return true;
+	}
+
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private void spillBoundAlgo(PrintWriter writer, int contour_no, int loop) throws IOException, ClassNotFoundException {
 
@@ -2416,6 +2429,39 @@ public OptSB(){}
 			currentContourPoints = 0;
 		make_local_partition(part.get(part_idx));
 		
+
+		if(ContourPointsMap.get(contour_no).size() == 0){
+			System.out.print(" zero contour scenario\n");
+			readCoveringContourFromFile(contour_no);
+			
+			Collections.sort(ContourPointsMap.get(contour_no), new pointComparator(dimension,remainingDim));
+			
+			point_generic p_retained;
+			
+//			System.out.println("After sorting the current contour points with remaining Dims "+remainingDim);
+//			
+//			Iterator iter = ContourPointsMap.get(contour_no).iterator();
+//			while (iter.hasNext()) {
+//				point_generic objContourPt = (point_generic) iter.next();
+//				printSelectivityCost(objContourPt.dim_sel_values,(float) objContourPt.get_cost());
+//			}
+//			
+			Iterator iter = ContourPointsMap.get(contour_no).iterator();
+			while (iter.hasNext()) {
+				point_generic objContourPt = (point_generic) iter.next();
+				if(dominatesActSelProjection(objContourPt)){
+					p_retained = objContourPt;
+					ContourPointsMap.get(contour_no).clear();
+					ContourPointsMap.get(contour_no).add(p_retained);
+					System.out.print("added point to empty contour numbered : "+contour_no+"\t");
+					printSelectivityCost(p_retained.dim_sel_values,(float) p_retained.get_cost());
+					break;
+				}
+				//if((Math.abs(objContourPt.dim_values[0] - 0.02f) < 0.00001f) )
+				//printSelectivityCost(objContourPt.dim_sel_values,(float) objContourPt.get_cost());
+			}		
+
+		}
 		assert(n_partition<=remainingDim.size()): funName+" no. of partitions is more than the number of remaining dimensions";
 		doPartition(ContourPointsMap.get(contour_no), min_cost_index, unique_plans);
 	//	point_generic [] min_fpc_point = new point_generic[n_partition];
@@ -2673,18 +2719,6 @@ public OptSB(){}
 		//&& (Math.pow(2, contour_no-1)*c_min <= q_a_cost)
 		if(currentContourPoints == 0) {
 			
-			readCoveringContourFromFile(contour_no);
-			Collections.sort(ContourPointsMap.get(contour_no), new pointComparator());
-			
-			System.out.println("After sorting the current contour points ");
-			Iterator iter = ContourPointsMap.get(contour_no).iterator();
-			while (iter.hasNext()) {
-				point_generic objContourPt = (point_generic) iter.next();
-				
-				//if((Math.abs(objContourPt.dim_values[0] - 0.02f) < 0.00001f) )
-					printSelectivityCost(objContourPt.dim_sel_values,(float) objContourPt.get_cost());
-			}		
-					
 			assert(false) : "cannot expect to here: currentContourPoints size is Zero";
 			if((Math.pow(2, contour_no)*c_min >= q_a_cost)){
 				int [] arr = new int[dimension];	
@@ -3953,7 +3987,7 @@ public OptSB(){}
 				
 
 				prevExecCost = execCost;
-				if(temp_actual[dim] == resolution-1)
+				if(temp_actual[dim] >= selectivity[resolution-1])
 				{
 					sel_completely_learnt=true;
 					break;

@@ -380,7 +380,7 @@ public class CostGreedyGCI3D
 
 		 String funName  = "sortContourPoints";
 		 
-		 Collections.sort(ContourPointsMap.get(contour_no), new pointComparator());
+		 Collections.sort(ContourPointsMap.get(contour_no), new pointComparator(dimension));
 	}
 
 	 public void writeSuboptToFile(double[] subOpt,String path) throws IOException {
