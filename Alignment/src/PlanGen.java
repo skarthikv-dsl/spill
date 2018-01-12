@@ -845,7 +845,7 @@ File plansFile = new File(apktPath+"planStructure_new");
 		
 	}
 
-	public void getForcedPlanStructure(int plan_no) throws PicassoException, IOException, SQLException {
+	public void getForcedPlanStructure(int plan_no, boolean isonlinePB, float alpha) throws PicassoException, IOException, SQLException {
 
 		
 
@@ -854,7 +854,11 @@ File plansFile = new File(apktPath+"planStructure_new");
 		try{      	
 			Statement stmt = conn.createStatement();
 			String exp_query = new String(select_query);
-			exp_query = "explain " + exp_query +" fpc "+apktPath+"planStructureXML/"+plan_no+".xml";
+			
+			if(isonlinePB)
+				exp_query = "explain " + exp_query +" fpc "+apktPath+"onlinePB/"+"planStructureXML"+alpha+"/"+plan_no+".xml";
+			else
+				exp_query = "explain " + exp_query +" fpc "+apktPath+"planStructureXML/"+plan_no+".xml";
 			
 			ResultSet rs = stmt.executeQuery(exp_query);
 			//System.out.println("coming here");
@@ -883,7 +887,18 @@ File plansFile = new File(apktPath+"planStructure_new");
 		
 		
 		//Write temp_plan
-		String path = apktPath+"planStructure_new/"+plan_no+".txt";
+		String path;
+		
+		if(isonlinePB) {
+			File dir = new File(apktPath+"onlinePB/planStructure_new"+alpha+"/");
+			if(!dir.exists())
+				dir.mkdirs();
+			
+			path = apktPath+"onlinePB/"+"planStructure_new"+alpha+"/"+plan_no+".txt";
+		}
+		else
+		   path = apktPath+"planStructure_new/"+plan_no+".txt";
+		
 		File fnative=new File(path);
 		try {
 			

@@ -160,7 +160,7 @@ public class OptSB
 	
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
-	static boolean singleThread = false;
+	static boolean singleThread = true;
 	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
@@ -610,8 +610,8 @@ public OptSB(){}
 		
 	{	
 		obj.conn = source.getConnection();
-		min_point = 128355;
-		max_point = 128356;
+		min_point = 78379;
+		max_point = 78380;
 		PrintWriter writer = new PrintWriter(apktPath+"TSB_logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -1112,11 +1112,11 @@ public OptSB(){}
 	
 	public void loadPredicateOrder() throws NumberFormatException, IOException{
 		
-		int numPlans = new File(apktPath+"planStructureXML/").listFiles().length ;
+		int numPlans = new File(apktPath+"onlinePB/"+"planStructureXML"+alpha+"/").listFiles().length ;
 		
 		for(int i=0; i< numPlans; i++)
 		try{
-			FileReader file = new FileReader(apktPath+"predicateOrder/"+i+".txt");
+			FileReader file = new FileReader(apktPath+"onlinePB/"+"predicateOrder"+alpha+"/"+i+".txt");
 
 			BufferedReader br = new BufferedReader(file);
 			String s;
@@ -3892,7 +3892,7 @@ public OptSB(){}
 				//this is for pure fpc
 				//exp_query = select_query;
 				
-				exp_query = "explain " + exp_query + " fpc "+apktPath+"onlinePB/planStructureXML/"+plan+".xml";
+				exp_query = "explain " + exp_query + " fpc "+apktPath+"onlinePB/planStructureXML"+alpha+"/"+plan+".xml";
 				ResultSet rs = stmt.executeQuery(exp_query);
 				//   if(spill_node == 543){
 				// 	System.out.println("We are at node 23");
@@ -4742,9 +4742,9 @@ public OptSB(){}
 	}
 	void loadPlans() throws NumberFormatException, IOException
 	{
-
-		plans_list = new plan[totalPlans];
-		for(int i=0;i<totalPlans;i++)
+		int totPlans = new File(apktPath+"onlinePB/"+"planStructureXML"+alpha+"/").listFiles().length;
+		plans_list = new plan[totPlans];
+		for(int i=0;i<totPlans;i++)
 		{
 			plans_list[i]=new plan(i);
 		}
@@ -5526,7 +5526,7 @@ public OptSB(){}
 			apktPath = prop.getProperty("apktPath");
 			qtName = prop.getProperty("qtName");
 			QTName = prop.getProperty("qtName");
-			plansPath = apktPath;
+			plansPath = apktPath+"onlinePB/"+"predicateOrder"+alpha+"/";
 			cardinalityPath = prop.getProperty("cardinalityPath");
 			input.close();
 
@@ -6691,7 +6691,7 @@ class plan{
 		plan_locs = new ArrayList <Integer>();
 		order =  new ArrayList<Integer>();
 
-		FileReader file = new FileReader(OptSB.plansPath+"predicateOrder/"+p_no+".txt");
+		FileReader file = new FileReader(OptSB.plansPath+p_no+".txt");
 
 		BufferedReader br = new BufferedReader(file);
 		String s;

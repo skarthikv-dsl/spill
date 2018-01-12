@@ -114,7 +114,9 @@ public class BinaryTree {
 	public static HashMap<String, Integer> relationMap =  new HashMap<String, Integer>();
 	public static boolean FROM_CLAUSE;
 	static boolean generate_planstructure = true;
-
+	static boolean isOnlinePB = true;
+	static float alpha = 2;
+	
 	public BinaryTree(){
 
 	}
@@ -720,32 +722,71 @@ public class BinaryTree {
 		
 		
 		path = apktPath;
-		numplans=new File(path+"planStructureXML/").listFiles().length ;
-		System.out.println("NUMPLANS ="+numplans+"\n");
 		
-		for(int i=0; i<numplans;i++){
-			//reload the planStrucuture_new directory
-			if(generate_planstructure){
-				PlanGen pg = new PlanGen();
-				pg.apktPath = apktPath;
-				pg.dimension = Integer.parseInt(prop.getProperty("dimension"));
-				pg.select_query = prop.getProperty("select_query");
-				File f_marwa = new File("/home/dsladmin/marwa");
-				File f_durga = new File("/home/dsladmin/durga");
-				if(f_marwa.exists() || f_durga.exists()) { 
-					Class.forName("org.postgresql.Driver");
-					pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai","sa", "database");
-				}
-				else {
-					Class.forName("org.postgresql.Driver");
-					pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai","sa", "database");
-				}
-				pg.getForcedPlanStructure(i);
-				if (pg.conn != null) {
-					try { pg.conn.close(); } catch (SQLException e) {}
+		if(!isOnlinePB) {
+			numplans=new File(path+"planStructureXML/").listFiles().length ;
+			System.out.println("NUMPLANS ="+numplans+"\n");
+
+			for(int i=0; i<numplans;i++){
+				//reload the planStrucuture_new directory
+				if(generate_planstructure){
+					PlanGen pg = new PlanGen();
+					pg.apktPath = apktPath;
+					pg.dimension = Integer.parseInt(prop.getProperty("dimension"));
+					pg.select_query = prop.getProperty("select_query");
+					File f_marwa = new File("/home/dsladmin/marwa");
+					File f_durga = new File("/home/dsladmin/durga");
+					if(f_marwa.exists() || f_durga.exists()) { 
+						Class.forName("org.postgresql.Driver");
+						pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai","sa", "database");
+					}
+					else {
+						Class.forName("org.postgresql.Driver");
+						pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai","sa", "database");
+					}
+					pg.getForcedPlanStructure(i, false, -1);
+					if (pg.conn != null) {
+						try { pg.conn.close(); } catch (SQLException e) {}
+					}
 				}
 			}
 		}
+		else {
+			
+			if(args.length >= 1){
+				alpha = Float.parseFloat(args[0]);
+				System.out.println("Alpha = "+alpha);
+				//writeMapstoFile = false;
+			}
+			
+			numplans=new File(path+"onlinePB/"+"planStructureXML"+alpha+"/").listFiles().length ;
+			System.out.println("NUMPLANS ="+numplans+"\n");
+
+			for(int i=0; i<numplans;i++){
+				//reload the planStrucuture_new directory
+				if(generate_planstructure){
+					PlanGen pg = new PlanGen();
+					pg.apktPath = apktPath;
+					pg.dimension = Integer.parseInt(prop.getProperty("dimension"));
+					pg.select_query = prop.getProperty("select_query");
+					File f_marwa = new File("/home/dsladmin/marwa");
+					File f_durga = new File("/home/dsladmin/durga");
+					if(f_marwa.exists() || f_durga.exists()) { 
+						Class.forName("org.postgresql.Driver");
+						pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai","sa", "database");
+					}
+					else {
+						Class.forName("org.postgresql.Driver");
+						pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai","sa", "database");
+					}
+					pg.getForcedPlanStructure(i, true, alpha);
+					if (pg.conn != null) {
+						try { pg.conn.close(); } catch (SQLException e) {}
+					}
+				}
+			}
+		}
+		
 		tree.initialize(QTName);
 		for(int i=0;i<numplans;i++){
 			//reading the plan
@@ -757,7 +798,13 @@ public class BinaryTree {
 			//File file = new File("/home/srinivas/Srinivas/data/HQT83D-OC-PL-SL_EXP2/planStructure/"+numPlans+".txt");
 			//File file = new File("/home/dsladmin/Srinivas/data/writingPlans/"+"test.txt");
 	
-			File file = new File(path+"planStructure_new/"+i+".txt");
+			File file;
+			
+			if(isOnlinePB)
+				file = new File(path+"onlinePB/"+"planStructure_new"+alpha+"/"+i+".txt");
+			else
+				file = new File(path+"planStructure_new/"+i+".txt");
+			
 			FileReader fr = new FileReader(file);
 			BufferedReader br = new BufferedReader(fr); 
 			String s;
@@ -815,7 +862,18 @@ public class BinaryTree {
 						}
 					}
 
-					File filer = new File(path+"predicateOrder/"+i+".txt");
+					File filer;
+					
+					if(isOnlinePB) {
+						File dir = new File(apktPath+"onlinePB/predicateOrder"+alpha+"/");
+						if(!dir.exists())
+							dir.mkdirs();
+						
+						filer = new File(path+"onlinePB/"+"predicateOrder"+alpha+"/"+i+".txt");
+					}
+					else
+						filer = new File(path+"predicateOrder/"+i+".txt");
+					
 					FileWriter writer = new FileWriter(filer, false);  
 					PrintWriter pw = new PrintWriter(writer);
 					for(int j = 0; j<nodeids.length;j++)
