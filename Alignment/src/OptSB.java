@@ -158,9 +158,12 @@ public class OptSB
 	//Use the best local partitioning if set to true.
 	static boolean local_partition_flag = true;
 	
+	//used for profiling
+	static float reading_contour_time =0f;
+	static float removing_points_contour_time = 0f;
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
-	static boolean singleThread = true;
+	static boolean singleThread = false;
 	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
@@ -169,7 +172,7 @@ public class OptSB
 	static boolean AlignmentPenaltyCode = false;
 	static boolean AlignmentPenaltyCode_generic = false;
 	static int partition_size = 1;
-	static boolean DEBUG = false;
+	static boolean DEBUG = true;
 	static boolean spill_opt_for_Alignment = false;
 	static boolean contoursReadFromFile = false;
 	static boolean covering_contoursReadFromFile = true;
@@ -201,9 +204,10 @@ public class OptSB
 	double min_ctr_cost=Double.MAX_VALUE;
 	double max_ctr_cost=Double.MIN_VALUE;
 
-
+	static HashMap<Short, ArrayList<location>> ContourLocationsMap = new HashMap<Short, ArrayList<location>>();
 	ArrayList<Integer> remainingDim;
-	HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
+	static HashMap<Integer,ArrayList<point_generic>> ContourPointsMap = new HashMap<Integer,ArrayList<point_generic>>();
+	HashMap<Integer,ArrayList<point_generic>> ContourPointsMap_local = new HashMap<Integer,ArrayList<point_generic>>();
 	ArrayList<Pair<Integer>> executions = new ArrayList<Pair<Integer>>();  
 	HashMap<Index,ArrayList<Double>> sel_for_point = new HashMap<Index,ArrayList<Double>>();
 	 HashMap<Integer,ArrayList<Integer>> cur_partition = new HashMap<Integer,ArrayList<Integer>>();
@@ -247,7 +251,7 @@ public OptSB(){}
 		minIndex = new float[obj.dimension];
 		maxIndex = new float[obj.dimension];		
 		this.remainingDim = new ArrayList<Integer>(obj.remainingDim);
-		this.ContourPointsMap = new HashMap<Integer, ArrayList<point_generic>>();
+		this.ContourPointsMap_local = new HashMap<Integer, ArrayList<point_generic>>();
 		HashMap<Integer,ArrayList<Integer>> cur_partition = new HashMap<Integer,ArrayList<Integer>>();
 	/*	Iterator itr = obj.ContourPointsMap.keySet().iterator();
 		Integer key;
@@ -297,6 +301,7 @@ public OptSB(){}
 			System.out.println("minimum_selectivity = "+minimum_selectivity);
 			//writeMapstoFile = false;
 		}
+		
 		
 		
 		
@@ -493,6 +498,7 @@ public OptSB(){}
 		if(covering_contoursReadFromFile && onlineSB) {
 			obj.loadPredicateOrder();
 			obj.readCoveringContourFromFile();
+			obj.readCoveringContour();
 		}
 		else if(!Nexus_algo && !generateSpecificContour && contoursReadFromFile){
 			File ContoursFile = new File(apktPath+"contours/Contours.map");
@@ -610,8 +616,8 @@ public OptSB(){}
 		
 	{	
 		obj.conn = source.getConnection();
-		min_point = 78379;
-		max_point = 78380;
+		min_point = 0;
+		max_point = 30;
 		PrintWriter writer = new PrintWriter(apktPath+"TSB_logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -818,20 +824,20 @@ public OptSB(){}
 		            	input.obj.conn = source.getConnection();
 		            	OptSB obj = input.obj;
 		            	
-		            	Iterator itr = global_obj.ContourPointsMap.keySet().iterator();
-
-		            	Integer key;
-		            	while(itr.hasNext())
-		            	{
-		            		key = (Integer)itr.next();
-		            		ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
-		            		for(int c=0;c<global_obj.ContourPointsMap.get(key).size();c++){
-		            			point_generic pg = new point_generic(global_obj.ContourPointsMap.get(key).get(c));
-		            			contourPoints.add(pg);
-		            			//pg.printPoint();
-		            		}
-		            		obj.ContourPointsMap.put(key, contourPoints);
-		            	}
+//		            	Iterator itr = global_obj.ContourPointsMap.keySet().iterator();
+//
+//		            	Integer key;
+//		            	while(itr.hasNext())
+//		            	{
+//		            		key = (Integer)itr.next();
+//		            		ArrayList<point_generic> contourPoints = new ArrayList<point_generic>();
+//		            		for(int c=0;c<global_obj.ContourPointsMap.get(key).size();c++){
+//		            			point_generic pg = new point_generic(global_obj.ContourPointsMap.get(key).get(c));
+//		            			contourPoints.add(pg);
+//		            			//pg.printPoint();
+//		            		}
+//		            		obj.ContourPointsMap.put(key, contourPoints);
+//		            	}
 
 		            	for(int j= min_index;j<=max_index;j++){
 		            		if(mod_flag == true){
@@ -879,7 +885,7 @@ public OptSB(){}
 		            	
 		            		output.num_of_points ++; //keeping track of number of qa's > 10000 cost for this thread
 
-		            		while(i<=obj.ContourPointsMap.size() && !obj.remainingDim.isEmpty())
+		            		while(i<=ContourPointsMap.size() && !obj.remainingDim.isEmpty())
 		            		{	
 
 		            			if(cost<(double)10000){
@@ -1084,7 +1090,8 @@ public OptSB(){}
 
 		long endTime = System.nanoTime();
 		System.out.println("Took "+(endTime - startTime)/1000000000 + " sec");
-
+		System.out.println("reading contour time "+reading_contour_time);
+		System.out.println("removing contour points time "+removing_points_contour_time);
 	}
 	
 	
@@ -1160,25 +1167,35 @@ public OptSB(){}
 		
 	}
 	
-	public void readCoveringContourFromFile() throws ClassNotFoundException {
-
-		try {
-			ObjectInputStream ip= null;//	System.out.println("   having cost = "+cost+" and plan "+num);
-			onlineLocationsMap obj;
-			
-			ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Contours"+alpha+".map")));
-			
-			obj = (onlineLocationsMap)ip.readObject();
-			HashMap<Short, ArrayList<location>> ContourLocationsMap = obj.getContourMap();
-			Iterator itr = ContourLocationsMap.keySet().iterator();
-			while(itr.hasNext()){
-				Short key = (Short) itr.next();
-				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
-				//System.out.println("The no. of locations on contour "+(key.shortValue())+" is "+ContourLocationsMap.get(key.shortValue()).size());
-				//System.out.println("--------------------------------------------------------------------------------------");
-				
-			}
+	public void readCoveringContourFromFile() throws FileNotFoundException, IOException, ClassNotFoundException {
+		
+		long startTime = System.nanoTime();
+		long endTime;
+		
+		ObjectInputStream ip= null;//	System.out.println("   having cost = "+cost+" and plan "+num);
+		onlineLocationsMap obj;
+		
+		
+		ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Contours"+alpha+".map")));
+		
+		obj = (onlineLocationsMap)ip.readObject();
+		ContourLocationsMap = obj.getContourMap();
+		
+		Iterator itr = ContourLocationsMap.keySet().iterator();
+		while(itr.hasNext()){
+			Short key = (Short) itr.next();
+			//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
+			//System.out.println("The no. of locations on contour "+(key.shortValue())+" is "+ContourLocationsMap.get(key.shortValue()).size());
 			//System.out.println("--------------------------------------------------------------------------------------");
+			
+		}
+		//System.out.println("--------------------------------------------------------------------------------------");
+		
+		
+		
+		try {
+			
+			assert(ContourLocationsMap.get((short) 1).size() > 0):"contourlocationMap seem to enpty at 0th contour";
 			
 			ContourPointsMap.clear();
 			
@@ -1214,7 +1231,7 @@ public OptSB(){}
 			while(itr.hasNext()){
 				Integer key = (Integer) itr.next();
 				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
-				//System.out.println("The no. of locations on contour "+(key.shortValue())+" is "+ContourPointsMap.get(key.intValue()).size());
+				System.out.println("The no. of locations on contour "+(key.shortValue())+" is "+ContourPointsMap.get(key.intValue()).size());
 				//System.out.println("--------------------------------------------------------------------------------------");
 				
 			}
@@ -1224,53 +1241,36 @@ public OptSB(){}
 			e.printStackTrace();
 		}
 		
+		endTime = System.nanoTime();
+		reading_contour_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
 	}
 	
-	//read specific covering contour from file 
-	public void readCoveringContourFromFile(int contour) throws ClassNotFoundException {
+	
+	public void readCoveringContour() throws ClassNotFoundException {
 
-		try {
-			ObjectInputStream ip= null;//	System.out.println("   having cost = "+cost+" and plan "+num);
-			onlineLocationsMap obj;
-			
-			ip = new ObjectInputStream(new FileInputStream(new File(apktPath +"online_contours/Contours"+alpha+".map")));
-			
-			obj = (onlineLocationsMap)ip.readObject();
-			HashMap<Short, ArrayList<location>> ContourLocationsMap = obj.getContourMap();
-			Iterator itr = ContourLocationsMap.keySet().iterator();
-			while(itr.hasNext()){
-				Short key = (Short) itr.next();
-				//System.out.println("The no. of Anshuman locations on contour "+(st+1)+" is "+contourLocs[st].size());
-				//System.out.println("The no. of locations on contour "+(key.shortValue())+" is "+ContourLocationsMap.get(key.shortValue()).size());
-				//System.out.println("--------------------------------------------------------------------------------------");
-				
-			}
-			//System.out.println("--------------------------------------------------------------------------------------");
-			
-				Iterator iter = ContourLocationsMap.get((short)contour).iterator();
-				while (iter.hasNext()) {
-					location objContourPt = (location) iter.next();
-					
-					//if((Math.abs(objContourPt.dim_values[0] - 0.02f) < 0.00001f) )
-						//printSelectivityCost(objContourPt.dim_values, objContourPt.opt_cost);
-
-					
-					point_generic p = new point_generic(objContourPt.dim_values, objContourPt.get_plan_no(), objContourPt.get_cost(), remainingDim, predicateOrderMap.get((int)objContourPt.get_plan_no()));
-					p.group_id = getGroup_id(objContourPt.dim_values);
-					if(!ContourPointsMap.containsKey(contour)){
-						ArrayList<point_generic> al = new ArrayList<point_generic>();
-						al.add(p);
-						ContourPointsMap.put(contour,al);
-					}
-					else{
-						ContourPointsMap.get(contour).add(p);
-					}
-				}
-
-		} catch (IOException e) {
-			e.printStackTrace();
+		long startTime = System.nanoTime();
+		long endTime;
+		ContourPointsMap_local.clear();
+		for(int c=1;c<=ContourPointsMap.size();c++){
+			//ArrayList<Integer> removable_points = new ArrayList<Integer>();
+			ContourPointsMap_local.put(c, new ArrayList<point_generic>(ContourPointsMap.get(c)));
 		}
+		endTime = System.nanoTime();
+		reading_contour_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
+	}
+	
+	//read specific covering contour from datastructure
+	public void readCoveringContour(int contour) throws ClassNotFoundException {
+
 		
+		long startTime = System.nanoTime();
+		long endTime;
+		
+		ContourPointsMap_local.remove(contour);
+		ContourPointsMap_local.put(contour, new ArrayList<point_generic>(ContourPointsMap.get(contour)));
+		
+		endTime = System.nanoTime();
+		reading_contour_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
 	}
 
 	public void highSOQas(String filePath){
@@ -1409,13 +1409,13 @@ public OptSB(){}
 				currentContourPoints ++;
 				//-- For counting
 				category=plans_list[plan_no].getcategory(remainingDim);
-				if(p.getLearningDimension()!=category && DEBUG==true){
-					System.out.println("debug");
-					category=plans_list[plan_no].getcategory(remainingDim);
-					System.out.println("remaining Dim"+remainingDim);
-					System.out.println("Predicate Order"+p.getPredicateOrder());
-				}
-				assert(p.getLearningDimension()==category): "getLearning Dimension of spillBound is not equal to category of opt-SB";
+//				if(p.getLearningDimension()!=category && DEBUG==true){
+//					System.out.println("debug");
+//					category=plans_list[plan_no].getcategory(remainingDim);
+//					System.out.println("remaining Dim"+remainingDim);
+//					System.out.println("Predicate Order"+p.getPredicateOrder());
+//				}
+//				assert(p.getLearningDimension()==category): "getLearning Dimension of spillBound is not equal to category of opt-SB with p.getLearningDim = "+p.getLearningDimension()+" category = "+category;
 				
 				spillDim_planCnt[category]++;
 				// --
@@ -1649,14 +1649,14 @@ public OptSB(){}
 	   
 	        double max_penality = Double.MIN_VALUE;
 	        //find the extreme locations for each dimensions
-	        for(int c=1; c<=ContourPointsMap.size(); c++){
+	        for(int c=1; c<=ContourPointsMap_local.size(); c++){
 	           
 	            System.out.println("------------------------------------Contour "+c+"---------------------------------");
 	            //get the extreme locations for each dimension in points_max for each contour
 	            HashMap<Integer,point_generic> points_max = new HashMap<Integer,point_generic>();
 
-	            for(int l=0; l <ContourPointsMap.get(c).size(); l++){
-	                point_generic p = ContourPointsMap.get(c).get(l);
+	            for(int l=0; l <ContourPointsMap_local.get(c).size(); l++){
+	                point_generic p = ContourPointsMap_local.get(c).get(l);
 	                for(int d=0; d<dimension; d++){
 	                	 if(!points_max.containsKey(d))
 	                         points_max.put(d, p);
@@ -1739,7 +1739,7 @@ public OptSB(){}
 	       
 	        System.out.println("The max penalty is "+max_penality);
 	        for(int i=0;i<penalty_threshold.length;i++){
-	            System.out.println("% of contour within the threshold of "+(double)(penalty_threshold[i]-1)*100.0+" is "+(double)(contour_penalty_count[i]*1.0/(ContourPointsMap.size()*1.0)));
+	            System.out.println("% of contour within the threshold of "+(double)(penalty_threshold[i]-1)*100.0+" is "+(double)(contour_penalty_count[i]*1.0/(ContourPointsMap_local.size()*1.0)));
 	        }
 	        System.exit(1);
 	    }
@@ -1752,9 +1752,9 @@ public OptSB(){}
 	        boolean aligned = false;
 	        int [] contour_penalty_count = new int[penalty_threshold.length];
 	        //buildSpillDimensionMap(spillDimensionPlanMap);
-	        for(int i=1;i<=ContourPointsMap.size();i++){
-				for(int j=0;j<ContourPointsMap.get(i).size();j++){
-					point_generic p = ContourPointsMap.get(i).get(j);
+	        for(int i=1;i<=ContourPointsMap_local.size();i++){
+				for(int j=0;j<ContourPointsMap_local.get(i).size();j++){
+					point_generic p = ContourPointsMap_local.get(i).get(j);
 					p.reloadOrderList(remainingDim);
 					assert(p.getPredicateOrder().size() == dimension) : " reLoading predicate Order not done properly";
 				}
@@ -1845,7 +1845,7 @@ public OptSB(){}
 	        boolean first_flag ;
 	        int contour_no;
 	      
-	        for(int c=1; c<=ContourPointsMap.size(); c++){
+	        for(int c=1; c<=ContourPointsMap_local.size(); c++){
 	           contour_no = c;
 	            System.out.println("------------------------------------Contour "+c+"---------------------------------");
 	    		int part_idx = 0;
@@ -1860,7 +1860,7 @@ public OptSB(){}
 	    		make_local_partition(part.get(part_idx));
 	    		
 	    		assert(n_partition<=remainingDim.size()): funName+" no. of partitions is more than the number of remaining dimensions";
-	    		doPartition(ContourPointsMap.get(contour_no), min_cost_index, unique_plans);
+	    		doPartition(ContourPointsMap_local.get(contour_no), min_cost_index, unique_plans);
 	    	//	point_generic [] min_fpc_point = new point_generic[n_partition];
 	    		point_generic [] min_cost_point = new point_generic[n_partition];
 	    		boolean [] min_cost_good_guy = new boolean[n_partition];
@@ -1982,7 +1982,8 @@ public OptSB(){}
 	    				if(q==(cur_partition.get(m_key).size()-1))
 	    				{
 	    					if(min_cost_good_guy[m]==true){
-	    						ld = min_cost_point[m].getLearningDimension();
+	    						int p_no = min_cost_point[m].get_plan_no();
+	    						ld = plans_list[p_no].getcategory(remainingDim);
 	    						min_cost_point[m].set_goodguy();
 	    						cur_tol = 1;
 	    						
@@ -2072,7 +2073,7 @@ public OptSB(){}
     		}
 	       // System.out.println("The max penalty is "+temp_tol);
 	        for(int i=0;i<penalty_threshold.length;i++){
-	            System.out.println("% of contour within the threshold of "+(double)(penalty_threshold[i]-1)*100.0+" is "+(double)(contour_penalty_count[i]*1.0/(ContourPointsMap.size()*1.0)));
+	            System.out.println("% of contour within the threshold of "+(double)(penalty_threshold[i]-1)*100.0+" is "+(double)(contour_penalty_count[i]*1.0/(ContourPointsMap_local.size()*1.0)));
 	        }
 	        System.exit(1);
 	    }
@@ -2140,25 +2141,25 @@ public OptSB(){}
 				arr[d] = actual_sel[d];
 		}
 
-		if(ContourPointsMap.get(contour_no).size() > 1){
+		if(ContourPointsMap_local.get(contour_no).size() > 1){
 			//System.out.println(funName+" the locations of contour "+contour_no);
-			for(point_generic p : ContourPointsMap.get(contour_no)){
+			for(point_generic p : ContourPointsMap_local.get(contour_no)){
 				printSelectivityCost(p.dim_sel_values,(float) p.get_cost());
 			}
 		}
 		
-		if(ContourPointsMap.get(contour_no).size() == 0){
+		if(ContourPointsMap_local.get(contour_no).size() == 0){
 			writer.println(funName+" the number of locations of contour "+contour_no+" is zero");
-			readCoveringContourFromFile();
+			readCoveringContour(contour_no);
 		}
 		
-		assert(ContourPointsMap.get(contour_no).size() >= 1) : contour_no +" numbered contour has size "+ContourPointsMap.get(contour_no).size();
+		assert(ContourPointsMap_local.get(contour_no).size() >= 1) : contour_no +" numbered contour has size "+ContourPointsMap_local.get(contour_no).size();
 		//TODO: pick the sel_min in the contour in 1D
 		
 		point_generic p_min = null; // the location which JUST dominates the actual_sel[dim] in the contour
-		for(int c=0;c< ContourPointsMap.get(contour_no).size();c++){
+		for(int c=0;c< ContourPointsMap_local.get(contour_no).size();c++){
 
-			point_generic p = ContourPointsMap.get(contour_no).get(c);
+			point_generic p = ContourPointsMap_local.get(contour_no).get(c);
 
 			if(true){
 			//if(inFeasibleRegion(convertIndextoSelectivity(p.get_point_Index()))){
@@ -2185,7 +2186,7 @@ public OptSB(){}
 		
 		if(p_min == null)
 			//only for the case when we will not a covering location which is also dominating q_a
-			p_min = ContourPointsMap.get(contour_no).get(0);
+			p_min = ContourPointsMap_local.get(contour_no).get(0);
 
 		if(p_min.get_cost() < oneDimCost)
 			oneDimCost = p_min.get_cost();
@@ -2344,7 +2345,7 @@ public OptSB(){}
 		Set<Integer> unique_plans = new HashSet();
 		if(print_flag)
 		{
-			writer.println("\nContour number ="+contour_no+ " with its size being "+ContourPointsMap.get(contour_no).size());
+			writer.println("\nContour number ="+contour_no+ " with its size being "+ContourPointsMap_local.get(contour_no).size());
 		}
 		int j;
 
@@ -2449,11 +2450,11 @@ public OptSB(){}
 		make_local_partition(part.get(part_idx));
 		
 
-		if(ContourPointsMap.get(contour_no).size() == 0){
+		if(ContourPointsMap_local.get(contour_no).size() == 0){
 			writer.println(" zero contour scenario");
-			readCoveringContourFromFile(contour_no);
+			readCoveringContour(contour_no);
 			
-			Collections.sort(ContourPointsMap.get(contour_no), new pointComparator(dimension,remainingDim));
+			Collections.sort(ContourPointsMap_local.get(contour_no), new pointComparator(dimension,remainingDim));
 			
 			point_generic p_retained;
 			
@@ -2465,13 +2466,13 @@ public OptSB(){}
 //				printSelectivityCost(objContourPt.dim_sel_values,(float) objContourPt.get_cost());
 //			}
 //			
-			Iterator iter = ContourPointsMap.get(contour_no).iterator();
+			Iterator iter = ContourPointsMap_local.get(contour_no).iterator();
 			while (iter.hasNext()) {
 				point_generic objContourPt = (point_generic) iter.next();
 				if(dominatesActSelProjection(objContourPt)){
 					p_retained = objContourPt;
-					ContourPointsMap.get(contour_no).clear();
-					ContourPointsMap.get(contour_no).add(p_retained);
+					ContourPointsMap_local.get(contour_no).clear();
+					ContourPointsMap_local.get(contour_no).add(p_retained);
 					System.out.print("added point to empty contour numbered : "+contour_no+"\t");
 					printSelectivityCost(p_retained.dim_sel_values,(float) p_retained.get_cost());
 					break;
@@ -2482,7 +2483,7 @@ public OptSB(){}
 
 		}
 		assert(n_partition<=remainingDim.size()): funName+" no. of partitions is more than the number of remaining dimensions";
-		doPartition(ContourPointsMap.get(contour_no), min_cost_index, unique_plans);
+		doPartition(ContourPointsMap_local.get(contour_no), min_cost_index, unique_plans);
 	//	point_generic [] min_fpc_point = new point_generic[n_partition];
 		point_generic [] min_cost_point = new point_generic[n_partition];
 		boolean [] min_cost_good_guy = new boolean[n_partition];
@@ -2602,7 +2603,8 @@ public OptSB(){}
 				if(q==(cur_partition.get(m_key).size()-1))
 				{
 					if(min_cost_good_guy[m]==true){
-						ld = min_cost_point[m].getLearningDimension();
+						int p_no = min_cost_point[m].get_plan_no(); 
+						ld = plans_list[p_no].getcategory(remainingDim);
 						min_cost_point[m].set_goodguy();
 						cur_tol = 1;
 						
@@ -2978,7 +2980,7 @@ public OptSB(){}
 					remove_from_partition(d);
 					test_if_dimension_in_partition(d);
 					remove_points_covering_contour(d, actual_sel[d], contour_no);
-					removeDimensionFromContourPoints(d);
+					//removeDimensionFromContourPoints(d); //this is not required since we using plan_list.getCategory function; which is the right thing to do.
 					return;
 				}
 
@@ -3390,15 +3392,18 @@ public OptSB(){}
 			p.putpercent_err(error);
 		}
 		//p.set_fpcSpillDim(dim_index);
-		assert(dim_index!=p.getLearningDimension()) : funName+" it should not the aligned scenario";
+		//assert(dim_index!=p.getLearningDimension()) : funName+" it should not the aligned scenario";
 		return p.getfpc_cost();
 	}
 	private void removeDimensionFromContourPoints(int d) {
 		String funName = "removeDimensionFromContourPoints";
 		//TODO should we have to check for empty contours and points? 
-		for(int c=1;c<=ContourPointsMap.size();c++){
+		for(int c=1;c<=ContourPointsMap_local.size();c++){
 			//ArrayList<Integer> removable_points = new ArrayList<Integer>();
-			for(point_generic p: ContourPointsMap.get(c)){
+			for(point_generic p: ContourPointsMap_local.get(c)){
+				
+//				if(c==1 && (Math.abs(p.dim_sel_values[0] - 1.0E-4) <= float_error) && (Math.abs(p.dim_sel_values[1] - 1.0E-4) <= float_error) && (Math.abs(p.dim_sel_values[2] - 1.0) <= float_error) && (Math.abs(p.dim_sel_values[3] - 1.56E-4) <= float_error) )
+//					System.out.println("Interesting");
 				p.remove_dimension(d);
 				//add the index of the points to be removed
 				//removable_points.add(ContourPointsMap.get(c).indexOf(p));
@@ -3410,11 +3415,13 @@ public OptSB(){}
 	
 	public void remove_points_covering_contour(int learnt_dim, float sel, int contour_no){
 		
+		long startTime = System.nanoTime();
+		long endTime;
 		int removable_pnt_cnt = 0, original_pnt_cnt = 0, current_cnt =0;
 
 
-		for(int cnt  =1; cnt <= ContourPointsMap.size(); cnt++){
-			original_pnt_cnt += ContourPointsMap.get(cnt).size();
+		for(int cnt  =1; cnt <= ContourPointsMap_local.size(); cnt++){
+			original_pnt_cnt += ContourPointsMap_local.get(cnt).size();
 		}
 
 		if(learnt_dim < dimension-2){
@@ -3431,14 +3438,14 @@ public OptSB(){}
 
 			// pruning the contours from current contour since there is no point pruning the 
 			//lower contours
-			for(int c=contour_no;c<=ContourPointsMap.size();c++){
+			for(int c=contour_no;c<=ContourPointsMap_local.size();c++){
 
 				HashMap<Integer,point_generic> ctr_group_sel = new HashMap<Integer,point_generic>(); 
 
 				Float used_sel_values =-1.0f; //to see if an elements already exist wrt a group_id  
 //				System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
 				ArrayList<Integer> removable_points = new ArrayList<Integer>();
-				Iterator itr = ContourPointsMap.get(c).iterator();
+				Iterator itr = ContourPointsMap_local.get(c).iterator();
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
 
@@ -3488,7 +3495,7 @@ public OptSB(){}
 
 				//iter
 
-				current_cnt += ContourPointsMap.get(c).size();
+				current_cnt += ContourPointsMap_local.get(c).size();
 			}	
 
 		}
@@ -3499,7 +3506,7 @@ public OptSB(){}
 			HashMap<Integer,HashMap<Integer,point_generic>> group_sel =  new HashMap<Integer,HashMap<Integer,point_generic>>();
 			// pruning the contours from current contour since there is no point pruning the 
 			//lower contours
-			for(int c= contour_no;c<=ContourPointsMap.size();c++){
+			for(int c= contour_no;c<=ContourPointsMap_local.size();c++){
 				//for a fixed group-id (determined by the first D-2 dimensions) we have to retain the
 				// point just above the selectivity value 'sel' and discard the rest
 				HashMap<Integer,point_generic> ctr_group_sel = new HashMap<Integer,point_generic>(); 
@@ -3507,7 +3514,7 @@ public OptSB(){}
 				// above 'sel' is maintained.
 //				System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
 
-				Iterator itr = ContourPointsMap.get(c).iterator();
+				Iterator itr = ContourPointsMap_local.get(c).iterator();
 
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
@@ -3550,10 +3557,10 @@ public OptSB(){}
 
 			}
 
-			//again iterating over the ContourPointsMap to remove the redundant  points in a group
-			for(int c= contour_no;c<=ContourPointsMap.size();c++){
+			//again iterating over the ContourPointsMap_local to remove the redundant  points in a group
+			for(int c= contour_no;c<=ContourPointsMap_local.size();c++){
 				//System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
-				Iterator itr = ContourPointsMap.get(c).iterator();
+				Iterator itr = ContourPointsMap_local.get(c).iterator();
 				HashMap<Integer,point_generic> ctr_group_sel = group_sel.get(c);
 				while(itr.hasNext()){
 					point_generic p = (point_generic) itr.next();
@@ -3564,11 +3571,14 @@ public OptSB(){}
 					}
 				}
 				//				removable_pnt_cnt += removable_points.size();
-				current_cnt += ContourPointsMap.get(c).size();	
+				current_cnt += ContourPointsMap_local.get(c).size();	
 			}
 
 		}
 
+
+		endTime = System.nanoTime();
+		removing_points_contour_time += (float)((endTime*1.0f - startTime*1.0f)/1000000000f);
 		//assert(original_pnt_cnt == (removable_pnt_cnt + current_cnt)): "removed point cnt not matching with actually removed with original = "+original_pnt_cnt+ " the count after removal is "+ (removable_pnt_cnt + current_cnt);
 		
  }
@@ -4033,7 +4043,7 @@ public OptSB(){}
 					break;
 				}
 				//adding the code for oneshot learning of predicate
-
+				assert (findNearestPoint(temp_actual[dim])+1 < resolution ) : "problem at loop numbered "+loop;
 				temp_actual[dim] = selectivity[findNearestPoint(temp_actual[dim])+1];
 
 
@@ -4306,8 +4316,8 @@ public OptSB(){}
 		/*
 		 * reload the order list before the start of  every contour
 		 */
-		ContourPointsMap.clear();
-		readCoveringContourFromFile();
+		ContourPointsMap_local.clear();
+		readCoveringContour();
 		
 
 	}
@@ -4630,28 +4640,28 @@ public OptSB(){}
 			//			points_list[index[0]][index[1]].putopt_cost(data[i].getCost());
 			this.OptimalCost[i]= data[i].getCost();
 			this.plans[i] = data[i].getPlanNumber();
-			plan_no = data[i].getPlanNumber();
-			plans_list[plan_no].addPoint(i);
+			//plan_no = data[i].getPlanNumber();
+			//plans_list[plan_no].addPoint(i);
 
-			cat = plans_list[plan_no].getcategory(remainingDim);
+			//cat = plans_list[plan_no].getcategory(remainingDim);
 			//			if(cat == 3)
 			//			{
 			//				System.out.println("Here");
 			//			}
-			spillDim_planCnt[cat] = spillDim_planCnt[cat]+1;
+			//spillDim_planCnt[cat] = spillDim_planCnt[cat]+1;
 			//System.out.println("At "+i+" plan is "+plans[i]);
 			//System.out.println("Plan Number ="+plans[i]+"\n");
 			//	System.out.println("\nOptimal_cost:["+i+"] ="+OptimalCost[i]+"\n");
 		}
-		for(int l=0;l<dimension;l++)
-		{
-			spillDim_pointPercent[l] = (double)spillDim_planCnt[l]*100/data.length;
-		}
-		//	System.out.println("\n SpillDim_pointCount-----");
-		for(int l=0;l<dimension;l++)
-		{
-			System.out.println("Points spilling on dim "+l+" = "+spillDim_pointPercent[l]+"%");
-		}
+//		for(int l=0;l<dimension;l++)
+//		{
+//			spillDim_pointPercent[l] = (double)spillDim_planCnt[l]*100/data.length;
+//		}
+//		//	System.out.println("\n SpillDim_pointCount-----");
+//		for(int l=0;l<dimension;l++)
+//		{
+//			System.out.println("Points spilling on dim "+l+" = "+spillDim_pointPercent[l]+"%");
+//		}
 
 
 
@@ -4734,7 +4744,7 @@ public OptSB(){}
 			//				else
 			//					System.out.printf("\nFPC ERROR: Plan: %4d, Loc(%3d, %3d): (%6.4f, %6.4f), pktCost: %10.1f, fpcOptCost: %10.1f, error: %4.2f", p, i, selectivity[i], selectivity[j], c1, c2, (double)Math.abs(c1 - c2)*100/c1);
 		}
-		System.out.println(funName+": FPC ERROR: for 5% deviation is "+fpc_count+" Max Error%="+max_error);
+		System.out.println(funName+": FPC ERROR: for 1% deviation is "+fpc_count+" Max Error%="+max_error);
 
 		}
 
@@ -6315,7 +6325,8 @@ class point_generic implements Serializable
 		this.storedOrder = new ArrayList<Integer>();
 		
 		for(int i=0;i < predicateOrder.size();i++){
-			this.order.add(predicateOrder.get(i));
+			if(remainingDim.contains(predicateOrder.get(i)))
+				this.order.add(predicateOrder.get(i));
 		}
 		
 		for(int i=0;i < predicateOrder.size();i++){
@@ -6691,6 +6702,7 @@ class plan{
 		plan_locs = new ArrayList <Integer>();
 		order =  new ArrayList<Integer>();
 
+		assert(OptSB.plansPath.contains("online")) : "wrong path for loading predicate order";
 		FileReader file = new FileReader(OptSB.plansPath+p_no+".txt");
 
 		BufferedReader br = new BufferedReader(file);

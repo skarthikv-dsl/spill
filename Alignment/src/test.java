@@ -40,10 +40,12 @@ public class test {
 		System.out.println(arr);
 		
 
-		obj.compareTwoFloats();
+		obj.affectofNewOperatorinArrayList();
 		
 		System.exit(0);
 
+		obj.compareTwoFloats();
+		
 		obj.removingObjectsinArrayList();
 		
 		obj.comparingTwoFloatArrays();
@@ -123,6 +125,30 @@ public class test {
 		System.out.println(pg_al.indexOf(p_rem));
 	}
 
+	public void affectofNewOperatorinArrayList() throws IOException {
+		//soln: add @override and override the equals, hashcode method in point_generic class 
+		float [] arr = new float[3];
+		arr[0] = arr[1] = arr[2] = 1.0f;
+		ArrayList<Integer> al = new ArrayList<Integer>();
+		al.add(0);al.add(1);al.add(2);
+		point_generic p = new point_generic(arr,100,100.0f,al,al);
+		ArrayList<point_generic> pg_al = new ArrayList<point_generic>();
+		pg_al.add(p);
+		
+		arr[0] = arr[1] = arr[2] = 2.0f;
+		p = new point_generic(arr,100,100.0f,al,al);
+		pg_al.add(p);
+		
+		arr[0] = arr[1] = arr[2] = 3.0f;
+		p = new point_generic(arr,100,100.0f,al,al);
+		pg_al.add(p);
+		
+		ArrayList<point_generic> pg_al_dup = new ArrayList<point_generic>(pg_al);
+		pg_al.remove(1);pg_al.get(0).cost = -1;
+		System.out.println("size of pg_al is "+pg_al.size()+" size of pg_al_dup is "+pg_al_dup.size());
+	}
+
+	
 	private void comparingTwoFloatArrays() {
 		
 		float[] a1 = new float[] { 4.4444444f, 3.3f, 5.3f};
