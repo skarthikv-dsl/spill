@@ -81,7 +81,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 	static int num_of_usable_threads;
 	static boolean extra_locations = true;
 	static int no_extra_locs = 6;
-	static boolean only_apkt_gen = true; //required for only ess generation without both pcst (all plans cost) and plan structure storage 
+	static boolean only_apkt_gen = false; //required for only ess generation without both pcst (all plans cost) and plan structure storage 
 	//static DataValues [] data = new DataValues[totalPoints];
 	
 	public static void main(String[] args) throws IOException, PicassoException, SQLException {
@@ -104,10 +104,15 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		totalPoints = (int) Math.pow(resolution, dimension);
 		obj.readpkt(gdp, false);
 		obj.loadPropertiesFile();
+		gdp.dimension = dimension;
+		for(int k =0 ; k< dimension ; k++) {
+			gdp.setResolution(resolution, k);
+		}
 		obj.loadSelectivity();
 		totalPoints = (int) Math.pow(resolution, dimension);
 		
 		num_of_usable_threads = (int) ( Runtime.getRuntime().availableProcessors()*1.0);
+		
 		try{
 			System.out.println("entered DB conn1");
 			source = new Jdbc3PoolingDataSource();
@@ -192,9 +197,10 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 		gdp.setMaxPlanNumber(totalPlans);
 		gdp.setDataPoints(data_new);
 		gdp.setResolution(resolution, dimension);
+		
 		//Write the new apkt file
 		//ADP.setPlans(plans);
-		//ADP.setMaxPlanNumber(plans.size());
+		//ADP.setMaxPlanNumber(plans.size()); 
 		String fName = apktPath + qtName + "_new9.4_R"+resolution+".apkt";		
 		try
 		{
@@ -246,7 +252,7 @@ import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 			}
 		}
 			*/
-
+source.close();
 	}
 
 	public void getPlanGenParallel() throws SQLException, PicassoException, IOException {
@@ -845,7 +851,7 @@ File plansFile = new File(apktPath+"planStructure_new");
 		
 	}
 
-	public void getForcedPlanStructure(int plan_no, boolean isonlinePB, float alpha) throws PicassoException, IOException, SQLException {
+	public void getForcedPlanStructure(int plan_no) throws PicassoException, IOException, SQLException {
 
 		
 
@@ -854,11 +860,7 @@ File plansFile = new File(apktPath+"planStructure_new");
 		try{      	
 			Statement stmt = conn.createStatement();
 			String exp_query = new String(select_query);
-			
-			if(isonlinePB)
-				exp_query = "explain " + exp_query +" fpc "+apktPath+"onlinePB/"+"planStructureXML"+alpha+"/"+plan_no+".xml";
-			else
-				exp_query = "explain " + exp_query +" fpc "+apktPath+"planStructureXML/"+plan_no+".xml";
+			exp_query = "explain " + exp_query +" fpc "+apktPath+"planStructureXML/"+plan_no+".xml";
 			
 			ResultSet rs = stmt.executeQuery(exp_query);
 			//System.out.println("coming here");
@@ -887,18 +889,7 @@ File plansFile = new File(apktPath+"planStructure_new");
 		
 		
 		//Write temp_plan
-		String path;
-		
-		if(isonlinePB) {
-			File dir = new File(apktPath+"onlinePB/planStructure_new"+alpha+"/");
-			if(!dir.exists())
-				dir.mkdirs();
-			
-			path = apktPath+"onlinePB/"+"planStructure_new"+alpha+"/"+plan_no+".txt";
-		}
-		else
-		   path = apktPath+"planStructure_new/"+plan_no+".txt";
-		
+		String path = apktPath+"planStructure_new/"+plan_no+".txt";
 		File fnative=new File(path);
 		try {
 			
@@ -1501,7 +1492,7 @@ public void writeXMLPlan(int loc, int plan_no) throws PicassoException, IOExcept
 			ObjectInputStream ois = new ObjectInputStream(fis);
 			Object obj = ois.readObject();
 			gdp = (ADiagramPacket) obj;
-
+			
 			ois.close();
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();

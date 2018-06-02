@@ -288,7 +288,7 @@ public OptSB(){}
 		System.out.println("print_loop_flag ="+print_loop_flag);
 		System.out.println("hash_join_optimization_flag ="+hash_join_optimization_flag);
 		int threads = Runtime.getRuntime().availableProcessors();
-		int num_of_usable_threads = threads;
+		int num_of_usable_threads = threads -2;
 		//System.out.println("Partitions = "+part_str);
 		//int genContourNumber = -1;
 		if(args.length >= 1){
@@ -600,8 +600,8 @@ public OptSB(){}
 						}
 
 
-			if (args.length > 0) {
-				/*updating the min and the max index if available*/
+		/*	if (args.length > 0) {
+				
 				try {
 					min_point = Integer.parseInt(args[0]);
 					max_point = Integer.parseInt(args[1]);
@@ -610,14 +610,14 @@ public OptSB(){}
 					System.exit(1);
 				}
 			}
-
+		*/
 			
 	if(singleThread)
 		
 	{	
 		obj.conn = source.getConnection();
-		min_point = 0;
-		max_point = 30;
+		min_point = 92395;
+		max_point = 92396;
 		PrintWriter writer = new PrintWriter(apktPath+"TSB_logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -1195,15 +1195,17 @@ public OptSB(){}
 		
 		try {
 			
-			assert(ContourLocationsMap.get((short) 1).size() > 0):"contourlocationMap seem to enpty at 0th contour";
+			//assert(ContourLocationsMap.get((short) 1).size() > 0):"contourlocationMap seem to enpty at 0th contour";
 			
 			ContourPointsMap.clear();
 			
 			point_generic p_init = new point_generic(dimension);
+			Iterator iter_key = ContourLocationsMap.keySet().iterator();
 			
-			for (short k = 1; k <= ContourLocationsMap.size(); k++) {
+			while (iter_key.hasNext()) {
 				//System.out.println("\n Contour no: "+k);
 				//System.out.println("--------------------------------------------------------------------------------------");
+				Short k = (Short) iter_key.next();
 				
 				Iterator iter = ContourLocationsMap.get(k).iterator();
 				while (iter.hasNext()) {
@@ -1251,7 +1253,9 @@ public OptSB(){}
 		long startTime = System.nanoTime();
 		long endTime;
 		ContourPointsMap_local.clear();
-		for(int c=1;c<=ContourPointsMap.size();c++){
+		Iterator iter_key = ContourPointsMap.keySet().iterator();
+		while (iter_key.hasNext()) {
+			int  c = (int) iter_key.next();
 			//ArrayList<Integer> removable_points = new ArrayList<Integer>();
 			ContourPointsMap_local.put(c, new ArrayList<point_generic>(ContourPointsMap.get(c)));
 		}
@@ -2051,6 +2055,8 @@ public OptSB(){}
 	    		
 	    		for(int li =0; li < best_partitioning.size();li ++){
 	    			System.out.print("[");
+	    			if(spillBound)
+	    				assert(best_partitioning.get(li).size() <= 1): "more than 1 dimension in a partion which is wrong";
 	    			for(int li_inner =0 ; li_inner < best_partitioning.get(li).size();li_inner ++){
 	    			System.out.print(best_partitioning.get(li).get(li_inner)+",");
 	    			}
@@ -2121,7 +2127,7 @@ public OptSB(){}
 
 		//  TODO: changed 2*cost to cost
 		double opt_cost = cost_generic(convertSelectivitytoIndex(actual_sel));
-		if(opt_cost > cost){
+		if(opt_cost > alpha*cost){
 			
 			oneDimCost = alpha*cost;
 			writer.println(funName+" cost expended in the contour is "+oneDimCost);
@@ -3419,8 +3425,9 @@ public OptSB(){}
 		long endTime;
 		int removable_pnt_cnt = 0, original_pnt_cnt = 0, current_cnt =0;
 
-
-		for(int cnt  =1; cnt <= ContourPointsMap_local.size(); cnt++){
+		Iterator iter_key = ContourPointsMap_local.keySet().iterator();
+		while (iter_key.hasNext()) {
+			int cnt = (int) 	iter_key.next();
 			original_pnt_cnt += ContourPointsMap_local.get(cnt).size();
 		}
 
@@ -3438,8 +3445,13 @@ public OptSB(){}
 
 			// pruning the contours from current contour since there is no point pruning the 
 			//lower contours
-			for(int c=contour_no;c<=ContourPointsMap_local.size();c++){
-
+			iter_key = ContourPointsMap_local.keySet().iterator();
+			while (iter_key.hasNext()) {
+				int c = (int) iter_key.next();
+				
+				if(c < contour_no)
+					continue;
+				
 				HashMap<Integer,point_generic> ctr_group_sel = new HashMap<Integer,point_generic>(); 
 
 				Float used_sel_values =-1.0f; //to see if an elements already exist wrt a group_id  
@@ -3506,7 +3518,12 @@ public OptSB(){}
 			HashMap<Integer,HashMap<Integer,point_generic>> group_sel =  new HashMap<Integer,HashMap<Integer,point_generic>>();
 			// pruning the contours from current contour since there is no point pruning the 
 			//lower contours
-			for(int c= contour_no;c<=ContourPointsMap_local.size();c++){
+			iter_key = ContourPointsMap_local.keySet().iterator();
+			while (iter_key.hasNext()) {
+				int c = (int) iter_key.next();
+				
+				if(c < contour_no)
+					continue;
 				//for a fixed group-id (determined by the first D-2 dimensions) we have to retain the
 				// point just above the selectivity value 'sel' and discard the rest
 				HashMap<Integer,point_generic> ctr_group_sel = new HashMap<Integer,point_generic>(); 
@@ -3558,7 +3575,12 @@ public OptSB(){}
 			}
 
 			//again iterating over the ContourPointsMap_local to remove the redundant  points in a group
-			for(int c= contour_no;c<=ContourPointsMap_local.size();c++){
+			iter_key = ContourPointsMap_local.keySet().iterator();
+			while (iter_key.hasNext()) {
+				int c = (int) iter_key.next();
+				
+				if(c < contour_no)
+					continue;
 				//System.out.println("Because of sel "+sel+" learnt on "+learnt_dim+" dimension "+" contour = "+c);
 				Iterator itr = ContourPointsMap_local.get(c).iterator();
 				HashMap<Integer,point_generic> ctr_group_sel = group_sel.get(c);
@@ -3754,16 +3776,16 @@ public OptSB(){}
 		}
 		
 		//handling the  large jumps due to extra selectivity scenario 
-		if(p.get_cost() > alpha*contour_cost) {
+		if(p.get_cost() > 1.1*alpha*contour_cost) {
 			
 			float sel_learnt = -1f;
 			double q_a_cost = cost_generic(convertSelectivitytoIndex(actual_sel));			
-			double sel_div_factor = p.get_cost()/(alpha*contour_cost);
-			assert(sel_div_factor > 1):" sel div factor is less or equal to 1 unfortunately";
+			double sel_div_factor = (p.get_cost()*0.75)/(alpha*contour_cost);
+			//assert(sel_div_factor > 1):" sel div factor is less or equal to 1 unfortunately";
 			learning_cost += alpha*contour_cost;
 			writer.println("large jumps due to extra selectivity scenario"); 
 			
-			if(2*q_a_cost > contour_cost) //then it is the last contour scenario
+			if(q_a_cost < contour_cost) //then it is the last contour scenario
 				sel_learnt = p.dim_sel_values[dim];
 			else
 				sel_learnt = (float)(p.dim_sel_values[dim]/sel_div_factor);
@@ -4043,9 +4065,11 @@ public OptSB(){}
 					break;
 				}
 				//adding the code for oneshot learning of predicate
-				assert (findNearestPoint(temp_actual[dim])+1 < resolution ) : "problem at loop numbered "+loop;
-				temp_actual[dim] = selectivity[findNearestPoint(temp_actual[dim])+1];
-
+				
+				if(findNearestPoint(temp_actual[dim]) >= resolution-1)
+					temp_actual[dim] = selectivity[findNearestPoint(temp_actual[dim])];
+				else
+					temp_actual[dim] = selectivity[findNearestPoint(temp_actual[dim])+1];
 
 
 				assert(temp_actual[dim]< 1.0f) : funName+" index exceeding resolution";

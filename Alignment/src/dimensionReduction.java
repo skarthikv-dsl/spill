@@ -116,6 +116,9 @@ public class dimensionReduction {
 			System.err.println( e.getClass().getName()+": "+ e.getMessage() );
 		}
 		
+		obj.varying_execution_times();
+		
+//		obj.computeSelectivityUpperandLowerBound();
 //		obj.writeCostToFile();
 //		System.exit(0);
 		
@@ -125,6 +128,15 @@ public class dimensionReduction {
 		if(old_dims >1)
 			coor[1] = 40;
 //		obj.CostSlopeRatio(0,coor);
+		
+		for(int i=0; i < old_dims; i++) {
+			for(int j= i+1; j < old_dims; j++) {
+				System.out.println("for varying dim = "+i+" extreme dim = "+j);
+				obj.ExtremeSlopeComputation(i,  coor, j, 1000);
+			}
+		}
+		
+		System.exit(0);
 		
 		if(old_qtname.contains("BaseOperators")){
 			for(int itr = 0; itr < 3; itr++){
@@ -147,7 +159,7 @@ public class dimensionReduction {
 			for(int dim=0; dim<old_dims; dim++){
 				//			if(dim!=2)
 				//				continue;
-				obj.CostSlopeRatio_synthetic(dim,coor,10000, Operators.None);
+				obj.CostSlopeRatio_synthetic(dim,coor,1000, Operators.None);
 			}
 		}
 		
@@ -172,6 +184,40 @@ public class dimensionReduction {
 	}
 	
 	
+
+	private void computeSelectivityUpperandLowerBound() {
+		
+		
+		Statement stmt;
+		String tableName = new String("time_dim");
+		String colName = new String("t_minute");
+			try{      	
+				
+				
+				 stmt = conn.createStatement();
+				 String query = new String("select  histogram_bounds from pg_stats where tablename = '"+tableName+"' and attname = '"+colName+"'");
+				 ResultSet rs = stmt.executeQuery(query);
+					rs.next();
+					String str = rs.getString(1);
+					System.out.println(str);
+					String[] stringArray = str.split("\\s*,\\s*");
+					int num_of_buckets = stringArray.length; 
+					float sel_upper_bound = (float) (1f/(num_of_buckets*1f));
+					System.out.println("Upperbound is "+sel_upper_bound);
+					rs.close();
+					stmt.close();	
+					
+			}
+			catch(Exception e){	
+				e.printStackTrace();
+				ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+				
+			}
+			System.exit(0);
+			
+	}
+
+
 
 	public void concavityValidation(boolean useFPC, boolean optimalPlan, int fpc_plan) throws SQLException{
 		String funName = "concavityValidation";
@@ -427,6 +473,32 @@ public class dimensionReduction {
 	}
 	
 	
+	public void varying_execution_times() {
+		
+		double[] sel_array = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0};
+		String query =  "select * from customer, customer_address where c_current_addr_sk = ca_address_sk and c_birth_month in (10,9,7,5,1,3) and ca_state in ('CA','CA','WV','OH','UT','ID','VA')";
+
+
+		Statement stmt;
+		try{      	
+
+
+			stmt = conn.createStatement();
+			stmt.execute("set work_mem = '10MB'");
+			stmt.execute("set effective_cache_size='1GB'");
+			
+			String exp_query = "explain analyze selectivity (c_birth_month in (10,9,7,5,1,3)) ("+sel_array[0]+" ) "+query;
+			ResultSet rs = stmt.executeQuery(exp_query);
+
+		}
+		catch(Exception e){
+			e.printStackTrace();
+			ServerMessageUtil.SPrintToConsole("Cannot get plan from postgres: "+e);
+			
+		}
+		
+	}
+	
 public void CostSlopeRatio_synthetic(int varyDim,  int otherDims[], int res, Operators op) throws SQLException, PicassoException, IOException{
 		
 		int old_res = resolution;
@@ -681,7 +753,155 @@ public void CostSlopeRatio_synthetic(int varyDim,  int otherDims[], int res, Ope
 		loadPropertiesFile();
 	}
 	
-	public HashMap<Integer,Integer> generatePOSPList(int varyDim, int[] arr, int res, 	PlanGen pg, Operators op) throws PicassoException, IOException, SQLException {
+
+
+public void ExtremeSlopeComputation(int varyDim,  int otherDims[], int extremeDim, int res) throws SQLException, PicassoException, IOException{
+	
+	int old_res = resolution;
+	resolution = res;
+	boolean POSP_Known = false;
+	double delta[] = {0.1,0.2,0.3};
+	int arr_min[] =  new int[dimension];
+	int arr_max[] =  new int[dimension];
+	
+	for(int d = 0; d < dimension; d++){
+		if(d == extremeDim) {
+			arr_min[d] = 0;
+			arr_max[d] = resolution -1;
+		}
+		else if (d != varyDim){
+			arr_min[d] = otherDims[d];
+			arr_max[d] = otherDims[d];
+		}
+	}
+	
+	PlanGen pg = new PlanGen();
+	//update the PlanGen constant.properties
+	pg.apktPath = this.apktPath;
+	pg.qtName = this.qtName;
+	pg.select_query = this.select_query;
+	pg.predicates = new String(this.predicates.split("and", 0)[varyDim].trim()+" and "+this.predicates.split("and", 0)[extremeDim].trim());
+	pg.dimension = 2;
+	pg.resolution = res;
+	pg.FROM_CLAUSE = this.FROM_CLAUSE;
+	pg.sel_distribution = this.sel_distribution;
+	pg.database_conn = this.database_conn;
+	pg.conn = this.conn;
+	pg.loadSelectivity();
+	
+	
+	
+	selectivity = new double[resolution];
+	loadSelectivity();
+
+	//double costSlope[][] = new double[al.size()+1][resolution];
+	double cost[][] = new double[2][resolution];
+	String old_qtname = new String(qtName);
+	if(pg.apktPath!= null && pg.qtName!= null && pg.predicates!= null && pg.select_query!=null){ 
+		apktPath = pg.apktPath;
+		qtName = pg.qtName;
+		select_query = pg.select_query;
+		predicates = pg.predicates;
+		dimension = pg.dimension;
+		resolution = pg.resolution ;
+	}
+	
+	//TODO: write a assert to check if the optimal plan cost is equal to min of POSP cost
+	
+	//slope for the optimal plan
+	
+		for(int i=0;i<resolution;i++){
+
+			if(!POSP_Known){
+				assert(dimension==2) : "dimensions should be 2 in this case"; 
+				double sel_min [] = new double[2];
+				sel_min[0] = selectivity[i]; sel_min[1] = 0.0001f;
+				cost[0][i] = getFPCCost(sel_min, -1);
+				
+				double sel_max [] = new double[2];
+				sel_max[0] = selectivity[i]; sel_max[1] = 1.0f;
+				cost[1][i] = getFPCCost(sel_max, -1);
+			}
+			else{
+				//TODO: need to complete if we want to use the packets
+
+//				arr_min[varyDim] = i;
+//				cost[al.size()][i] = getFPCCost(convertIndextoSelectivity(arr), -1);		
+			}
+			//costSlope[al.size()][i] = getParticularSlope(varyDim, true, true, delta, -1, getIndex(arr, resolution));
+
+			//assert(costSlope[al.size()][i] != (double) -1): "the slope of optimal plan cannot be -1 at "+i;
+		}	
+	
+	
+	
+	double[] prevratio = new double[2];
+	double[] currratio = new double[2];
+	double[] intercept = new double[2];
+	double violatioCnt = 0;
+	double violatioCnt5 = 0;
+	double violatioCnt10 = 0;
+			
+	System.out.println("The extremem slopes are ");
+	if(DEBUG){
+		for(int i=0;i<resolution;i++){
+			
+
+			for(int j=0; j<=1; j++){
+							
+				if(i<=1){
+					prevratio[j] = 1;
+					//writer_slope.print("\t"+"1");
+				}
+				else{
+					intercept[j] =  (selectivity[1]*cost[j][0] - selectivity[0]*cost[j][1])/(selectivity[1] - selectivity[0]);
+					//currratio[j] = ((cost[j][i] - cost[j][i-1]) < 10) ? prevratio[j] : (cost[j][i] - cost[j][i-1])/(selectivity[i] - selectivity[i-1]);
+					currratio[j] = (cost[j][i] - cost[j][i-1])/(selectivity[i] - selectivity[i-1]);
+					//currratio[plan] = ((cost[plan][i] - cost[plan][i-2]) < 10) ? prevratio[plan] : (cost[plan][i] - cost[plan][i-2])/(2*(selectivity[i] - selectivity[i-1]));
+				}
+				prevratio[j] = currratio[j];
+				
+			}
+			
+			System.out.println("i = "+i+" min_slope = "+currratio[0]+" min_cost(i) = "+cost[0][i]+ " max_slope = "+currratio[1]+" max_cost(i) = "+cost[1][i]);
+			
+			if(currratio[0] < currratio[1])
+				violatioCnt++;
+
+			if(currratio[0]*1.05 < currratio[1])
+				violatioCnt5++;
+
+			
+			if(currratio[0]*1.1 < currratio[1])
+				violatioCnt10++;
+
+		}
+	}
+	
+	if(DEBUG){
+		
+			System.out.print("\n the violations  % are ");
+			System.out.print("\t"+violatioCnt);
+			
+			System.out.println();
+			
+			System.out.print("\n the violations of 5 % are ");
+			System.out.print("\t"+violatioCnt5);
+			System.out.println();
+			
+			System.out.print("\n the violations of 10 % are ");
+			System.out.print("\t"+violatioCnt10);
+			System.out.println();
+	}
+	
+	
+	resolution = old_res;
+	loadSelectivity();
+	loadPropertiesFile();
+}
+
+
+public HashMap<Integer,Integer> generatePOSPList(int varyDim, int[] arr, int res, 	PlanGen pg, Operators op) throws PicassoException, IOException, SQLException {
 	
 	
 		
