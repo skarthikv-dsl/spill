@@ -44,7 +44,7 @@ import java.util.regex.Pattern;
 import org.postgresql.jdbc3.Jdbc3PoolingDataSource;
 
 
-public class genPCST_parallel {
+public class genPCST_parallel_bak {
 
 	static double AllPlanCosts[][];
 	protected Vector<Plan> plans_vector;
@@ -82,8 +82,8 @@ public class genPCST_parallel {
 	static boolean single_thread = false;
 	//static DataValues [] data = new DataValues[totalPoints];
 	
-	 public genPCST_parallel() {}
-	 public genPCST_parallel(genPCST_parallel another) {
+	 public genPCST_parallel_bak() {}
+	 public genPCST_parallel_bak(genPCST_parallel_bak another) {
 		 this.totalPlans = another.totalPlans;
 		 this.dimension = another.dimension;
 		 this.resolution = another.resolution;
@@ -95,7 +95,7 @@ public class genPCST_parallel {
 		// TODO Auto-generated method stub
 
 		//NativeSubOptimality obj = new NativeSubOptimality();
-		genPCST_parallel obj = new genPCST_parallel();
+		genPCST_parallel_bak obj = new genPCST_parallel_bak();
 		
 		obj.loadPropertiesFile();
 		String pktPath = apktPath + qtName + "_new9.4.apkt" ;
@@ -167,7 +167,12 @@ public class genPCST_parallel {
 		}
 //		String stop2 = "kill -9 ";//| grep '5431' | rev |cut -d' ' -f3 | rev | cut -d'/' -f1 | head -n1
 		//String stop = "/home/dsladmin/Srinivas/AnshPG/bin/pg_ctl -D /home/dsladmin/Srinivas/AnshPG/tpch/ -w stop";
-
+		
+		// create / clear the contents of pcst directory
+		File dir = new File(apktPath + "pcstFiles/");
+		if (!dir.exists())
+			dir.mkdirs();
+		
 			try 
 			{
 //				Process p;
@@ -185,7 +190,7 @@ public class genPCST_parallel {
 						File f =new File(pcstPath); 
 						if(f.exists())
 							continue;
-						inputParamStruct input = new inputParamStruct(new genPCST_parallel(obj), j);
+						inputParamStruct input = new inputParamStruct(new genPCST_parallel_bak(obj), j);
 						inputs.add(input);
 
 					}
@@ -199,12 +204,15 @@ public class genPCST_parallel {
 						single_thread = true;
 					if(single_thread )
 						threads = 1;
+					
+
+					
 					ExecutorService service = Executors.newFixedThreadPool(threads);
 					List<Future<outputParamStruct>> futures = new ArrayList<Future<outputParamStruct>>();
 					for (final inputParamStruct input:inputs){
 						Callable<outputParamStruct> callable = new Callable<outputParamStruct>() {
 							public outputParamStruct call() throws Exception {
-								genPCST_parallel obj = input.obj;
+								genPCST_parallel_bak obj = input.obj;
 								int PlanNo = input.planNo;
 								
 								obj.getFPCCost(PlanNo);
@@ -1718,12 +1726,12 @@ public void clearSystemCache(){
 
 			
 			FileReader file;
-			File file_exist = new File(genPCST_parallel.apktPath+"predicateOrder/"+p_no+".txt");
+			File file_exist = new File(genPCST_parallel_bak.apktPath+"predicateOrder/"+p_no+".txt");
 			if(!file_exist.exists()) {
-				file = new FileReader(genPCST_parallel.apktPath+"predicateOrder/0.txt");
+				file = new FileReader(genPCST_parallel_bak.apktPath+"predicateOrder/0.txt");
 			}
 			else {
-				file = new FileReader(genPCST_parallel.apktPath+"predicateOrder/"+p_no+".txt");
+				file = new FileReader(genPCST_parallel_bak.apktPath+"predicateOrder/"+p_no+".txt");
 			}
 				BufferedReader br = new BufferedReader(file);
 				String s;
@@ -1773,12 +1781,12 @@ class outputParamStruct {
 	boolean finishedflag =  false;
 }
 class inputParamStruct {
-	genPCST_parallel obj;
+	genPCST_parallel_bak obj;
 	int planNo;
 	int h_cost;
 	
 	
-	public inputParamStruct(genPCST_parallel obj, int planNo) throws SQLException {
+	public inputParamStruct(genPCST_parallel_bak obj, int planNo) throws SQLException {
 		this.obj = obj;
 		this.planNo = planNo;
 		

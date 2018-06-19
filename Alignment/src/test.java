@@ -30,7 +30,9 @@ public class test {
 			System.out.println("there is NOTHING in the argument");
 		
 		System.out.println("max integer = "+Short.MAX_VALUE+" min value = "+Short.MIN_VALUE);
+		
 		test obj = new test();
+		obj.splitting();
 		float old_val = obj.roundToDouble(1.5555555f, 6);
 		float zero = 1.0E-4f;
 		float  val1 = (zero * 10000);
@@ -91,6 +93,15 @@ public class test {
  
 	}
 	
+	public void splitting() {
+		
+		System.out.println("In splitting function");
+		String str = "123..456";
+		String str_arr[] = str.split("\\.\\.");
+		System.out.println(str_arr[0]+" "+str_arr[1]);
+		System.exit(0);
+	}
+
 	private void compareTwoFloats() {
 		
 		float f1 = 6f; //f2= 0;

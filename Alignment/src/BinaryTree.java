@@ -114,7 +114,9 @@ public class BinaryTree {
 	public static HashMap<String, Integer> relationMap =  new HashMap<String, Integer>();
 	public static boolean FROM_CLAUSE;
 	static boolean generate_planstructure = true;
-
+	static boolean isOnlinePB = false;
+	static float alpha = 2;
+	
 	public BinaryTree(){
 
 	}
@@ -548,7 +550,7 @@ public class BinaryTree {
 			predicates = new String[]{"(customer.c_customer_sk = catalog_sales.cs_bill_customer_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)"};
 		    predicatesRev = new String[]{"(catalog_sales.cs_bill_customer_sk = customer.c_customer_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)"};
 		    relations = new String[]{"cs","c","ca","d"};
-		}  
+		} 
 		
 		else if(qtName.contains("DSQT195DR")){
 			predicates = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)","(item.i_item_sk = store_sales.ss_item_sk)","(customer.c_customer_sk = store_sales.ss_customer_sk)","(store_sales.ss_store_sk = store.s_store_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
@@ -561,12 +563,7 @@ public class BinaryTree {
 		    predicatesRev = new String[]{"(catalog_sales.cs_bill_cdemo_sk = customer_demographics.cd_demo_sk)","(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)","(catalog_sales.cs_item_sk = item.i_item_sk)","(promotion.p_promo_sk = catalog_sales.cs_promo_sk)"};
 		    relations = new String[]{"cs","cd","d","i","p"};
 		} 
-		else if(qtName.contains("DSQT263DR")){
-			predicates = new String[]{"(customer_demographics.cd_demo_sk = catalog_sales.cs_bill_cdemo_sk)","(item.i_item_sk = catalog_sales.cs_item_sk)","(catalog_sales.cs_promo_sk = promotion.p_promo_sk)"};
-		    predicatesRev = new String[]{"(catalog_sales.cs_bill_cdemo_sk = customer_demographics.cd_demo_sk)","(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)","(catalog_sales.cs_item_sk = item.i_item_sk)","(promotion.p_promo_sk = catalog_sales.cs_promo_sk)"};
-		    relations = new String[]{"cs","cd","i","p"};
-		    System.out.println("Reached.");
-		} 
+		
 		else if(qtName.contains("DSQT262DR")){
 			predicates = new String[]{"(customer_demographics.cd_demo_sk = catalog_sales.cs_bill_cdemo_sk)","(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)"};
 		    predicatesRev = new String[]{"(catalog_sales.cs_bill_cdemo_sk = customer_demographics.cd_demo_sk)","(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)"};
@@ -609,18 +606,6 @@ public class BinaryTree {
 		    relations = new String[]{"d1","d2","d3","ss","sr","cs","s","i"};
 		}
 		
-		else if (qtName.contains("DSQT624DR")){
-			predicates = new String[]{"(web_sales.ws_warehouse_sk = warehouse.w_warehouse_sk)","(web_sales.ws_ship_mode_sk = ship_mode.sm_ship_mode_sk)","(web_site.web_site_sk = web_sales.ws_web_site_sk)","(date_dim.d_date_sk = web_sales.ws_ship_date_sk)"};
-		    predicatesRev = new String[]{"(warehouse.w_warehouse_sk = web_sales.ws_warehouse_sk)","(ship_mode.sm_ship_mode_sk = web_sales.ws_ship_mode_sk)","(web_sales.ws_web_site_sk = web_site.web_site_sk)","(web_sales.ws_ship_date_sk = date_dim.d_date_sk)"};
-		    relations = new String[]{"ws","w","sm","web","d"};
-		}
-		
-		else if (qtName.contains("DSQT994DR")){
-			predicates = new String[]{"(catalog_sales.cs_warehouse_sk = warehouse.w_warehouse_sk)","(catalog_sales.cs_ship_mode_sk = ship_mode.sm_ship_mode_sk)","(call_center.cc_call_center_sk = catalog_sales.cs_call_center_sk)","(date_dim.d_date_sk = catalog_sales.cs_ship_date_sk)"};
-		    predicatesRev = new String[]{"(warehouse.w_warehouse_sk = catalog_sales.cs_warehouse_sk)","(ship_mode.sm_ship_mode_sk = catalog_sales.cs_ship_mode_sk)","(catalog_sales.cs_call_center_sk = call_center.cc_call_center_sk)","(catalog_sales.cs_ship_date_sk = date_dim.d_date_sk)"};
-		    relations = new String[]{"cs","w","sm","cc","d"};
-		}
-		
 		else if (qtName.contains("DSQT274DR")){
 			predicates = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)","(item.i_item_sk = store_sales.ss_item_sk)","(store_sales.ss_store_sk = store.s_store_sk)","(customer_demographics.cd_demo_sk = store_sales.ss_cdemo_sk)"};
 		    predicatesRev = new String[]{"(date_dim.d_date_sk = store_sales.ss_sold_date_sk)","(store_sales.ss_item_sk = item.i_item_sk)","(store.s_store_sk = store_sales.ss_store_sk)","(store_sales.ss_cdemo_sk = customer_demographics.cd_demo_sk)"};
@@ -650,6 +635,148 @@ public class BinaryTree {
 		    predicatesRev = new String[]{"(household_demographics.hd_demo_sk = store_sales.ss_hdemo_sk)","(store_sales.ss_sold_time_sk = time_dim.t_time_sk)"};
 		    relations = new String[]{"ss","hd","t","s"};
 		} 
+		
+		else if(qtName.contains("DSQT32DR")){
+			predicates = new String[]{"(store_sales.ss_sold_date_sk = dt.d_date_sk)","(store_sales.ss_item_sk = item.i_item_sk)"};
+		    predicatesRev = new String[]{"(dt.d_date_sk = store_sales.ss_sold_date_sk)","(item.i_item_sk = store_sales.ss_item_sk)"};
+		    relations = new String[]{"d","ss","i"};
+		} 
+		
+		else if(qtName.contains("DSQT122DR")){
+			predicates = new String[]{"(web_sales.ws_item_sk = item.i_item_sk)", "(web_sales.ws_sold_date_sk = date_dim.d_date_sk)"};
+		    predicatesRev = new String[]{"(item.i_item_sk = web_sales.ws_item_sk)", "(date_dim.d_date_sk = web_sales.ws_sold_date_sk)"};
+		    relations = new String[]{"ws","i","d"};
+		} 
+		
+		else if(qtName.contains("DSQT213DR")){
+			predicates = new String[]{"(item.i_item_sk = inventory.inv_item_sk)", "(inventory.inv_warehouse_sk = warehouse.w_warehouse_sk)", "(inventory.inv_date_sk = date_dim.d_date_sk)"};
+		    predicatesRev = new String[]{"(inventory.inv_item_sk = item.i_item_sk)", "(warehouse.w_warehouse_sk = inventory.inv_warehouse_sk)", "(date_dim.d_date_sk = inventory.inv_date_sk)"};
+		    relations = new String[]{"inv","w","i","d"};
+		}
+		
+		else if(qtName.contains("DSQT223DR")){
+			predicates = new String[]{"(inventory.inv_date_sk = date_dim.d_date_sk)", "(item.i_item_sk = inventory.inv_item_sk)", "(inventory.inv_warehouse_sk = warehouse.w_warehouse_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = inventory.inv_date_sk)", "(inventory.inv_item_sk = item.i_item_sk)", "(warehouse.w_warehouse_sk = inventory.inv_warehouse_sk)"};
+		    relations = new String[]{"inv","d","i","w"};
+		}
+		
+		else if(qtName.contains("DSQT363DR")){
+			predicates = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(item.i_item_sk = store_sales.ss_item_sk)", "(store_sales.ss_store_sk = store.s_store_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(store_sales.ss_item_sk = item.i_item_sk)", "(store.s_store_sk = store_sales.ss_store_sk)"};
+		    relations = new String[]{"ss","d","i","s"};
+		}
+		
+		/*
+		else if(qtName.contains("DSQT373DR")){
+			predicates = new String[]{"(inventory.inv_item_sk = item.i_item_sk)", "(inventory.inv_date_sk = date_dim.d_date_sk)", "(catalog_sales.cs_item_sk = inventory.inv_item_sk)"};
+		    predicatesRev = new String[]{"(item.i_item_sk = inventory.inv_item_sk)", "(date_dim.d_date_sk = inventory.inv_date_sk)", "(inventory.inv_item_sk = catalog_sales.cs_item_sk)"};
+		    relations = new String[]{"i","inv","d","cs"};
+		}*/
+		
+		//the third predicate is different from the above one (which is correct). I am doing this because of redundant predicate being added which is also correct. 
+		else if(qtName.contains("DSQT373DR")){
+			predicates = new String[]{"(inventory.inv_item_sk = item.i_item_sk)", "(inventory.inv_date_sk = date_dim.d_date_sk)", "catalog_sales.cs_item_sk"};
+		    predicatesRev = new String[]{"(item.i_item_sk = inventory.inv_item_sk)", "(date_dim.d_date_sk = inventory.inv_date_sk)", "catalog_sales.cs_item_sk"};
+		    relations = new String[]{"i","inv","d","cs"};
+		}
+		
+		else if(qtName.contains("DSQT403DR")){
+			predicates = new String[]{"(item.i_item_sk = catalog_sales.cs_item_sk)", "(catalog_sales.cs_warehouse_sk = warehouse.w_warehouse_sk)", "(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)"};
+		    predicatesRev = new String[]{"(catalog_sales.cs_item_sk = item.i_item_sk)", "(warehouse.w_warehouse_sk = catalog_sales.cs_warehouse_sk)", "(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)"};
+		    relations = new String[]{"cs","w","i","d"};
+		}
+		
+		else if(qtName.contains("DSQT422DR")){
+			predicates = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(store_sales.ss_item_sk = item.i_item_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(item.i_item_sk = store_sales.ss_item_sk)"};
+		    relations = new String[]{"d","ss","i"};
+		}
+		
+		else if(qtName.contains("DSQT432DR")){
+			predicates = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(store_sales.ss_store_sk = store.s_store_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(store.s_store_sk = store_sales.ss_store_sk)"};
+		    relations = new String[]{"d","ss","s"};
+		}
+				
+		else if(qtName.contains("DSQT522DR")){
+			predicates = new String[]{"(store_sales.ss_sold_date_sk = dt.d_date_sk)", "(store_sales.ss_item_sk = item.i_item_sk)"};
+		    predicatesRev = new String[]{"(dt.d_date_sk = store_sales.ss_sold_date_sk)", "(item.i_item_sk = store_sales.ss_item_sk)"};
+		    relations = new String[]{"d","ss","i"};
+		}
+		
+		else if(qtName.contains("DSQT533DR")){
+			predicates = new String[]{"(store_sales.ss_item_sk = item.i_item_sk)", "(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(store.s_store_sk = store_sales.ss_store_sk)"};
+		    predicatesRev = new String[]{"(item.i_item_sk = store_sales.ss_item_sk)", "(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(store_sales.ss_store_sk = store.s_store_sk)"};
+		    relations = new String[]{"i","ss","d","s"};
+		}
+		
+		else if(qtName.contains("DSQT552DR")){
+			predicates = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(store_sales.ss_item_sk = item.i_item_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(item.i_item_sk = store_sales.ss_item_sk)"};
+		    relations = new String[]{"d","ss","i"};
+		}
+		
+		else if (qtName.contains("DSQT624DR")){
+			predicates = new String[]{"(date_dim.d_date_sk = web_sales.ws_ship_date_sk)","(web_sales.ws_warehouse_sk = warehouse.w_warehouse_sk)","(web_sales.ws_ship_mode_sk = ship_mode.sm_ship_mode_sk)","(web_sales.ws_web_site_sk = web_site.web_site_sk)"};
+		    predicatesRev = new String[]{"(web_sales.ws_ship_date_sk = date_dim.d_date_sk)","(warehouse.w_warehouse_sk = web_sales.ws_warehouse_sk)","(ship_mode.sm_ship_mode_sk = web_sales.ws_ship_mode_sk)","(web_site.web_site_sk = web_sales.ws_web_site_sk)"};
+		    relations = new String[]{"ws","d","w","sm","ws_web"};
+		}
+		
+		else if(qtName.contains("DSQT633DR")){
+			predicates = new String[]{"(store_sales.ss_item_sk = item.i_item_sk)", "(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(store.s_store_sk = store_sales.ss_store_sk)"};
+		    predicatesRev = new String[]{"(item.i_item_sk = store_sales.ss_item_sk)", "(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(store_sales.ss_store_sk = store.s_store_sk)"};
+		    relations = new String[]{"i","ss","d","s"};
+		}
+		
+		else if(qtName.contains("DSQT673DR")){
+			predicates = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(item.i_item_sk = store_sales.ss_item_sk)", "(store_sales.ss_store_sk = store.s_store_sk)"};
+		    predicatesRev = new String[]{"(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(store_sales.ss_item_sk = item.i_item_sk)", "(store.s_store_sk = store_sales.ss_store_sk)"};
+		    relations = new String[]{"ss","d","s","i"};
+		}
+		
+		else if(qtName.contains("DSQT733DR")){
+			predicates = new String[]{"(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(store_sales.ss_store_sk = store.s_store_sk)", "(store_sales.ss_hdemo_sk = household_demographics.hd_demo_sk)"};
+		    predicatesRev = new String[]{"(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(store.s_store_sk = store_sales.ss_store_sk)", "(household_demographics.hd_demo_sk = store_sales.ss_hdemo_sk)"};
+		    relations = new String[]{"ss","d","s","hd"};
+		}
+		
+		/*
+		else if(qtName.contains("DSQT823DR")){
+			predicates = new String[]{"(inventory.inv_item_sk = item.i_item_sk)", "(inventory.inv_date_sk = date_dim.d_date_sk)", "(store_sales.ss_item_sk = inventory.inv_item_sk)"};
+		    predicatesRev = new String[]{"(item.i_item_sk = inventory.inv_item_sk)", "(date_dim.d_date_sk = inventory.inv_date_sk)", "(inventory.inv_item_sk = store_sales.ss_item_sk)"};
+		    relations = new String[]{"i","inv","d","ss"};
+		}*/
+		
+		//the same problem of reduntant predicates
+		else if(qtName.contains("DSQT823DR")){
+			predicates = new String[]{"(inventory.inv_item_sk = item.i_item_sk)", "(inventory.inv_date_sk = date_dim.d_date_sk)", "store_sales.ss_item_sk"};
+		    predicatesRev = new String[]{"(item.i_item_sk = inventory.inv_item_sk)", "(date_dim.d_date_sk = inventory.inv_date_sk)", "store_sales.ss_item_sk"};
+		    relations = new String[]{"i","inv","d","ss"};
+		}
+		
+		else if(qtName.contains("DSQT862DR")){
+			predicates = new String[]{"(web_sales.ws_sold_date_sk = d1.d_date_sk)", "(item.i_item_sk = web_sales.ws_item_sk)"};
+		    predicatesRev = new String[]{"(d1.d_date_sk = web_sales.ws_sold_date_sk)", "(web_sales.ws_item_sk = item.i_item_sk)"};
+		    relations = new String[]{"ws","d","i"};
+		}
+		
+		else if(qtName.contains("DSQT893DR")){
+			predicates = new String[]{"(store_sales.ss_item_sk = item.i_item_sk)", "(store_sales.ss_sold_date_sk = date_dim.d_date_sk)", "(store.s_store_sk = store_sales.ss_store_sk)"};
+		    predicatesRev = new String[]{"(item.i_item_sk = store_sales.ss_item_sk)", "(date_dim.d_date_sk = store_sales.ss_sold_date_sk)", "(store_sales.ss_store_sk = store.s_store_sk)"};
+		    relations = new String[]{"i","ss","d","s"};
+		}
+		
+		else if(qtName.contains("DSQT982DR")){
+			predicates = new String[]{"(store_sales.ss_item_sk = item.i_item_sk)", "(store_sales.ss_sold_date_sk = date_dim.d_date_sk)"};
+		    predicatesRev = new String[]{"(item.i_item_sk = store_sales.ss_item_sk)", "(date_dim.d_date_sk = store_sales.ss_sold_date_sk)"};
+		    relations = new String[]{"ss","i","d"};
+		}
+		
+		else if (qtName.contains("DSQT994DR")){
+			predicates = new String[]{"(date_dim.d_date_sk = catalog_sales.cs_ship_date_sk)","(catalog_sales.cs_warehouse_sk = warehouse.w_warehouse_sk)","(catalog_sales.cs_ship_mode_sk = ship_mode.sm_ship_mode_sk)","(catalog_sales.cs_call_center_sk = call_center.cc_call_center_sk)"};
+		    predicatesRev = new String[]{"(catalog_sales.cs_ship_date_sk = date_dim.d_date_sk)","(warehouse.w_warehouse_sk = catalog_sales.cs_warehouse_sk)","(ship_mode.sm_ship_mode_sk = catalog_sales.cs_ship_mode_sk)","(call_center.cc_call_center_sk = catalog_sales.cs_call_center_sk)"};
+		    relations = new String[]{"cs","w","sm","cc","d"};
+		}
 		
 		else if(qtName.contains("HQT53DR")){
 			predicates = new String[]{"(orders.o_custkey = customer.c_custkey)","(lineitem.l_orderkey = orders.o_orderkey)","(supplier.s_suppkey = lineitem.l_suppkey)"};
@@ -725,32 +852,71 @@ public class BinaryTree {
 		
 		
 		path = apktPath;
-		numplans=new File(path+"planStructureXML/").listFiles().length ;
-		System.out.println("NUMPLANS ="+numplans+"\n");
 		
-		for(int i=0; i<numplans;i++){
-			//reload the planStrucuture_new directory
-			if(generate_planstructure){
-				PlanGen pg = new PlanGen();
-				pg.apktPath = apktPath;
-				pg.dimension = Integer.parseInt(prop.getProperty("dimension"));
-				pg.select_query = prop.getProperty("select_query");
-				File f_marwa = new File("/home/dsladmin/marwa");
-				File f_durga = new File("/home/dsladmin/durga");
-				if(f_marwa.exists() || f_durga.exists()) { 
-					Class.forName("org.postgresql.Driver");
-					pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai","sa", "database");
-				}
-				else {
-					Class.forName("org.postgresql.Driver");
-					pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai","sa", "database");
-				}
-				pg.getForcedPlanStructure(i);
-				if (pg.conn != null) {
-					try { pg.conn.close(); } catch (SQLException e) {}
+		if(!isOnlinePB) {
+			numplans=new File(path+"planStructureXML/").listFiles().length ;
+			System.out.println("NUMPLANS ="+numplans+"\n");
+
+			for(int i=0; i<numplans;i++){
+				//reload the planStrucuture_new directory
+				if(generate_planstructure){
+					PlanGen pg = new PlanGen();
+					pg.apktPath = apktPath;
+					pg.dimension = Integer.parseInt(prop.getProperty("dimension"));
+					pg.select_query = prop.getProperty("select_query");
+					File f_marwa = new File("/home/dsladmin/marwa");
+					File f_durga = new File("/home/dsladmin/durga");
+					if(f_marwa.exists() || f_durga.exists()) { 
+						Class.forName("org.postgresql.Driver");
+						pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai","sa", "database");
+					}
+					else {
+						Class.forName("org.postgresql.Driver");
+						pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai","sa", "database");
+					}
+					pg.getForcedPlanStructure(i, false, -1);
+					if (pg.conn != null) {
+						try { pg.conn.close(); } catch (SQLException e) {}
+					}
 				}
 			}
 		}
+		else {
+			
+			if(args.length >= 1){
+				alpha = Float.parseFloat(args[0]);
+				System.out.println("Alpha = "+alpha);
+				//writeMapstoFile = false;
+			}
+			
+			numplans=new File(path+"onlinePB/"+"planStructureXML"+alpha+"/").listFiles().length ;
+			System.out.println("NUMPLANS ="+numplans+"\n");
+
+			for(int i=0; i<numplans;i++){
+				//reload the planStrucuture_new directory
+				if(generate_planstructure){
+					PlanGen pg = new PlanGen();
+					pg.apktPath = apktPath;
+					pg.dimension = Integer.parseInt(prop.getProperty("dimension"));
+					pg.select_query = prop.getProperty("select_query");
+					File f_marwa = new File("/home/dsladmin/marwa");
+					File f_durga = new File("/home/dsladmin/durga");
+					if(f_marwa.exists() || f_durga.exists()) { 
+						Class.forName("org.postgresql.Driver");
+						pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5431/tpcds-ai","sa", "database");
+					}
+					else {
+						Class.forName("org.postgresql.Driver");
+						pg.conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/tpcds-ai","sa", "database");
+					}
+					pg.getForcedPlanStructure(i, true, alpha);
+					if (pg.conn != null) {
+						try { pg.conn.close(); } catch (SQLException e) {}
+					}
+				}
+			}
+		}
+		
 		tree.initialize(QTName);
 		for(int i=0;i<numplans;i++){
 			//reading the plan
@@ -762,7 +928,13 @@ public class BinaryTree {
 			//File file = new File("/home/srinivas/Srinivas/data/HQT83D-OC-PL-SL_EXP2/planStructure/"+numPlans+".txt");
 			//File file = new File("/home/dsladmin/Srinivas/data/writingPlans/"+"test.txt");
 	
-			File file = new File(path+"planStructure_new/"+i+".txt");
+			File file;
+			
+			if(isOnlinePB)
+				file = new File(path+"onlinePB/"+"planStructure_new"+alpha+"/"+i+".txt");
+			else
+				file = new File(path+"planStructure_new/"+i+".txt");
+			
 			FileReader fr = new FileReader(file);
 			BufferedReader br = new BufferedReader(fr); 
 			String s;
@@ -820,7 +992,18 @@ public class BinaryTree {
 						}
 					}
 
-					File filer = new File(path+"predicateOrder/"+i+".txt");
+					File filer;
+					
+					if(isOnlinePB) {
+						File dir = new File(apktPath+"onlinePB/predicateOrder"+alpha+"/");
+						if(!dir.exists())
+							dir.mkdirs();
+						
+						filer = new File(path+"onlinePB/"+"predicateOrder"+alpha+"/"+i+".txt");
+					}
+					else
+						filer = new File(path+"predicateOrder/"+i+".txt");
+					
 					FileWriter writer = new FileWriter(filer, false);  
 					PrintWriter pw = new PrintWriter(writer);
 					for(int j = 0; j<nodeids.length;j++)

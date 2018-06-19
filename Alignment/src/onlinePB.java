@@ -148,23 +148,19 @@ public class onlinePB {
 		int threads = (int) (Runtime.getRuntime().availableProcessors() * 0.9);
 		num_of_usable_threads = threads;
 		// set the program arguments
-		if (args.length >= 1) {
+		if (args.length == 1) {
 			alpha = Float.parseFloat(args[0]);
 			System.out.println("Alpha = " + alpha);
 			// writeMapstoFile = false;
 		}
-		if (args.length >= 2) {
-			minimum_selectivity = Float.parseFloat(args[1]);
-			System.out.println("minimum_selectivity = " + minimum_selectivity);
-			// writeMapstoFile = false;
-		}
+		
 
 		System.out.println("contoursReadFromFile = " + contoursReadFromFile + " writeMapstoFile = " + writeMapstoFile
 				+ " singleThread  = " + singleThread + " trie = " + trie + " extra_locations = " + extra_locations
 				+ "  no_extra_locs = " + no_extra_locs);
 
 		float_error = (float) Math.pow(10, -1 * decimalPrecision);
-		long startTime = System.nanoTime();
+		
 		onlinePB obj = new onlinePB();
 		obj.loadPropertiesFile();
 		obj.loadSelectivity();
@@ -341,7 +337,20 @@ public class onlinePB {
 			order.clear();
 			for (int d = 0; d < obj.dimension; d++)
 				order.add(d);
-
+			
+			if (args.length == dimension) {
+				order.clear();
+				assert(dimension != 1): "arguments not matching with the alpha argument";
+				for(int itr = 0; itr < dimension; itr++) {
+					order.add(Integer.parseInt(args[itr]));
+				}
+				
+				// writeMapstoFile = false;
+				System.out.println("Following is the order of dimensions explored");
+				for (int d = 0; d < obj.dimension; d++)
+					System.out.println(order.get(d));
+				//System.exit(0);
+			}
 			// close the connection since the multithreaded version is starting
 			if (!singleThread) {
 				if (obj.conn != null) {
@@ -355,6 +364,9 @@ public class onlinePB {
 			obj.contour_points = new ArrayList<location>();
 			obj.non_contour_points = new ArrayList<location>();
 
+			long startTime = System.nanoTime();
+			long minusTime = 0, minusTimeStart = 0, minusTimeEnd = 0;
+			
 			while (cost < 2 * h_cost) {
 
 				if (cost < (double) 9000) {
@@ -378,8 +390,13 @@ public class onlinePB {
 				// continue;
 				// }
 
+				minusTimeStart = System.nanoTime();
 				System.gc();
 				obj.restartDatabase();
+				minusTimeEnd = System.nanoTime();
+				
+				minusTime += (minusTimeEnd - minusTimeStart);
+				
 				if (!singleThread) {
 					if (obj.conn != null) {
 						try {
@@ -418,10 +435,13 @@ public class onlinePB {
 				System.out.println("The running location hits are " + obj.location_hits);
 				System.out.println("The running FPC calls are " + obj.fpc_call);
 
+					
 				if (!singleThread) {
 					obj.conn = source.getConnection();
 				}
 
+				minusTimeStart = System.nanoTime();
+				
 				for (location l : obj.contour_points) {
 					l.set_contour_no((short) i);
 					if (l.get_plan_no() == -1) {
@@ -452,7 +472,10 @@ public class onlinePB {
 				int size_of_non_contour = obj.non_contour_points.size();
 				ContourPointsMap.put((short) i, new ArrayList<location>(obj.contour_points)); // storing the contour
 																								// points
-
+				minusTimeEnd = System.nanoTime();
+				
+				minusTime += (minusTimeEnd - minusTimeStart);
+				
 				// non_ContourPointsMap.put((short)i, new
 				// ArrayList<location>(obj.non_contour_points)); //storing the contour points
 
@@ -461,6 +484,8 @@ public class onlinePB {
 
 				cost *= 2;
 				i++;
+				
+				//break;
 			}
 			System.out.println("the number of optimization calls are " + obj.opt_call);
 			System.out.println("the number of FPC calls are " + obj.fpc_call);
@@ -481,7 +506,9 @@ public class onlinePB {
 			System.out.println("total 2d contours skipped " + obj.two_d_contours_skipped);
 
 			long endTime = System.nanoTime();
-			System.out.println("Took " + (endTime - startTime) / 1000000000 + " sec");
+			System.out.println("Wall clock " + (endTime - startTime) / 1000000000 + " sec");
+			System.out.println("minus time " + (minusTime) / 1000000000 + " sec");
+			System.out.println("Real time for contour gen " + (endTime - startTime - minusTime) / 1000000000 + " sec");
 
 			if (writeMapstoFile)
 				obj.writeMaptoFile(false);
@@ -2418,6 +2445,663 @@ public class onlinePB {
 		}
 	}
 
+	
+	public void generateCoveringContours6D(ArrayList<Integer> order, float cost, PrintWriter writer )
+			throws IOException, SQLException, PicassoException {
+
+		String funName = "generateCoveringContours6D";
+		if (DEBUG_LEVEL_1)
+			System.out.println("Entered function " + funName);
+
+		// learntDim contains the dimensions already learnt (which is null initially)
+		// learntDimIndices contains the exact point in the space for the learnt
+		// dimensions
+
+		ArrayList<Integer> remainingDimList = new ArrayList<Integer>();
+		for (int i = 0; i < order.size(); i++) {
+			if (learntDim.contains(order.get(i)) != true) {
+				remainingDimList.add(order.get(i));
+				qrun_sel[order.get(i)] = -1.0f;
+			}
+		}
+
+		float temp_qrun[] = new float[dimension];
+
+		if (remainingDimList.size() == 2) {
+			
+			for(int i =0; i< dimension; i++) {
+				writer.print(qrun_sel[i]+",");
+			}
+			writer.println();
+			
+			if(dimension == 6)
+				return;
+			
+			
+			int last_dim1 = -1, last_dim2 = -1;
+
+			// if((opt_call % 500) ==0 )
+			// System.out.println("running optimization for debug along thread
+			// ["+min_cc_sel_idx+"-"+max_cc_sel_idx+"] opt_call = "+opt_call+" fpc call =
+			// "+fpc_call+" location hits = "+location_hits);
+
+			for (int i = 0; i < dimension; i++) {
+				if (learntDim.contains(i)) {
+					assert (qrun_sel[i] != -1.0) : "the selectivity values are assigned";
+					// System.out.print(arr[i]+",");
+				} else if (last_dim1 == -1) {
+					assert (last_dim2 == -1) : last_dim2 + " dimension should not be set at this point of time";
+					assert (qrun_sel[i] == -1.0) : "the selectivity values are not yet assigned";
+					last_dim1 = i;
+				} else {
+					assert (last_dim1 != -1) : last_dim1 + " dimension should be set at this point of time";
+					assert (qrun_sel[i] == -1.0) : "the selectivity values are not yet assigned";
+					last_dim2 = i;
+				}
+			}
+
+			assert (last_dim1 >= 0 && last_dim1 < dimension) : funName + " : last dim1 index problem ";
+			assert (last_dim2 >= 0 && last_dim2 < dimension) : funName + " : last dim2  index problem ";
+			assert (remainingDimList.size() + learntDim.size() == dimension) : funName
+					+ " : learnt dimension data structures size not matching";
+
+			// for the last two dimensions last_dim1 and last_dim2
+			location loc1, loc2;
+
+			qrun_sel[last_dim1] = qrun_sel[last_dim2] = minimum_selectivity;
+
+			if (trie) {
+				loc1 = searchLocationInGraph(qrun_sel, 0);
+				if (loc1 == null) {
+					loc1 = searchLocationInGraph(qrun_sel, 2);
+				}
+			} else
+				loc1 = locationAlreadyExist(qrun_sel);
+			if (loc1 == null) {
+				loc1 = new location(qrun_sel, this);
+				// if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
+				// printSelectivityCost(qrun_sel, -1);
+				// non_contour_points.add(loc1);
+				if (trie)
+					addLocationtoGraph(loc1, 2);
+				opt_call++;
+			}
+
+			assert (loc1 != null) : "loc1 is null";
+			float optimization_cost_low = loc1.get_cost();
+
+			qrun_sel[last_dim1] = qrun_sel[last_dim2] = 1.0f;
+			if (trie) {
+				loc2 = searchLocationInGraph(qrun_sel, 0);
+				if (loc2 == null) {
+					loc2 = searchLocationInGraph(qrun_sel, 2);
+				}
+			} else
+				loc2 = locationAlreadyExist(qrun_sel);
+
+			if (loc2 == null) {
+				loc2 = new location(qrun_sel, this);
+				// non_contour_points.add(loc2);
+				// if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
+				// printSelectivityCost(qrun_sel, -1);
+				if (trie)
+					addLocationtoGraph(loc2, 2);
+				opt_call++;
+			}
+
+			assert (loc2 != null) : "loc2 is null";
+			float optimization_cost_high = loc2.get_cost();
+			// non_contour_points.add(loc2);
+
+			if (dimension < 6)
+				assert (optimization_cost_low <= optimization_cost_high) : "violation of PCM";
+			// check if the origin of this 2D slice is greater cost
+			// OR
+			// check if the terminal of this 2D slice has lesser cost
+
+			total_2d_contours++;
+			if (optimization_cost_low > cost || optimization_cost_high < cost) {
+				// do not process the 2D plane
+				two_d_contours_skipped++;
+				return;
+			}
+
+			// now we need to explore the 2D surface
+			else {
+
+				// just the initialize the last two dimensions;
+				qrun_sel[last_dim2] = 1.0f;
+				qrun_sel[last_dim1] = minimum_selectivity;
+				location loc;
+
+				if (trie) {
+					loc = searchLocationInGraph(qrun_sel, 0);
+					if (loc == null) {
+						loc = searchLocationInGraph(qrun_sel, 2);
+					}
+				} else
+					loc = locationAlreadyExist(qrun_sel);
+				if (loc == null) {
+					loc = new location(qrun_sel, this);
+					// non_contour_points.add(loc);
+					// if(Math.abs(qrun_sel[0] - minimum_selectivity) < 0.00001f)
+					// printSelectivityCost(qrun_sel, -1);
+					if (trie)
+						addLocationtoGraph(loc, 2);
+					opt_call++;
+				}
+
+				assert (loc != null) : "location is null";
+				float optimization_cost = loc.get_cost();
+
+				location loc_rev;
+				float optimization_cost_rev = Float.MIN_VALUE;
+
+				if (enhancement) {
+					// just the initialize the last two dimensions;
+					qrun_sel_rev[last_dim2] = minimum_selectivity;
+					qrun_sel_rev[last_dim1] = 1.0f;
+
+					// set the first two dimensions as per qrun
+					for (int i = 0; i < dimension; i++) {
+						if (learntDim.contains(i))
+							qrun_sel_rev[i] = qrun_sel[i];
+					}
+
+					if (trie) {
+						loc = searchLocationInGraph(qrun_sel_rev, 0);
+						if (loc == null) {
+							loc = searchLocationInGraph(qrun_sel_rev, 2);
+						}
+					} else
+						loc = locationAlreadyExist(qrun_sel_rev);
+
+					if (loc == null) {
+						loc = new location(qrun_sel_rev, this);
+						// non_contour_points.add(loc);
+						// if(Math.abs(qrun_sel_rev[0] - minimum_selectivity) < 0.00001f)
+						// printSelectivityCost(qrun_sel_rev, -1);
+						if (trie)
+							addLocationtoGraph(loc, 2);
+						opt_call++;
+					}
+
+					assert (loc != null) : "location is null";
+					optimization_cost_rev = loc.get_cost();
+					if (DEBUG_LEVEL_2)
+						printSelectivityCost(qrun_sel_rev, optimization_cost);
+
+				}
+
+				boolean increase_along_dim1 = true;
+
+				// we are reverse jumping along last_dim2 dimension
+
+				float target_cost1 = (float) Math.pow(beta, dimension - 2) * cost;
+				float target_cost2 = (float) Math.pow(beta, dimension - 1) * cost;
+				float target_cost3 = (float) Math.pow(beta, dimension) * cost;
+				int orig_dim1 = last_dim1;
+				int orig_dim2 = last_dim2;
+				float opt_cost_copy = Float.MIN_VALUE;
+				boolean contour_done = false; // to capture the finishing status of contour processing
+
+				float[] qrun_copy = new float[dimension];
+				for (;;) {
+
+					for (int i = 0; i < dimension; i++) {
+						if (increase_along_dim1) {
+							qrun_copy[i] = qrun_sel[i];
+							last_dim1 = orig_dim1;
+							last_dim2 = orig_dim2;
+							opt_cost_copy = optimization_cost;
+						} else {
+							qrun_copy[i] = qrun_sel_rev[i];
+							last_dim1 = orig_dim2;
+							last_dim2 = orig_dim1;
+							opt_cost_copy = optimization_cost_rev;
+						}
+					}
+
+					boolean came_inside_dim2_loop = false;
+					contour_done = false;
+					// while((qrun_copy[last_dim2] > minimum_selectivity) && (target_cost1 <=
+					// opt_cost_copy))
+					// changed from above to below after adding the extra locations
+					while ((qrun_copy[last_dim2] > minimum_selectivity)) {
+
+						// if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] -
+						// 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f) )
+						// System.out.println("intereseting");
+
+						came_inside_dim2_loop = true;
+
+						if (opt_cost_copy <= target_cost2)
+							break;
+
+						// second condition for breaking from loop
+						if (enhancement) {
+
+							for (int i = 0; i < dimension; i++) {
+								if (increase_along_dim1) {
+									qrun_sel[i] = qrun_copy[i];
+									optimization_cost = opt_cost_copy;
+								} else {
+									qrun_sel_rev[i] = qrun_copy[i];
+									optimization_cost_rev = opt_cost_copy;
+								}
+							}
+
+							if ((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1])
+									|| (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2])) {
+
+								// setting
+								contour_done = true;
+								break;
+							}
+						}
+						float old_sel = qrun_copy[last_dim2];
+
+						if (!extra_locations) {
+							qrun_copy[last_dim2] = roundToDouble(old_sel / beta);
+						} else {
+							qrun_copy[last_dim2] = old_sel / beta;
+							qrun_copy[last_dim2] = findNearestLowerSel(qrun_copy[last_dim2]);
+						}
+
+						if (qrun_copy[last_dim2] <= minimum_selectivity)
+							qrun_copy[last_dim2] = minimum_selectivity;
+
+						assert (qrun_copy[last_dim2] <= old_sel) : "selectivity not decreasing, even if it has to: old_sel = "
+								+ old_sel + " new sel = " + qrun_copy[last_dim2];
+
+						if (DEBUG_LEVEL_2)
+							System.out.println("Selectivity learnt " + old_sel / (qrun_copy[last_dim2] * beta));
+
+						if (trie) {
+							loc = searchLocationInGraph(qrun_copy, 0);
+							if (loc == null) {
+								loc = searchLocationInGraph(qrun_copy, 2);
+							}
+
+						} else
+							loc = locationAlreadyExist(qrun_copy);
+
+						if (loc == null) {
+							loc = new location(qrun_copy, this);
+							// printSelectivityCost(qrun_copy, opt_cost_copy);
+							// non_contour_points.add(loc);
+							// if(Math.abs(qrun_copy[0] - minimum_selectivity) < 0.00001f)
+							// printSelectivityCost(qrun_copy, -1);
+							if (trie)
+								addLocationtoGraph(loc, 2);
+							// counting the optimization calls
+
+							opt_call++;
+							backward_jumps++;
+						}
+
+						// non_contour_points.add(loc);
+						assert (loc != null) : "location is null";
+						opt_cost_copy = loc.get_cost();
+
+						if (qrun_copy[last_dim2] <= minimum_selectivity) {
+							contour_done = true;
+							break;
+						}
+
+						if (qrun_copy[last_dim1] > minimum_selectivity && dimension < 6)
+							assert (opt_cost_copy >= cost) : "covering locaiton has less than contour cost: i.e. covering_cost = "
+									+ opt_cost_copy + " and contour cost = " + cost;
+
+						if (DEBUG_LEVEL_2)
+							printSelectivityCost(qrun_copy, opt_cost_copy);
+
+					}
+
+					// if we hit one of the boundary then we are done
+					if (contour_done) {
+						break;
+					}
+
+					// we are forward jumping along last_dim1 dimension
+					// qrun_sel[last_dim1] = minimum_selectivity;
+					// if((loc = locationAlreadyExist(qrun_sel)) == null){
+					// loc = new location(qrun_sel, this);
+					// contour_points.add(loc);
+					// opt_call++;
+					// }
+					// assert(loc != null) : "location is null";
+					// optimization_cost = loc.get_cost();
+
+					boolean came_inside_dim1_loop = false;
+					contour_done = false;
+					// while((qrun_copy[last_dim1] < (1.0f-float_error)) && (opt_cost_copy <=
+					// target_cost3))
+					// changed from above to below after adding the extra locations
+					while ((qrun_copy[last_dim1] < (1.0f - float_error))) {
+
+						// if((Math.abs(qrun_copy[0] - 0.001271) < 0.00001f) && (Math.abs(qrun_copy[1] -
+						// 1.0) < 0.00001f) && (Math.abs(qrun_copy[2] - 2.0E-4) < 0.00001f) )
+						// System.out.println("intereseting");
+
+						came_inside_dim1_loop = true;
+
+						if (opt_cost_copy >= target_cost2) {
+							// found a covering contour point
+
+							if (trie) {
+								loc = searchLocationInGraph(qrun_copy, 0);
+								if (loc == null) {
+									loc = searchLocationInGraph(qrun_copy, 1);
+								}
+							} else
+								loc = locationAlreadyExist(qrun_copy);
+
+							if (loc == null) {
+								loc = new location(qrun_copy, this);
+								opt_call++;
+								// if(Math.abs(qrun_copy[0] - minimum_selectivity) < 0.00001f)
+								// printSelectivityCost(qrun_copy, -1);
+								forward_jumps++;
+								if (qrun_copy[0] >= ((float) Math.pow(beta, 3) * minimum_selectivity)
+										&& qrun_copy[0] <= ((float) Math.pow(beta, 10) * minimum_selectivity))
+									forward_jumps_zero_level++;
+							}
+
+							if (!ContourLocationAlreadyExist(loc.dim_values))
+								if (loc.get_contour_no() > 0) // again checking if the loc already exist in earlier
+																// contours
+									contour_points.add(new location(loc.dim_values, this));
+								else
+									contour_points.add(loc);
+							if (trie)
+								addLocationtoGraph(loc, 1);
+
+							if (enhancement_end_contour) {
+								for (int d = 0; d < dimension; d++)
+									temp_qrun[d] = qrun_copy[d];
+
+								temp_qrun[last_dim2] = minimum_selectivity;
+
+								location temp_loc;
+								if (trie) {
+									temp_loc = searchLocationInGraph(temp_qrun, 0);
+									if (temp_loc == null) {
+										temp_loc = searchLocationInGraph(temp_qrun, 2);
+									}
+
+								} else
+									temp_loc = locationAlreadyExist(temp_qrun);
+
+								if (temp_loc == null) {
+									temp_loc = new location(temp_qrun, this);
+									// non_contour_points.add(temp_loc);
+									if (trie)
+										addLocationtoGraph(temp_loc, 2);
+								}
+
+								// assert(temp_loc.get_cost() <= loc.get_cost()*(1+cost_error)) : "cost of the
+								// covering location is not higher than that of its boundary location";
+								if (temp_loc.get_cost() >= cost) {
+									contour_done = true;
+									return;
+								}
+							}
+							break;
+						}
+
+						// second condition for breaking from loop
+						if (enhancement) {
+
+							for (int i = 0; i < dimension; i++) {
+								if (increase_along_dim1) {
+									qrun_sel[i] = qrun_copy[i];
+									optimization_cost = opt_cost_copy;
+								} else {
+									qrun_sel_rev[i] = qrun_copy[i];
+									optimization_cost_rev = opt_cost_copy;
+								}
+							}
+
+							if ((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1])
+									|| (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2])) {
+
+								contour_done = true;
+								// setting
+								break;
+							}
+						}
+
+						// if((Math.abs(qrun_copy[0] - 1.0E-4) < 0.00001f) && (Math.abs(qrun_copy[1] -
+						// 0.013906) < 0.00001f) && (Math.abs(qrun_copy[2] - 1.0) < 0.00001f) )
+						// System.out.println("intereseting");
+
+						// the second argument for calculate jump size is the dimension along which we
+						// need to traverse
+						double forward_jump = calculateJumpSize(qrun_copy, last_dim1, opt_cost_copy);
+
+						if (DEBUG_LEVEL_2)
+							System.out.println("The forward jump size is " + (beta - 1) * forward_jump
+									+ " from selectivity " + qrun_copy[last_dim1]);
+
+						float old_sel = qrun_copy[last_dim1];
+						qrun_copy[last_dim1] += (beta - 1) * forward_jump; // check this again!
+
+						if ((beta - 1) * forward_jump <= 0.0f)
+							printSelectivityCost(qrun_copy, opt_cost_copy);
+
+						assert ((beta - 1) * forward_jump > 0.0f) : "jump in the negative direction";
+
+						if (qrun_copy[last_dim1] / (old_sel * beta) < (1.0f - float_error))
+							qrun_copy[last_dim1] = old_sel * beta;
+
+						if (qrun_copy[last_dim1] / old_sel < 1.01 * beta)
+							jump_size_1++;
+						else if (qrun_copy[last_dim1] / old_sel < 1.1 * beta)
+							jump_size_10++;
+
+						if (qrun_copy[last_dim1] / old_sel > 1.2 * beta)
+							jump_size_20++;
+						if (qrun_copy[last_dim1] / old_sel > 1.5 * beta)
+							jump_size_50++;
+						if (qrun_copy[last_dim1] / old_sel > 2 * beta)
+							jump_size_100++;
+
+						// just rounding up the float value
+						qrun_copy[last_dim1] = roundToDouble(qrun_copy[last_dim1]);
+						// System.out.println("The jumps sizes are "+(qrun_copy[last_dim1]/old_sel)+"
+						// against "+beta);
+						assert (qrun_copy[last_dim1] >= old_sel) : "selectivity not increasing, even if it has to";
+
+						if (qrun_copy[last_dim1] >= (1.0f - float_error)) {
+
+							qrun_copy[last_dim1] = 1.0f;
+							if (trie) {
+								loc = searchLocationInGraph(qrun_copy, 0);
+								if (loc == null) {
+									loc = searchLocationInGraph(qrun_copy, 1);
+								}
+							} else
+								loc = locationAlreadyExist(qrun_copy);
+
+							if (loc == null) {
+								loc = new location(qrun_copy, this);
+								opt_call++;
+								// if(Math.abs(qrun_copy[0] - minimum_selectivity) < 0.00001f){
+								// printSelectivityCost(qrun_copy, -1);
+								// System.out.println(" [ "+min_cc_sel_idx+"-"+max_cc_sel_idx+"]"+" jump size
+								// "+forward_jump);
+								// }
+								forward_jumps++;
+								if (qrun_copy[0] >= minimum_selectivity
+										&& qrun_copy[0] <= ((float) Math.pow(beta, 2) * minimum_selectivity))
+									forward_jumps_zero_level++;
+							}
+							if (!ContourLocationAlreadyExist(loc.dim_values))
+								if (loc.get_contour_no() > 0) // again checking if the loc already exist in earlier
+																// contours
+									contour_points.add(new location(loc.dim_values, this));
+								else
+									contour_points.add(loc);
+							if (trie)
+								addLocationtoGraph(loc, 1);
+							// check to see if the terminus point is reached for the 2D slice
+							if (qrun_copy[last_dim2] >= (1.0f - float_error))
+								return;
+
+							contour_done = true;
+							break;
+						}
+
+						if (DEBUG_LEVEL_2)
+							System.out.println("Selectivity learnt " + qrun_copy[last_dim1] / (old_sel * beta));
+
+						if (trie) {
+							loc = searchLocationInGraph(qrun_copy, 0);
+							if (loc == null) {
+								loc = searchLocationInGraph(qrun_copy, 2);
+							}
+						} else
+							loc = locationAlreadyExist(qrun_copy);
+
+						if (loc == null) {
+							loc = new location(qrun_copy, this);
+							// non_contour_points.add(loc);
+							if (trie)
+								addLocationtoGraph(loc, 2);
+							// counting the optimization calls
+							opt_call++;
+							// if(Math.abs(qrun_copy[0] - minimum_selectivity) < 0.00001f){
+							// printSelectivityCost(qrun_copy, -1);
+							// System.out.println(" jump size "+forward_jump);
+							// }
+							forward_jumps++;
+							if (qrun_copy[0] >= minimum_selectivity
+									&& qrun_copy[0] <= ((float) Math.pow(beta, 2) * minimum_selectivity))
+								forward_jumps_zero_level++;
+						}
+
+						// non_contour_points.add(loc);
+						assert (loc != null) : "location is null";
+						opt_cost_copy = loc.get_cost();
+
+						if (qrun_copy[last_dim2] < 1.0 && dimension < 6)
+							assert (opt_cost_copy >= cost) : "covering locaiton has less than contour cost: i.e. covering_cost = "
+									+ opt_cost_copy + " and contour cost = " + cost;
+
+						if (DEBUG_LEVEL_2)
+							printSelectivityCost(qrun_copy, opt_cost_copy);
+
+					}
+
+					// if we hit the boundary then we are done
+					if (contour_done) {
+
+						// check to see if the terminus point is reached for the 2D slice
+						if (qrun_copy[last_dim2] >= (1.0f - float_error))
+							return;
+
+						break;
+					}
+
+					// if(came_inside_dim1_loop)
+					// assert(opt_cost_copy <= target_cost3*(1+cost_error) &&
+					// (1+cost_error)*opt_cost_copy >= target_cost2) : "dim1 is not in the range:
+					// opt_cost = "+opt_cost_copy+" target_cost2 = "+ target_cost2+ " target_cost3 =
+					// "+target_cost3;
+
+					//
+					if (opt_cost_copy > (Math.pow(beta, dimension) * cost)) {
+
+						opt_cost_copy = (float) Math.pow(beta, dimension) * cost;
+
+						if (opt_cost_copy > (Math.pow(beta, dimension) * cost * (1 + cost_error))) {
+							System.out.print("How is this possible? and cost increase is "
+									+ opt_cost_copy / (Math.pow(beta, dimension) * cost));
+							System.out.println(" \t opt_cost_copy " + opt_cost_copy + " max possible cost "
+									+ (Math.pow(beta, dimension) * cost));
+						}
+
+					}
+
+					// copy back the copy-variable to the original data structure
+					for (int i = 0; i < dimension; i++) {
+						if (increase_along_dim1) {
+							qrun_sel[i] = qrun_copy[i];
+							optimization_cost = opt_cost_copy;
+						} else {
+							qrun_sel_rev[i] = qrun_copy[i];
+							optimization_cost_rev = opt_cost_copy;
+						}
+					}
+
+					if (enhancement) {
+						increase_along_dim1 = increase_along_dim1 ? false : true;
+
+						if ((qrun_sel[orig_dim1] >= qrun_sel_rev[orig_dim1])
+								|| (qrun_sel[orig_dim2] <= qrun_sel_rev[orig_dim2]) || contour_done)
+							break;
+					}
+				}
+			}
+
+			return;
+		}
+
+		Integer curDim = remainingDimList.get(0);
+
+		
+		if(curDim == order.get(0))
+			qrun_sel[curDim] = outermost_dimension_sel.get(0);
+		else if (curDim == order.get(1)) // to check if it is the last but one outer most dimension
+			qrun_sel[curDim] = outermost_dimension_sel.get(min_cc_sel_idx);
+		else
+			qrun_sel[curDim] = minimum_selectivity;
+
+		int itr_o = 0;
+		int itr_i = min_cc_sel_idx;
+		while (true) {
+			// if(qrun_sel[0] == minimum_selectivity)
+			// continue;
+			boolean flag = false;
+
+			if (curDim == order.get(0)) {
+				qrun_sel[curDim] = outermost_dimension_sel.get(itr_o);
+				if (itr_o == outermost_dimension_sel.size()-1) {
+					flag = true;
+				}
+				restartDatabase(); //TODO: is it correct?
+			}
+			else if (curDim == order.get(1)) {
+				qrun_sel[curDim] = outermost_dimension_sel.get(itr_i);
+				if (itr_i == max_cc_sel_idx) {
+					flag = true;
+				}
+			} else {
+				if (qrun_sel[curDim] >= (1.0f - float_error)) {
+					qrun_sel[curDim] = 1.0f;
+					flag = true;
+				}
+			}
+
+			learntDim.add(curDim);
+
+			generateCoveringContours6D(order, cost,writer);
+			learntDim.remove(learntDim.indexOf(curDim));
+
+			if (curDim == order.get(0))
+				itr_o++;
+			else if (curDim == order.get(1))
+				itr_i++;
+			else
+				qrun_sel[curDim] = roundToDouble(qrun_sel[curDim] * beta);
+
+			if (flag)
+				break;
+		}
+	}
+
+	
 	public void getCoveringContoursParallel(ArrayList<Integer> order, float cost) throws SQLException {
 
 		System.out.println("Number of Usable threads are : " + num_of_usable_threads + " with selec range size: "
@@ -3741,8 +4425,16 @@ class CoveringContourinputParamStruct {
 			assert (order.size() == dimension) : "size of order not matching with dimensions";
 			assert (cost > 0) : "contour searching cost is less than or equal to 0";
 
-			obj.generateCoveringContours(order, cost);
-
+			
+			
+			if(dimension == 6) {
+				PrintWriter writer = new PrintWriter(new FileOutputStream(new File(apktPath+"others/FSB/log("+min_index+"-"+max_index+").txt")), true);
+				obj.generateCoveringContours6D(order, cost, writer);
+				writer.close();
+			}
+			else
+				obj.generateCoveringContours(order, cost);
+			
 			// assert(obj.contour_points.size() > 0 || obj.non_contour_points.size() > 0):
 			// "empty contour or non_contour points";
 
