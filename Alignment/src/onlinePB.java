@@ -82,7 +82,7 @@ public class onlinePB {
 	static HashMap<Short, ArrayList<location>> ContourPointsMap = new HashMap<Short, ArrayList<location>>();
 	static HashMap<Short, ArrayList<location>> non_ContourPointsMap = new HashMap<Short, ArrayList<location>>();
 	static ArrayList<Float> outermost_dimension_sel;
-
+	static ArrayList<Integer> order = new ArrayList<Integer>(); //to be first filled by max-ratio function
 	// parameters to set
 	// static float minimum_selectivity = 0.00005f;
 	static float minimum_selectivity = 0.0001f;
@@ -93,6 +93,7 @@ public class onlinePB {
 	static int decimalPrecision = 6;
 	static boolean DEBUG_LEVEL_2 = false;
 	static boolean DEBUG_LEVEL_1 = false;
+	static boolean zero_contour_flag = false;
 	static boolean visualisation_2D = false;
 	static boolean enhancement = true; // toggling between last_dim1 and last_dim2
 	static boolean enhancement_end_contour = false; // if you are enabling this add opt++ in code
@@ -155,7 +156,7 @@ public class onlinePB {
 		}
 		
 
-		System.out.println("contoursReadFromFile = " + contoursReadFromFile + " writeMapstoFile = " + writeMapstoFile
+		System.out.println("alpha = "+alpha+ " contoursReadFromFile = " + contoursReadFromFile + " writeMapstoFile = " + writeMapstoFile
 				+ " singleThread  = " + singleThread + " trie = " + trie + " extra_locations = " + extra_locations
 				+ "  no_extra_locs = " + no_extra_locs);
 
@@ -177,6 +178,11 @@ public class onlinePB {
 		obj.readpkt(gdp, true);
 		obj.loadPropertiesFile();
 
+		//max-ratio code
+		long startTime = System.nanoTime();
+		obj.maxRatioPerimeterAdHocOld();
+		System.exit(0);
+		
 		try {
 			System.out.println("entered DB conn1");
 			source = new Jdbc3PoolingDataSource();
@@ -333,10 +339,10 @@ public class onlinePB {
 
 			i = 1;
 
-			ArrayList<Integer> order = new ArrayList<Integer>();
-			order.clear();
-			for (int d = 0; d < obj.dimension; d++)
-				order.add(d);
+			
+//			order.clear();
+//			for (int d = 0; d < obj.dimension; d++)
+//				order.add(d);
 			
 			if (args.length == dimension) {
 				order.clear();
@@ -364,7 +370,7 @@ public class onlinePB {
 			obj.contour_points = new ArrayList<location>();
 			obj.non_contour_points = new ArrayList<location>();
 
-			long startTime = System.nanoTime();
+			
 			long minusTime = 0, minusTimeStart = 0, minusTimeEnd = 0;
 			
 			while (cost < 2 * h_cost) {
@@ -481,13 +487,17 @@ public class onlinePB {
 
 				System.out.println("Size of contour: " + size_of_contour);
 				System.out.println("Size of non-contour: " + size_of_non_contour);
-
+				
+				if(size_of_contour == 0) {
+					zero_contour_flag = true;
+				}
+					
 				cost *= 2;
 				i++;
 				
 				//break;
 			}
-			System.out.println("the number of optimization calls are " + obj.opt_call);
+			System.out.println("the number of optimization calls are " + obj.opt_call+ " with zero contour flag = "+zero_contour_flag);
 			System.out.println("the number of FPC calls are " + obj.fpc_call);
 			System.out.println("location hits " + obj.location_hits);
 			System.out.println("slope function time " + obj.slope_time);
@@ -1459,16 +1469,9 @@ public class onlinePB {
 			} else if (sel_distribution == 1) {
 
 				// This is for TPCDS queries
-				selectivity[0] = 0.00005f;
-				selectivity[1] = 0.0005f;
-				selectivity[2] = 0.005f;
-				selectivity[3] = 0.02f;
-				selectivity[4] = 0.05f;
-				selectivity[5] = 0.10f;
-				selectivity[6] = 0.15f;
-				selectivity[7] = 0.25f;
-				selectivity[8] = 0.50f;
-				selectivity[9] = 0.99f; // dec - 2012
+				selectivity[0] = 0.0001f;	selectivity[1] = 0.0005f;selectivity[2] = 0.005f;	selectivity[3] = 0.02f;
+				selectivity[4] = 0.05f;		selectivity[5] = 0.10f;	selectivity[6] = 0.15f;	selectivity[7] = 0.25f;
+				selectivity[8] = 0.50f;		selectivity[9] = 0.99f;  
 			} else
 				assert (false) : funName + "ERROR: should not come here";
 
@@ -1499,26 +1502,11 @@ public class onlinePB {
 				selectivity[19] = 0.99f;
 			} else if (sel_distribution == 1) {
 
-				selectivity[0] = 0.0001f;
-				selectivity[1] = 0.0002f;
-				selectivity[2] = 0.0004f;
-				selectivity[3] = 0.0006f;
-				selectivity[4] = 0.0008f;
-				selectivity[5] = 0.001f;
-				selectivity[6] = 0.002f;
-				selectivity[7] = 0.004f;
-				selectivity[8] = 0.005f;
-				selectivity[9] = 0.008f;
-				selectivity[10] = 0.01f;
-				selectivity[11] = 0.05f;
-				selectivity[12] = 0.1f;
-				selectivity[13] = 0.15f;
-				selectivity[14] = 0.25f;
-				selectivity[15] = 0.40f;
-				selectivity[16] = 0.60f;
-				selectivity[17] = 0.80f;
-				selectivity[18] = 0.9f;
-				selectivity[19] = 0.99f;
+				selectivity[0] = 0.0001f;   selectivity[1] = 0.0003f;		selectivity[2] = 0.0005f;	selectivity[3] = 0.0007f;
+				selectivity[4] = 0.001f;   selectivity[5] = 0.003f;		selectivity[6] = 0.005f;	selectivity[7] = 0.007f;
+				selectivity[8] = 0.01f;	selectivity[9] = 0.03f;	selectivity[10] = 0.05f;	selectivity[11] = 0.07f;
+				selectivity[12] = 0.1f;	selectivity[13] = 0.15f;	selectivity[14] = 0.25f;	selectivity[15] = 0.4f;
+				selectivity[16] = 0.50f;	selectivity[17] = 0.60f;	selectivity[18] = 0.80f;	selectivity[19] = 0.99f;
 			} else
 				assert (false) : funName + "ERROR: should not come here";
 
@@ -1561,36 +1549,44 @@ public class onlinePB {
 			}
 
 			else if (sel_distribution == 1) {
-				selectivity[0] = 0.0001f;
+				selectivity[0] = 0.0001f;  selectivity[1] = 0.0002f;	selectivity[2] = 0.0004f;	selectivity[3] = 0.0006f;
+				selectivity[4] = 0.0008f;   selectivity[5] = 0.001f;	selectivity[6] = 0.002f;	selectivity[7] = 0.003f;
+				selectivity[8] = 0.004f;	selectivity[9] = 0.006f;	selectivity[10] = 0.008f;	selectivity[11] = 0.01f;
+				selectivity[12] = 0.0200f;	selectivity[13] = 0.0400f;	selectivity[14] = 0.0600f;	selectivity[15] = 0.08f;
+				selectivity[16] = 0.1000f;	selectivity[17] = 0.1500f;	selectivity[18] = 0.2000f;	selectivity[19] = 0.2500f;
+				selectivity[20] = 0.3000f;	selectivity[21] = 0.3500f;	selectivity[22] = 0.4000f;	selectivity[23] = 0.4500f;
+				selectivity[24] = 0.5000f;	selectivity[25] = 0.6000f;	selectivity[26] = 0.7000f;	selectivity[27] = 0.8000f;
+				selectivity[28] = 0.9000f;	selectivity[29] = 0.9950f;
+				/*selectivity[0] = 0.0001f;
 				selectivity[1] = 0.0002f;
-				selectivity[2] = 0.0005f;
-				selectivity[3] = 0.0007f;
-				selectivity[4] = 0.0010f;
-				selectivity[5] = 0.005f;
-				selectivity[6] = 0.0100f;
-				selectivity[7] = 0.0200f;
-				selectivity[8] = 0.0300f;
-				selectivity[9] = 0.0400f;
-				selectivity[10] = 0.0500f;
-				selectivity[11] = 0.0600f;
-				selectivity[12] = 0.0700f;
-				selectivity[13] = 0.0800f;
-				selectivity[14] = 0.0900f;
-				selectivity[15] = 0.1000f;
-				selectivity[16] = 0.1200f;
-				selectivity[17] = 0.1400f;
-				selectivity[18] = 0.1600f;
-				selectivity[19] = 0.1800f;
-				selectivity[20] = 0.2000f;
-				selectivity[21] = 0.2500f;
-				selectivity[22] = 0.3000f;
-				selectivity[23] = 0.4000f;
+				selectivity[2] = 0.0004f;
+				selectivity[3] = 0.0006f;
+				selectivity[4] = 0.0008f;
+				selectivity[5] = 0.001f;
+				selectivity[6] = 0.002f;
+				selectivity[7] = 0.003f;
+				selectivity[8] = 0.004f;
+				selectivity[9] = 0.006f;
+				selectivity[10] = 0.008f;
+				selectivity[11] = 0.01f;
+				selectivity[12] = 0.0200f;
+				selectivity[13] = 0.0400f;
+				selectivity[14] = 0.0600f;
+				selectivity[15] = 0.08f;
+				selectivity[16] = 0.1000f;
+				selectivity[17] = 0.1500f;
+				selectivity[18] = 0.2000f;
+				selectivity[19] = 0.2500f;
+				selectivity[20] = 0.3000f;
+				selectivity[21] = 0.3500f;
+				selectivity[22] = 0.4000f;
+				selectivity[23] = 0.4500f;
 				selectivity[24] = 0.5000f;
 				selectivity[25] = 0.6000f;
 				selectivity[26] = 0.7000f;
 				selectivity[27] = 0.8000f;
 				selectivity[28] = 0.9000f;
-				selectivity[29] = 0.9950f;
+				selectivity[29] = 0.9950f;*/
 			}
 
 			else
@@ -4368,6 +4364,387 @@ public class onlinePB {
 		return crawl_leaf.loc;
 	}
 
+	
+	public double[] maxRatioPerimeterAdHocOld() throws SQLException {
+		double max_ratios[] = new double[dimension];
+		System.out.println("Max-Ratio :Perimeter Version dimension "+ dimension);
+		assert(Math.abs(minimum_selectivity-selectivity[0])<0.0001) : "minimum selectivity not matching with load selectivity";
+		
+		for (long dim = 0; dim < dimension; dim++) {
+			ArrayList<long[]> perimeterPoints = new ArrayList<long[]>();
+
+			long npoints = (long) Math.pow(2, dimension - 1);
+			// System.out.println("N-Points: "+npoints);
+
+			long binary[] = new long[dimension];
+
+			for (long b = 0; b < npoints; b++) {
+
+				long num = b;
+				for (long index = 0; index < dimension; index++) {
+					if (index != dim) {
+						binary[(int)index] = ((num % 2 == 1) ? (resolution - 1) : 0);
+						num = num / 2;
+					}
+
+				} // (new point formed)
+
+				// System.out.print(Arrays.toString(binary[b])+"\t");
+				// System.out.println(Arrays.toString(gray[b]));
+				long k = dimension;
+
+				while ((k = getIndexReverse(binary, k, 0, dim)) != -1) {
+
+					for (long j = 0; j < resolution; j++) {
+
+						binary[(int)k] = j;
+						binary[(int)dim] = 0;
+						long lowidx = getIndex(binary, resolution);
+
+						binary[(int)dim] = resolution - 1;
+						long highidx = getIndex(binary, resolution);
+						perimeterPoints.add(new long[] { lowidx, highidx });
+
+					} // segment
+					binary[(int)k] = 0;
+
+				} // perimeter end point
+
+			} // perimeter startpoints
+
+			max_ratios[(int)dim] = MaxRatioAdHocOld(perimeterPoints);
+
+		} // iterating over dimensions
+
+		maxRatioPerimeterAdHocSequentialOld(max_ratios);
+		return max_ratios;
+	}
+	
+	public long getIndex(long[] index, long res) {
+		long tmp = 0;
+
+		for (long i = index.length - 1; i >= 0; i--) {
+			if (index[(int)i] > 0)
+				tmp = tmp * res + index[(int)i];
+			else
+				tmp = tmp * res;
+		}
+
+		return tmp;
+	}
+	
+	public double MaxRatioAdHocOld(ArrayList<long[]> points) throws SQLException {
+
+		try {
+			// System.out.println("entered DB conn1");
+			source = new Jdbc3PoolingDataSource();
+			source.setDataSourceName("A Data Source");
+
+			// Settings
+			// System.out.println("entered DB conn2");
+			if (database_conn == 0) {
+				// conn = DriverManager
+				// .getConnection("jdbc:postgresql://localhost:5431/tpch-ai",
+				// "sa", "database");
+			} else {
+
+				// System.out.println("entered DB tpcds");
+				// conn = DriverManager
+				// .getConnection("jdbc:postgresql://localhost:5432/tpcds-ai",
+				// "sa", "database");
+				source.setServerName("localhost:5432");
+				//source.setDatabaseName("tpcds-ai");
+				source.setDatabaseName("tpcds-ai");
+
+			}
+			source.setUser("sa");
+			source.setPassword("database");
+
+			location loc = new location();
+			loc.dimension = this.dimension;
+			loc.select_query = new String(this.select_query);
+			loc.predicates = new String(this.predicates);
+			loc.database_conn = this.database_conn;
+			loc.apktPath = this.apktPath;
+
+			source.setMaxConnections(num_of_usable_threads);
+
+			// System.out.println("Opened database successfully");
+		} catch (Exception e) {
+			System.out.println("entered DB err");
+			System.err.println(e.getClass().getName() + ": " + e.getMessage());
+		}
+
+		long pSize = points.size();
+		long step_size = pSize / num_of_usable_threads;
+		long cur_min_val = 0;
+		long cur_max_val = 0;
+		ArrayList<MaxRatioInputParamOld> inputs = new ArrayList<MaxRatioInputParamOld>();
+
+		for (long j = 0; j < num_of_usable_threads; ++j) {
+
+			cur_min_val = cur_max_val;
+			cur_max_val = cur_min_val + step_size;
+
+			if (j == num_of_usable_threads - 1 || (pSize < num_of_usable_threads))
+				cur_max_val = pSize;
+
+			MaxRatioInputParamOld input = new MaxRatioInputParamOld(source, cur_min_val, cur_max_val - 1, this);
+			inputs.add(input);
+
+			if (pSize < num_of_usable_threads)
+				break;
+		}
+
+		ArrayList<Future<Double>> localRatios = new ArrayList<Future<Double>>();
+
+		ExecutorService service = Executors.newFixedThreadPool(num_of_usable_threads);
+
+		for (final MaxRatioInputParamOld input : inputs) {
+			Callable<Double> callable = new Callable<Double>() {
+				public Double call() throws Exception {
+
+					// System.out.println("before getting the connection");
+
+					input.getLocalMaxRatio(apktPath, qtName, select_query, predicates, dimension, database_conn,
+							points);
+
+					// System.out.println("after getting the connection");
+					double localratio = input.localMaxRatio;
+					return localratio;
+				}
+			};
+			localRatios.add(service.submit(callable));
+
+		}
+		service.shutdown();
+		double dim_max_ratio = Double.MIN_VALUE;
+		for (Future<Double> localRatio : localRatios) {
+
+			try {
+				Double lratio = localRatio.get();
+				if (lratio.doubleValue() > dim_max_ratio) {
+					dim_max_ratio = lratio.doubleValue();
+				}
+			} catch (InterruptedException | ExecutionException e) {
+				e.printStackTrace();
+			}
+
+		}
+		source.close();
+		return dim_max_ratio;
+
+	}
+
+	class MaxRatioInputParamOld {
+		Jdbc3PoolingDataSource source;
+		String apktPath, qtName, select_query, predicates;
+		long dimension, database_conn;
+		long min_val, max_val;
+		Connection conn;
+		onlinePB opb;
+		ArrayList<long[]> perimeterPoints;
+		double localMaxRatio = Double.MIN_VALUE;
+
+		public MaxRatioInputParamOld(Jdbc3PoolingDataSource source, long min_val, long max_val, onlinePB obj)
+				throws SQLException {
+			this.source = source;
+			this.min_val = min_val;
+			this.max_val = max_val;
+		}
+
+		public void getLocalMaxRatio(String apktPath, String qtName, String select_query, String predicates,
+				long dimension, long database_conn, ArrayList<long[]> perimeterPoints)
+						throws SQLException, IOException, PicassoException {
+			if (apktPath != null && qtName != null && select_query != null) {
+				this.apktPath = apktPath;
+				this.qtName = qtName;
+				this.select_query = select_query;
+				this.predicates = predicates;
+				this.dimension = dimension;
+				this.database_conn = database_conn;
+				this.perimeterPoints = perimeterPoints;
+			}
+
+			conn = source.getConnection();
+
+			for (long i = min_val; i <= max_val; i++) {
+
+				long[] idxpair = perimeterPoints.get((int)i);
+				long low_coords[] = getCoordinates(dimension, resolution, idxpair[0]);
+				long high_coords[] = getCoordinates(dimension, resolution, idxpair[1]);
+				double low_sel[] = new double[(int)dimension];
+				double high_sel[] = new double[(int)dimension];
+				for (int j = 0; j < dimension; j++) {
+
+					low_sel[(int)j] = selectivity[(int)low_coords[(int)j]];
+					high_sel[(int)j] = selectivity[(int)high_coords[(int)j]];
+
+				}
+				
+				//System.out.println("Selectivity [0]: "+selectivity[0]);
+				
+				location loc_low = new location(low_sel, opb, conn);
+				location loc_high = new location(high_sel, opb, conn);
+
+				double ratio = loc_high.opt_cost / loc_low.opt_cost;
+
+				if (ratio > localMaxRatio) {
+					localMaxRatio = ratio;
+				}
+
+			}
+
+			if (conn != null) {
+				try {
+					conn.close();
+				} catch (SQLException e) {
+				}
+			}
+		}
+	}
+	
+	public long[] getCoordinates(long dimensions, long res, long location) {
+		long[] index = new long[(int)dimensions];
+
+		for (int i = 0; i < dimensions; i++) {
+			index[i] = location % res;
+
+			location /= res;
+		}
+		return index;
+	}
+	
+	public double[] maxRatioPerimeterAdHocSequentialOld(double[] ratios) throws SQLException  {
+		double max_ratios[] = new double[dimension];
+		int order_max_ratio[] = new int[dimension];
+		getMaxRatiosAdHoc(order_max_ratio,ratios);
+		System.out.println("Max-Ratios : "+ Arrays.toString(ratios));
+		System.out.println("Max-Ratios Order : "+ Arrays.toString(order_max_ratio));
+		
+		order.clear();
+		for(int i= dimension -1 ; i >=0 ; i--) 
+			order.add(order_max_ratio[i]);
+		
+		assert(order.size() == dimension) : "order size not matching with dimension";
+		
+		HashSet<Integer> removedDimensions = new HashSet<Integer>();
+		for (int dim = 1; dim < dimension; dim++) {
+			ArrayList<long[]> perimeterPoints = new ArrayList<long[]>();
+			removedDimensions.add(order_max_ratio[dim-1]);
+			System.out.println("Removing Dimensions : "+ Arrays.toString(Arrays.copyOf(order_max_ratio, dim)));
+			long npoints = (long) Math.pow(2, dimension - dim);
+			//  System.out.println("N-Points: "+npoints);
+
+			long binary[] = new long[dimension];
+
+			for (long b = 0; b < npoints; b++) {
+
+				long num = b;
+				for (int index = 0; index < dimension; index++) {
+					if (!removedDimensions.contains(order_max_ratio[index])) {
+						binary[order_max_ratio[index]] = ((num % 2 == 1) ? (resolution - 1) : 0);
+						num = num / 2;
+					}
+
+				} // (new point formed)
+
+				// System.out.print(Arrays.toString(binary[b])+"\t");
+				// System.out.println(Arrays.toString(gray[b]));
+				int k = dimension;
+
+				while ((k = getIndexReverse(binary, k, 0, removedDimensions,order_max_ratio)) != -1) {
+
+					for (long j = 0; j < resolution; j++) {
+
+						binary[order_max_ratio[k]] = j;
+						Iterator<Integer> itr = removedDimensions.iterator();
+						while(itr.hasNext()) {
+							int d = itr.next();
+							binary[d] =0;
+						}
+						// System.out.println(Arrays.toString(binary)); 
+						long lowidx = getIndex(binary, resolution);
+
+						itr = removedDimensions.iterator();
+						while(itr.hasNext()) {
+							int d = itr.next();
+							binary[d] = resolution-1;
+						}
+						//System.out.println(Arrays.toString(binary));
+						long highidx = getIndex(binary, resolution);
+						perimeterPoints.add(new long[] { lowidx, highidx });
+
+					} // segment
+
+				} // perimeter end point
+
+			} // perimeter startpoints
+
+			max_ratios[dim] = MaxRatioAdHocOld(perimeterPoints);
+
+		} // iterating over dimensions
+
+		max_ratios[0] = 1.0;
+		System.out.println("Max-Ratios Sequential Removal: "+ Arrays.toString(max_ratios));
+		return max_ratios;
+	}
+
+	public void getMaxRatiosAdHoc(int order[], double max_ratios[]) {
+
+
+		for (int i = 0; i < dimension; i++) {
+			order[i] = i;
+		}
+
+		for (int i = 0; i < dimension; i++) {
+
+			for (int j = 1; j < dimension - i; j++) {
+
+				if (max_ratios[j] < max_ratios[j - 1]) {
+
+					double tmp = max_ratios[j];
+					max_ratios[j] = max_ratios[j - 1];
+					max_ratios[j - 1] = tmp;
+
+					int temp = order[j];
+					order[j] = order[j - 1];
+					order[j - 1] = temp;
+				}
+			}
+		}
+
+
+	}
+
+	
+	public int getIndexReverse(int arr[], int start, int key, int skipindex) {
+		for (int i = start - 1; i >= 0; i--) {
+			if (arr[i] == key && i != skipindex) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	public long getIndexReverse(long arr[], long start, long key, long skipindex) {
+		for (long i = start - 1; i >= 0; i--) {
+			if (arr[(int)i] == key && i != skipindex) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	public int getIndexReverse(long arr[], int start, int key, HashSet<Integer> removedDimensions, int order[]) {
+		for (int i = start - 1; i >= 0; i--) {
+			if (arr[order[i]] == key && !removedDimensions.contains(order[i])) {
+				return i;
+			}
+		}
+		return -1;
+	}
+	
 }
 
 class CoveringContourinputParamStruct {
@@ -4680,6 +5057,24 @@ class location implements Serializable {
 		dim_values = new float[dimension];
 		for (int i = 0; i < dimension; i++) {
 			dim_values[i] = roundToDouble(arr[i]);
+			// System.out.print(arr[i]+",");
+		}
+		// System.out.println();
+		try {
+			getPlan(conn);
+		} catch (SQLException e) {
+
+			e.printStackTrace();
+		}
+
+	}
+
+	location(double arr[], onlinePB obj, Connection conn) throws IOException, PicassoException {
+
+		//Connection conn = obj.conn;
+		dim_values = new float[dimension];
+		for (int i = 0; i < dimension; i++) {
+			dim_values[i] = (float)(arr[i]);
 			// System.out.print(arr[i]+",");
 		}
 		// System.out.println();

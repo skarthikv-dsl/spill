@@ -163,7 +163,7 @@ public class OptSB
 	static float removing_points_contour_time = 0f;
 	//The class memo would be used to do memoization of the points of execution. It is used in getLearntSelectivity. If set to true, it will speed up the process of finding MSO.
 	static boolean memoization_flag=false;
-	static boolean singleThread = false;
+	static boolean singleThread = true;
 	static boolean allPlanCost = true;
 	static boolean generateSpecificContour = false;	
 	static boolean Nexus_algo = false;
@@ -616,8 +616,8 @@ public OptSB(){}
 		
 	{	
 		obj.conn = source.getConnection();
-		min_point = 92395;
-		max_point = 92396;
+		min_point = 639;
+		max_point = 640;
 		PrintWriter writer = new PrintWriter(apktPath+"TSB_logs/SB_serial_log("+min_point+"-"+max_point+").txt", "UTF-8");
 		for (int  j = min_point ; j < max_point ; j++)
 //					for (int  j = 21893 ; j < 21984; j++)
@@ -2479,7 +2479,7 @@ public OptSB(){}
 					p_retained = objContourPt;
 					ContourPointsMap_local.get(contour_no).clear();
 					ContourPointsMap_local.get(contour_no).add(p_retained);
-					System.out.print("added point to empty contour numbered : "+contour_no+"\t");
+					//System.out.println("added point to empty contour numbered : "+contour_no);
 					printSelectivityCost(p_retained.dim_sel_values,(float) p_retained.get_cost());
 					break;
 				}
@@ -2919,10 +2919,22 @@ public OptSB(){}
 					}
 				}
 				
-				if(currentContourPoints!=0)
-					sel_max[d] = sel;
+				//if the current contour is the last contour one to be processed for this q_a
+				else if(q_a_cost >= Math.pow(2, contour_no-2)*m_cost && q_a_cost <= Math.pow(2, contour_no-1)*m_cost) {
+					sel = actual_sel[learning_dim];
+					
+					if(p.get_cost() <= Math.pow(2, contour_no-1)*m_cost)
+						learning_cost += p.get_cost();
+					else
+						learning_cost += Math.pow(2, contour_no-1)*m_cost;
+				}
 				
+				
+				if(currentContourPoints!=0) {
+					sel_max[d] = sel;
+				}
 				else{
+					//sel_max[d] = sel;
 					if(print_flag)
 					{
 						writer.println("Sel_max["+d+"]= "+sel_max[d]+", sel= "+sel);

@@ -582,9 +582,16 @@ public class BinaryTree {
 		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
 		} 
 		
+		/* this is the old one
 		else if(qtName.contains("DSQT915DR")){
 			predicates = new String[]{"(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer.c_customer_sk = catalog_returns.cr_returning_customer_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
 		    predicatesRev = new String[]{"(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(catalog_returns.cr_returning_customer_sk = customer.c_customer_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
+		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
+		} */
+		
+		else if(qtName.contains("DSQT915DR")){
+			predicates = new String[]{"(catalog_returns.cr_call_center_sk = call_center.cc_call_center_sk)","(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
+		    predicatesRev = new String[]{"(call_center.cc_call_center_sk = catalog_returns.cr_call_center_sk)", "(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
 		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
 		} 
 		
@@ -592,6 +599,12 @@ public class BinaryTree {
 			predicates = new String[]{"(catalog_returns.cr_call_center_sk = call_center.cc_call_center_sk)","(catalog_returns.cr_returned_date_sk = date_dim.d_date_sk)","(customer.c_customer_sk = catalog_returns.cr_returning_customer_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)","(customer_demographics.cd_demo_sk = customer.c_current_cdemo_sk)","(household_demographics.hd_demo_sk = customer.c_current_hdemo_sk)"};
 		    predicatesRev = new String[]{"(call_center.cc_call_center_sk = catalog_returns.cr_call_center_sk)","(date_dim.d_date_sk = catalog_returns.cr_returned_date_sk)","(catalog_returns.cr_returning_customer_sk = customer.c_customer_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)","(customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk)","(customer.c_current_hdemo_sk = household_demographics.hd_demo_sk)"};
 		    relations = new String[]{"cc","cr","d","c","ca","cd","hd"};
+		} 
+		
+		else if(qtName.contains("DSQT185DR")){
+			predicates = new String[]{"(date_dim.d_date_sk = catalog_sales.cs_sold_date_sk)","(item.i_item_sk = catalog_sales.cs_item_sk)","(catalog_sales.cs_bill_customer_sk = customer.c_customer_sk)","(cd2.cd_demo_sk = customer.c_current_cdemo_sk)","(customer.c_current_addr_sk = customer_address.ca_address_sk)"};
+		    predicatesRev = new String[]{"(catalog_sales.cs_sold_date_sk = date_dim.d_date_sk)","(catalog_sales.cs_item_sk = item.i_item_sk)","(customer.c_customer_sk = catalog_sales.cs_bill_customer_sk)","(customer.c_current_cdemo_sk = cd2.cd_demo_sk)","(customer_address.ca_address_sk = customer.c_current_addr_sk)"};
+		    relations = new String[]{"cs","d","i","cd1","c","cd2","ca"};
 		} 
 		
 		else if(qtName.contains("DSQT186DR")){
